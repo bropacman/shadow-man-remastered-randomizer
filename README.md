@@ -48,19 +48,41 @@ is beatable.
 
 ## Quick Start
 
-Clone the repo into the same parent folder as your Shadow Man Remastered install,
-or anywhere — you'll point at the install folder via `--game-dir`.
+### Just want to play?
+
+Download **`Shadow Man Randomizer.exe`** from the [Releases page](https://github.com/jonathanmanos/shadow-man-remastered-randomizer/releases/latest).
+No Python required — double-click and go.
+
+### Running from source
+
+Clone the repo and install the one dependency:
 
 ```bash
-git clone https://github.com/<your-org>/shadow-man-remastered-randomizer.git
+git clone https://github.com/jonathanmanos/shadow-man-remastered-randomizer.git
 cd shadow-man-remastered-randomizer
 pip install -r requirements.txt
+```
+
+**GUI** (recommended): double-click **`Launch Randomizer.bat`** — opens the interface, no terminal needed.
+
+**CLI**: run the patcher directly:
+
+```bash
 python patcher.py --game-dir "C:\Program Files (x86)\Steam\steamapps\common\Shadow Man Remastered"
 ```
 
-The patcher prints a seed and writes a spoiler log next to itself
-(`spoiler_seed_<N>.txt`). Drop the generated `shadowman_randomizer.kpf` in the
-game's `mods/` folder and play.
+### Building the exe yourself
+
+```bash
+build.bat
+```
+
+Produces `dist/Shadow Man Randomizer.exe`. Requires Python + PyInstaller (the script installs them automatically).
+
+---
+
+The patcher writes a spoiler log next to itself (`spoiler_seed_<N>.txt`).
+Drop the generated `shadowman_randomizer.kpf` in the game's `mods/` folder and play.
 
 ### Common recipes
 
@@ -144,6 +166,9 @@ Run `python patcher.py --help` for the authoritative list.
 shadow-man-remastered-randomizer/
 │
 ├── patcher.py                    ← Main entry point, orchestrates all steps
+├── gui.py                        ← Tkinter GUI wrapper (runs patcher.py as a subprocess)
+├── Launch Randomizer.bat         ← Double-click to open the GUI (no terminal needed)
+├── build.bat                     ← Builds a standalone .exe via PyInstaller
 ├── fill.py                       ← Assumed-fill placement algorithm + simulation
 ├── access_rules.py               ← All logic rules (gates, items, soul levels)
 ├── regions.py                    ← Region graph and connections

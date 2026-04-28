@@ -23,6 +23,8 @@ Usage:
     python patcher.py --seed 12345 --game-dir "C:/.../Shadow Man Remastered" --config config.yaml
 """
 
+import sys
+import os
 import csv
 import json
 import shutil
@@ -37,6 +39,12 @@ from constants import (LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANI
                        CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, ITEM_Y_ADJUST)
 from enemy_randomizer import randomize_enemies, enemy_spoiler_section, randomize_true_forms, true_form_spoiler_section
 from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
+
+if getattr(sys, 'frozen', False):
+    # If the app is running as a bundle (exe)
+    bundle_dir = sys._MEIPASS
+    if bundle_dir not in sys.path:
+        sys.path.append(bundle_dir)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 

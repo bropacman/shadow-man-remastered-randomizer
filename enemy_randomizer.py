@@ -126,6 +126,7 @@ def randomize_enemies(
                         names.append(None)
                         continue
                     target_tier = _depth_to_tier(depth)
+                    target_tier = rng.choices([1, 2, 3, 4, 5], weights=_TIER_WEIGHTS[target_tier])[0]
                     # Try target tier, then expand outward ±1, ±2
                     chosen = None
                     for delta in (0, 1, -1, 2, -2, 3, -3, 4, -4):
@@ -270,6 +271,19 @@ def _depth_to_tier(depth: int) -> int:
     if depth <= 9:  return 3
     if depth <= 14: return 4
     return 5
+
+
+# Weighted tier draw for difficulty mode.
+# Each row = base tier (1-5), columns = probability weights for tiers 1-5.
+# Higher base tier shifts the distribution right while keeping low-tier tails,
+# so early areas still feel manageable but can occasionally surprise you.
+_TIER_WEIGHTS: dict[int, list[int]] = {
+    1: [40, 25, 15, 15,  5],
+    2: [20, 40, 20, 15,  5],
+    3: [10, 20, 40, 20, 10],
+    4: [ 5, 10, 20, 40, 25],
+    5: [ 5,  5, 10, 25, 55],
+}
 
 
 def _build_difficulty_buckets(

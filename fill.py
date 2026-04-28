@@ -966,19 +966,24 @@ def assumed_fill(
     # candidate_pool) to ensure complete coverage of all levels including
     # liveside, which phase 1 may have excluded from its candidate set.
 
-    filler_slot_cats = FILLER_SLOT_CATS if not insanity else FILLER_SLOT_CATS | {"soul"}
+    include_cats = {"soul", "progression", "retractor", "accumulator", "gad"}
+    if shuffle_weapons: include_cats.add("weapon")
+    if shuffle_lore:    include_cats.add("lore")
+    if shuffle_bonus:   include_cats.add("bonus")
+
+    filler_slot_cats_remaining = FILLER_SLOT_CATS | include_cats if insanity else FILLER_SLOT_CATS | {"soul"}
 
     remaining_locs = [
         loc.loc_key for loc in CHECKABLE_LOCS
         if loc.loc_key not in placement
-           and loc.category in filler_slot_cats
+           and loc.category in filler_slot_cats_remaining
     ]
     rng.shuffle(remaining_locs)
 
     filler_items = [
         loc for loc in CHECKABLE_LOCS
         if loc.loc_key not in placement
-        and loc.category in FILLER_SLOT_CATS
+        and loc.category in filler_slot_cats_remaining
     ]
     rng.shuffle(filler_items)
 

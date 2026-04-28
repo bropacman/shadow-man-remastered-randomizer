@@ -1,0 +1,58 @@
+# -*- mode: python ; coding: utf-8 -*-
+
+a = Analysis(
+    ['gui.py'],
+    pathex=['.'],
+    binaries=[],
+    datas=[
+        ('data', 'data'),
+        ('extracted_locations.py', '.'),
+        ('extracted_enemy_locations.py', '.'),
+        ('patcher.py', '.'),
+        ('fill.py', '.'),
+        ('access_rules.py', '.'),
+        ('regions.py', '.'),
+        ('locations.py', '.'),
+        ('BaseClasses.py', '.'),
+        ('constants.py', '.'),
+        ('kpf_handler.py', '.'),
+        ('gad_pickup_patch.py', '.'),
+        ('setup_gad_records.py', '.'),
+        ('enemy_randomizer.py', '.'),
+        ('music_randomizer.py', '.'),
+        ('sfx_randomizer.py', '.'),
+    ],
+    hiddenimports=[
+        'webview.platforms.winforms',
+        'clr',
+        'yaml',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='Shadow Man Randomizer',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
