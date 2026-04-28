@@ -1,0 +1,51 @@
+# ── Python ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ── Virtual environments ──────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── IDEs & editors ────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── OS junk ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Generated / extracted location data ───────────────────────────
+# These are produced by the data extraction pipeline and should be
+# regenerated locally rather than tracked.
+extracted_enemy_locations.py
+extracted_locations.py
+
+# ── Backup files left behind by editors / sed -i ──────────────────
+*.bak
+*.orig
+fill_backup_*.py
+
+# ── Patcher runtime artifacts ─────────────────────────────────────
+# Per-seed working directory the patcher creates next to the game.
+_randomizer_work_*/
+# Patched / repacked game binaries (huge; never check these in).
+*.kpf
+thoth_x64_patched.exe
+# Spoiler logs from local runs.
+spoiler_seed_*.txt
+
+# ── Misc ──────────────────────────────────────────────────────────
+testfile.txt
