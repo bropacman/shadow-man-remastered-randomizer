@@ -673,7 +673,7 @@ def assumed_fill(
     lock_gates: frozenset[str] = frozenset(),
     max_sl: int | None = None,
     safe: bool = True,
-    insanity: bool = False,
+    insanity: int = 0,
     shuffle_weapons: bool = True,
     shuffle_lore: bool = True,
     shuffle_bonus: bool = False,
@@ -721,7 +721,7 @@ def assumed_fill(
     if not shuffle_gad_temples:
         active_slot_cats.discard("gad")
 
-    if insanity:
+    if insanity >= 3:
         candidate_pool = [
             l for l in CHECKABLE_LOCS
             if l.loc_key not in EXCLUDED_LOCS
@@ -877,7 +877,11 @@ def assumed_fill(
         )
 
         def _slot_ok(loc) -> bool:
-            if insanity:
+            if insanity >= 3:
+                return True
+            if insanity >= 2 and loc.category in {"soul", "cadeaux"}:
+                return True
+            if insanity >= 1 and loc.category == "soul":
                 return True
             return item.category in SLOT_ACCEPTS.get(loc.category, frozenset())
 
@@ -971,7 +975,7 @@ def assumed_fill(
     if shuffle_lore:    include_cats.add("lore")
     if shuffle_bonus:   include_cats.add("bonus")
 
-    filler_slot_cats_remaining = FILLER_SLOT_CATS | include_cats if insanity else FILLER_SLOT_CATS | {"soul"}
+    filler_slot_cats_remaining = (FILLER_SLOT_CATS | include_cats) if insanity >= 1 else (FILLER_SLOT_CATS | {"soul"})
 
     remaining_locs = [
         loc.loc_key for loc in CHECKABLE_LOCS

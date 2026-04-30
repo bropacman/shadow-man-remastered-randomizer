@@ -360,10 +360,15 @@ _HTML = r"""<!DOCTYPE html>
   <!-- Progression section -->
   <div class="card-title" style="margin-bottom:8px">Progression</div>
   <div class="check-grid" style="margin-bottom:10px">
-    <label class="check-label">
-      <input type="checkbox" id="insanity">
-      Insanity Mode
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Allows key progression items to be placed in soul slots and cadeaux slots in addition to standard item locations. Significantly increases placement randomness.</span></span>
+    <label class="check-label" style="grid-column:1/-1;gap:10px">
+      <span style="white-space:nowrap">Insanity Tier</span>
+      <select id="insanity" style="flex:0 0 auto">
+        <option value="0">Off</option>
+        <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
+        <option value="2">Tier 2 &mdash; + Cadeaux slots</option>
+        <option value="3">Full &mdash; All slots</option>
+      </select>
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed.<br><b>Tier 1:</b> Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also Cadeaux slots.<br><b>Full:</b> Any slot in the game. Wildly random.</span></span>
     </label>
   </div>
   <div class="row">
@@ -422,7 +427,7 @@ function getConfig() {
     shuffleMusic:     document.getElementById('shuffleMusic').checked,
     shuffleVoices:    document.getElementById('shuffleVoices').checked,
     shuffleWeaponsSfx:document.getElementById('shuffleWeaponsSfx').checked,
-    insanity:         document.getElementById('insanity').checked,
+    insanity:         parseInt(document.getElementById('insanity').value),
     shuffleLightSoul: document.getElementById('shuffleLightSoul').checked,
     shuffleKeyItems:  document.getElementById('shuffleKeyItems').checked,
     shuffleWeapons:   document.getElementById('shuffleWeapons').checked,
@@ -546,7 +551,7 @@ class _Api:
     def browse_dir(self, current: str) -> "str | None":
         assert self._window is not None
         result = self._window.create_file_dialog(
-            webview.FOLDER_DIALOG,
+            webview.FileDialog.FOLDER,
             directory=current or str(DEFAULT_GAME_DIR),
         )
         return result[0] if result else None
@@ -603,12 +608,15 @@ class _Api:
             ("shuffleMusic",      "--shuffle-music"),
             ("shuffleVoices",     "--shuffle-voices"),
             ("shuffleWeaponsSfx", "--shuffle-weapons-sfx"),
-            ("insanity",          "--insanity"),
             ("shuffleLightSoul",  "--shuffle-bonus"),
         ]
         for key, flag in flag_map:
             if config.get(key):
                 cmd.append(flag)
+
+        insanity_tier = int(config.get("insanity", 0))
+        if insanity_tier > 0:
+            cmd += ["--insanity", str(insanity_tier)]
 
         if config.get("shuffleEnemies"):
             cmd += ["--enemy-mode", config.get("enemyMode", "difficulty")]

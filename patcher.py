@@ -36,7 +36,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from constants import (LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANILLA_SL, GATE_PRESETS,
-                       CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, ITEM_Y_ADJUST)
+                       CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, PROGRESSION_IN_SOUL_LIFT, ITEM_Y_ADJUST,
+                       SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y)
 from enemy_randomizer import randomize_enemies, enemy_spoiler_section, randomize_true_forms, true_form_spoiler_section
 from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
 
@@ -644,7 +645,7 @@ def run_assumed_fill(rng: random.Random, config: dict,
         rng,
         progression_balancing=config.get("progression_balancing", 50),
         shuffle_gad_temples=config.get("shuffle_gad_temples", False),
-        insanity=config.get("insanity", False),
+        insanity=int(config.get("insanity", 0)),
         shuffle_weapons=config.get("shuffle_weapons", True),
         shuffle_lore=config.get("shuffle_lore", True),
         shuffle_bonus=config.get("shuffle_bonus", False),
@@ -693,15 +694,26 @@ def write_placement_patches(
             print(f"      {lk}")
 
     def make_patch(rec, new_name, instance_id):
-        new_tall = new_name in DARK_SOUL_TYPES
-        old_tall = rec.name in DARK_SOUL_TYPES
-        y_adj = GOVI_HEIGHT_BOOST if (new_tall and not old_tall) else \
-            CADEAU_HEIGHT_DROP if (not new_tall and old_tall) else 0.0
+        new_tall     = new_name in DARK_SOUL_TYPES
+        old_tall     = rec.name in DARK_SOUL_TYPES
+        old_soul_slot = rec.name in DARK_SOUL_TYPES or rec.name in CADEAUX_TYPES
+        new_is_key   = (new_name not in DARK_SOUL_TYPES
+                        and new_name not in CADEAUX_TYPES
+                        and new_name not in BARREL_TYPES)
+        if new_tall and not old_tall:
+            y_adj = GOVI_HEIGHT_BOOST          # govi into non-govi slot → raise
+        elif new_is_key and old_soul_slot:
+            y_adj = PROGRESSION_IN_SOUL_LIFT   # key/weapon/lore into soul or cadeaux slot → raise
+        elif not new_tall and old_tall:
+            y_adj = CADEAU_HEIGHT_DROP         # small soul item replacing a govi → drop
+        else:
+            y_adj = 0.0
         y_adj += ITEM_Y_ADJUST.get(new_name, 0.0)
         return {"name": new_name, "reward": instance_id,
                 "logic": rec.zone, "y_adjust": y_adj, "source_file": rec.source_file}
 
     patches_by_folder: dict = {}
+    marker_sites: list = []  # (folder, x, y, z, zone) for SOUL_SLOT_MARKER_FX injection
     matched = 0
 
     for loc_key, source_loc in progression_placement.items():
@@ -727,13 +739,67 @@ def write_placement_patches(
             rsc_name = "RSC_Q_VIOLATOR"
 
         instance_id = source_loc.instance_id
+        old_soul_slot = rec.name in DARK_SOUL_TYPES or rec.name in CADEAUX_TYPES
+        new_is_key    = (rsc_name not in DARK_SOUL_TYPES
+                         and rsc_name not in CADEAUX_TYPES
+                         and rsc_name not in BARREL_TYPES)
+        if new_is_key and old_soul_slot:
+            marker_sites.append((rec.folder, rec.x, rec.y + SOUL_SLOT_MARKER_FX_Y, rec.z, rec.zone))
         k = (rec.folder, rec.source_file)
         patches_by_folder.setdefault(k, {})[rec.offset] = \
             make_patch(rec, rsc_name, instance_id if instance_id is not None else rec.instance_id)
         matched += 1
 
     print(f"  RSC patches: {matched} locations written from fill placement")
-    return patches_by_folder
+    return patches_by_folder, marker_sites
+
+# ── Special item FX injection ───────────────────────────────────────────────────
+
+def _write_fx_marker_record(data: bytearray, x: float, y: float, z: float,
+                            zone: int, instance_id: int) -> bytearray:
+    """Append or fill-in a single SOUL_SLOT_MARKER_FX record in a quest.rsc bytearray."""
+    remainder = (len(data) - HEADER_SIZE) % RECORD_SIZE
+    if remainder:
+        data = data[:len(data) - remainder]
+    record = bytearray(RECORD_SIZE)
+    struct.pack_into("<fff", record, XYZ_OFF, x, y, z)
+    record[ZONE_OFF]     = zone & 0xFF
+    record[INSTANCE_OFF] = instance_id & 0xFF
+    name_bytes = SOUL_SLOT_MARKER_FX.encode("ascii")
+    record[NAME_OFF : NAME_OFF + len(name_bytes)] = name_bytes
+    # Find first zeroed slot or append
+    body = data[HEADER_SIZE:]
+    n    = len(body) // RECORD_SIZE
+    slot = next((i for i in range(n)
+                 if body[i*RECORD_SIZE + NAME_OFF :
+                         i*RECORD_SIZE + NAME_OFF + NAME_MAXLEN] == bytes(NAME_MAXLEN)),
+                None)
+    if slot is not None:
+        off = HEADER_SIZE + slot * RECORD_SIZE
+        data[off : off + RECORD_SIZE] = record
+    else:
+        data += record
+    data[9] = min(data[9] + 1, 255)
+    return data
+
+def inject_special_item_fx(marker_sites: list, levels_path) -> int:
+    """Write SOUL_SLOT_MARKER_FX records into quest.rsc for each key-item-in-soul-slot placement."""
+    by_folder: dict = {}
+    for folder, x, y, z, zone in marker_sites:
+        by_folder.setdefault(folder, []).append((x, y, z, zone))
+    total = 0
+    for folder, sites in by_folder.items():
+        quest_path = Path(levels_path) / folder / "quest.rsc"
+        if not quest_path.exists():
+            print(f"  WARNING: halo marker skipped — {folder}/quest.rsc not found")
+            continue
+        data = bytearray(quest_path.read_bytes())
+        for i, (x, y, z, zone) in enumerate(sites):
+            inst = 0
+            data = _write_fx_marker_record(data, x, y, z, zone, inst)
+            total += 1
+        quest_path.write_bytes(bytes(data))
+    return total
 
 # ── Spoiler log ───────────────────────────────────────────────────────────────
 
@@ -1090,7 +1156,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Step 4: RSC item patching ─────────────────────────────────────────────
     print("\nPatching RSC items...")
-    patches_by_folder = write_placement_patches(
+    patches_by_folder, marker_sites = write_placement_patches(
         records_by_folder,
         progression_placement=progression_placement,
         shuffle_gad_temples=config.get("shuffle_gad_temples", False),
@@ -1173,6 +1239,13 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     else:
         enemy_patches = {}
+
+    # ── Step 6b.5: Inject special item FX for insanity placements ────────────
+    if marker_sites:
+        print("\nSKIPPING Injecting special item FX markers for key items in soul/cadeaux slots...")
+        # print("\nInjecting special item FX markers for key items in soul/cadeaux slots...")
+        # n_markers = inject_special_item_fx(marker_sites, levels_path)
+        # print(f"  {n_markers} {SOUL_SLOT_MARKER_FX} record(s) injected")
 
     # ── Step 6c: Append enemy/true form sections to spoiler log ──────────────
     if enemy_patches or true_form_loc_remap:
@@ -1305,8 +1378,8 @@ if __name__ == "__main__":
                         help="Include bonus items (Light Soul) in the shuffle pool")
     parser.add_argument("--shuffle-gad-temples", action="store_true",
                         help="Shuffle gad powers as physical pickups (requires EXE patch)")
-    parser.add_argument("--insanity", action="store_true",
-                        help="Allow progression items to be placed in any location type including soul and cadeaux slots")
+    parser.add_argument("--insanity", nargs="?", const=3, type=int, default=0,
+                        help="Insanity tier 1-3: 1=soul/govi slots, 2=+cadeaux slots, 3=all slots. Bare --insanity = tier 3.")
     parser.add_argument("--shuffle-enemies", action="store_true",
                         help="Randomize enemy types in each level")
     parser.add_argument("--enemy-mode", choices=["difficulty", "full", "contextual"],
@@ -1342,7 +1415,7 @@ if __name__ == "__main__":
         "shuffle_lore":          not args.no_lore,
         "shuffle_bonus":         args.shuffle_bonus,
         "shuffle_gad_temples":   args.shuffle_gad_temples,
-        "insanity":              args.insanity,
+        "insanity":              args.insanity or 0,
         "shuffle_enemies":       args.shuffle_enemies,
         "enemy_mode":            args.enemy_mode,
         "shuffle_true_forms":    args.shuffle_true_forms,

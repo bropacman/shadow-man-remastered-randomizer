@@ -196,8 +196,14 @@ GAD_PICKUP_RSC = "RSC_X_GAD_PICKUP"
 
 TALL_TYPES: set[str] = {"RSC_X_GOVI", "RSC_X_DARK_SOUL"}  # same as DARK_SOUL_TYPES
 
-GOVI_HEIGHT_BOOST  =  120.0  # lift tall soul objects so they don't clip into the floor
-CADEAU_HEIGHT_DROP = -120.0  # drop short objects so they don't float replacing a tall one
+GOVI_HEIGHT_BOOST        =  120.0  # lift tall soul objects so they don't clip into the floor
+CADEAU_HEIGHT_DROP       = -120.0  # drop short objects so they don't float replacing a tall one
+PROGRESSION_IN_SOUL_LIFT =  0.0  # raise key/weapon/lore items placed in soul or cadeaux slots
+
+# RSC name spawned next to key items placed into soul/cadeaux slots (insanity mode).
+# Swap this out to try different visual effects.
+SOUL_SLOT_MARKER_FX        = "RSC_X_HALO" # RSC_X_HALO confirmed working
+SOUL_SLOT_MARKER_FX_Y      = -100.0   # Y offset the slot's native position
 
 # Per-item Y spawn adjustments for items that clip or float at the slot's native height.
 # Applied on top of GOVI_HEIGHT_BOOST / CADEAU_HEIGHT_DROP when those also fire.

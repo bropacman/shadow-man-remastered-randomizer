@@ -47,5 +47,9 @@ thoth_x64_patched.exe
 # Spoiler logs from local runs.
 spoiler_seed_*.txt
 
+# ── Local test / research scripts ────────────────────────────────
+tests/
+fx_buffet.py
+
 # ── Misc ──────────────────────────────────────────────────────────
 testfile.txt
