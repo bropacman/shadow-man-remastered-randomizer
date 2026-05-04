@@ -37,9 +37,9 @@ if errorlevel 1 (
 echo.
 echo [3/3] Build Complete!
 echo.
-if exist "dist\Shadow Man Randomizer.exe" (
+if exist "dist\shadow_man_randomizer.exe" (
     echo SUCCESS: Executable created at:
-    echo   dist\Shadow Man Randomizer.exe
+    echo   dist\shadow_man_randomizer.exe
     echo.
     echo Note: You can now distribute the single .exe file.
 ) else (

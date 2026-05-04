@@ -99,10 +99,15 @@ GAD_PICKUP_RSC = "RSC_X_GAD_PICKUP"
 # ── Injection sites ───────────────────────────────────────────────────────────
 # Each entry: (folder, filename, x, y, z, zone)
 # Coordinates and zones from in-game survey of temple puzzle reward locations.
+#
+# AUTHORITATIVE SOURCE: these coordinates are what gets baked into the RSC
+# records at setup time. The x/y/z values in extracted_locations.py must match
+# these — if you change a coordinate here, update extracted_locations.py to
+# match and re-run setup_gad_records.py on clean vanilla files.
 GAD_INJECTION_SITES = [
     ("t1tchgad", "quest.rsc", -559.4,  340.0,  35710.8, 16),  # Temple of Fire (Touch)
     ("t2wlkgad", "quest.rsc",  256.0,  395.0,   1280.0,  9),  # Temple of Prophecy (Walk)
-    ("t3swmgad", "quest.rsc", -1535.8, 511.8,  -4988.9,  7),  # Temple of Blood (Swim)
+    ("t3swmgad", "quest.rsc", -1535.8, 670.0,  -4988.9,  7),  # Temple of Blood (Swim)
 ]
 
 

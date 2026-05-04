@@ -443,7 +443,7 @@ _HTML = r"""<!DOCTYPE html>
 const GATE_DESCS = {
   none:   'default shuffle',
   open:   'all gates free, light soul requirements',
-  easy:   'light shuffle, SL5 cap, tight variance',
+  easy:   'light shuffle, SL7 cap, tight variance',
   medium: 'standard shuffle, SL8 cap',
   hard:   'full shuffle, no SL cap',
   chaos:  'fully unconstrained'
@@ -658,7 +658,7 @@ class _Api:
             ("shuffleMusic",      "--shuffle-music"),
             ("shuffleVoices",     "--shuffle-voices"),
             ("shuffleWeaponsSfx", "--shuffle-weapons-sfx"),
-            ("shuffleLightSoul",  "--shuffle-bonus"),
+            ("shuffleLightSoul",  "--shuffle-light-soul"),
         ]
         for key, flag in flag_map:
             if config.get(key):
@@ -686,11 +686,11 @@ class _Api:
             cmd += ["--progression-balancing", str(prog)]
 
         if not config.get("shuffleKeyItems", True):
-            cmd.append("--no-progression")
+            cmd.append("--no-shuffle-progression")
         if not config.get("shuffleWeapons", True):
-            cmd.append("--no-weapons")
+            cmd.append("--no-shuffle-weapons")
         if not config.get("shuffleLore", True):
-            cmd.append("--no-lore")
+            cmd.append("--no-shuffle-lore")
 
         return cmd
 

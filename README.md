@@ -11,11 +11,12 @@ is beatable.
 
 ### What Gets Randomized
 - **Progression items** — Engineers Key, Poigne, Baton, Flambeau, Marteau, Calabash,
-  Eclipser parts, Retractors, Accumulators, Flashlight, Prison Key Card
+  Eclipser parts, Retractors, Accumulators, Prison Key Card
 - **Gad powers** — Touch, Walk, and Swim Gad as physical pickups shuffled across
-  temple locations (requires `--shuffle-gad-temples`, EXE patch applied automatically)
-- **Weapons** — Asson, Shotgun, Enseigne, MP5, Tête de Mort, Desert Eagle
+  temple locations (EXE patch applied automatically; disable with `--no-shuffle-gad-temples`)
+- **Weapons** — Asson, Shotgun, Sawed-off Shotgun, Enseigne, MP-909, 0.9-SMG, Tête de Mort, Flashlight, Violator
 - **Lore items** — Book of Shadows, Prophecy, Jack's Schematic
+- **Starting item** — choose a specific item (or let the randomizer pick one) to receive at the Louisiana Swampland church before any other pickup
 - **Dark Souls and Govis** — shuffled across all soul slots
 - **Soul gate SL requirements** — coffin gate thresholds reshuffled across deadside
   (in-world ARC ring decorations updated to match)
@@ -26,6 +27,7 @@ is beatable.
 
 ### Logic Guarantees
 - Assumed-fill algorithm guarantees all seeds are beatable before patching
+- Starting item is granted before fill runs, so the algorithm accounts for it during logic
 - Soul gate shuffle ensures starting gates (Wasteland, Asylum, Path 3) stay at SL≤3
 - Eclipser lock group prevents circular placement
 - Liveside souls correctly require NIGHT (all three Eclipsers) to collect
@@ -50,22 +52,29 @@ is beatable.
 
 ### Just want to play?
 
-Download **`Shadow Man Randomizer.exe`** from the [Releases page](https://github.com/jonathanmanos/shadow-man-remastered-randomizer/releases/latest).
+Download **`shadow_man_randomizer.exe`** from the [Releases page](https://github.com/jonathanmanos/shadow-man-remastered-randomizer/releases/latest).
 No Python required — double-click and go.
 
 ### Running from source
 
-Clone the repo and install the one dependency:
+**1. Install Python 3.11 or newer** if you don't have it — grab it from [python.org](https://www.python.org/downloads/). During install, check **"Add Python to PATH"**.
+
+**2. Download the randomizer.** Either:
+- Click **Code → Download ZIP** on the [GitHub page](https://github.com/jonathanmanos/shadow-man-remastered-randomizer), then extract it anywhere, or
+- If you have Git: `git clone https://github.com/jonathanmanos/shadow-man-remastered-randomizer.git`
+
+**3. Install the one dependency.** Open a terminal in the randomizer folder and run:
 
 ```bash
-git clone https://github.com/jonathanmanos/shadow-man-remastered-randomizer.git
-cd shadow-man-remastered-randomizer
 pip install -r requirements.txt
 ```
 
-**GUI** (recommended): double-click **`Launch Randomizer.bat`** — opens the interface, no terminal needed.
+> **Tip:** On Windows you can open a terminal in any folder by typing `cmd` into the address bar in File Explorer and pressing Enter.
 
-**CLI**: run the patcher directly:
+**4. Launch the randomizer.**
+
+- **GUI (recommended):** double-click **`Launch Randomizer.bat`** — no terminal needed.
+- **CLI:** run the patcher directly:
 
 ```bash
 python patcher.py --game-dir "C:\Program Files (x86)\Steam\steamapps\common\Shadow Man Remastered"
@@ -73,11 +82,7 @@ python patcher.py --game-dir "C:\Program Files (x86)\Steam\steamapps\common\Shad
 
 ### Building the exe yourself
 
-```bash
-build.bat
-```
-
-Produces `dist/Shadow Man Randomizer.exe`. Requires Python + PyInstaller (the script installs them automatically).
+Run `build.bat` from the randomizer folder. It installs PyInstaller automatically and produces `dist/shadow_man_randomizer.exe`.
 
 ---
 
@@ -90,8 +95,8 @@ Drop the generated `shadowman_randomizer.kpf` in the game's `mods/` folder and p
 # Reproduce a specific seed
 python patcher.py --game-dir <PATH> --seed 12345
 
-# Add gad temple shuffle (EXE patch applied automatically)
-python patcher.py --game-dir <PATH> --shuffle-gad-temples
+# Disable gad temple shuffle (on by default)
+python patcher.py --game-dir <PATH> --no-shuffle-gad-temples
 
 # Shuffle enemies with the difficulty-weighted default
 python patcher.py --game-dir <PATH> --shuffle-enemies
@@ -99,12 +104,18 @@ python patcher.py --game-dir <PATH> --shuffle-enemies
 # Themed enemy shuffle (deadside / liveside / prison stay separated)
 python patcher.py --game-dir <PATH> --shuffle-enemies --enemy-mode contextual
 
-# Easy preset: most gates open, max SL capped at 8
+# Light shuffle with SL8 cap
 python patcher.py --game-dir <PATH> --gate-preset easy
+
+# Standard shuffle with SL8 cap
+python patcher.py --game-dir <PATH> --gate-preset medium
+
+# Start with the Engineers Key already in hand
+python patcher.py --game-dir <PATH> --starting-item RSC_X_ENGINEERS_KEY
 
 # Throw everything in the blender
 python patcher.py --game-dir <PATH> \
-    --shuffle-gad-temples --shuffle-enemies --shuffle-true-forms \
+    --shuffle-enemies --shuffle-true-forms \
     --shuffle-music --shuffle-voices --shuffle-weapons-sfx
 
 # Restore vanilla
@@ -130,19 +141,20 @@ python patcher.py --restore --game-dir <PATH>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--no-progression` | off | Skip key item shuffle (gates only) |
-| `--no-weapons` | off | Leave weapons in vanilla locations |
-| `--no-lore` | off | Leave lore items in vanilla locations |
-| `--shuffle-bonus` | off | Include bonus items (Light Soul) in the shuffle pool |
-| `--shuffle-gad-temples` | off | Gad powers as physical pickups (EXE patch) |
-| `--insanity` | off | Allow progression items in soul/cadeaux slots |
+| `--shuffle-progression` / `--no-shuffle-progression` | on | Shuffle key progression items using assumed-fill |
+| `--shuffle-weapons` / `--no-shuffle-weapons` | on | Shuffle weapons |
+| `--shuffle-lore` / `--no-shuffle-lore` | on | Shuffle lore items |
+| `--shuffle-light-soul` | off | Include the Light Soul bonus item in the shuffle pool |
+| `--shuffle-gad-temples` / `--no-shuffle-gad-temples` | on | Gad powers as physical pickups (EXE patch) |
+| `--starting-item RSC_NAME` | none | Place a specific item at the Louisiana Swampland church at run start (e.g. `RSC_X_ENGINEERS_KEY`). Use `--starting-item random` in the GUI to let the randomizer pick one. |
+| `--insanity [1\|2\|3]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. |
 | `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world |
 
 ### Soul gates
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--gate-preset NAME` | none | `story` = all open, `easy` = 7 open + SL8 cap, `hard` = shuffle with safety caps, `chaos` = fully unconstrained |
+| `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = most gates locked to vanilla, free gates reshuffled with SL7 cap; `medium` = only the three entry gates locked, everything else reshuffled with SL8 cap; `hard` = same locks as medium but no SL cap; `chaos` = no locks, no cap, no safety checks |
 | `--max-sl N` | none | Cap the maximum SL any shuffled gate can receive (1–10) |
 
 ### Enemies, music, SFX

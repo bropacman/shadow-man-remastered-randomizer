@@ -79,7 +79,7 @@ STARTING_ITEM_POOL: dict[str, str] = {
 # (source relative to randomizer root, dest relative to game dir)
 # Applied unconditionally on every randomizer run.
 ASSET_OVERRIDES: list[tuple[str, str]] = [
-    (r"data\000pot.dds", r"hdtextures\meshes\items\pot\000pot.dds"),
+    # (r"data\000pot.dds", r"hdtextures\meshes\items\pot\000pot.dds"),
     (r"data\019crate.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
     (r"data\020crate.dds", r"hdtextures\levels\uground\objects\tga\020crate.dds"),
 ]
@@ -159,7 +159,7 @@ GATE_PRESETS: dict[str, dict] = {
         "shuffle_gates": True,
         "no_soul_gates": False,
         "lock_gates": _EASY_LOCKED,
-        "max_sl": 8,
+        "max_sl": 7,
         "safe": True,
         "sl_spread": 2,  # stays close to vanilla depth
     },

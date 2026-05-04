@@ -731,13 +731,13 @@ def run_assumed_fill(rng: random.Random, config: dict,
                 )
                 changed = sum(1 for g, sl in gate_remap.items()
                               if sl != GATE_VANILLA_SL.get(g))
-                print(f"  Assumed fill : skipped (--no-progression)")
+                print(f"  Assumed fill : skipped (--no-shuffle-progression)")
                 print(f"  Gate shuffle : {changed} gate(s) changed")
             except ImportError:
                 print("  WARNING: fill.py not found - gate shuffle skipped")
                 gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
         else:
-            print("  Assumed fill : skipped (--no-progression)")
+            print("  Assumed fill : skipped (--no-shuffle-progression)")
             gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
         return {}, gate_remap
 
@@ -938,7 +938,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"Shuffle gad temples: {config.get('shuffle_gad_temples', False)}",
         f"Shuffle weapons: {config.get('shuffle_weapons', True)}",
         f"Shuffle lore: {config.get('shuffle_lore', True)}",
-        f"Shuffle bonus: {config.get('shuffle_bonus', False)}",
+        f"Shuffle light soul: {config.get('shuffle_bonus', False)}",
         f"Shuffle enemies: {config.get('shuffle_enemies', False)}",
         f"Enemy mode: {config.get('enemy_mode', 'difficulty')}",
         f"Shuffle music: {config.get('shuffle_music', False)}",
@@ -1580,7 +1580,8 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run",               action="store_true")
     parser.add_argument("--restore",               action="store_true")
     parser.add_argument("--progression-balancing", type=int, default=50)
-    parser.add_argument("--no-progression",        action="store_true")
+    parser.add_argument("--shuffle-progression", action=argparse.BooleanOptionalAction, default=True,
+                        help="Shuffle key progression items using assumed-fill (default: on)")
     parser.add_argument("--gate-preset",
                         choices=["open", "easy", "medium", "hard", "chaos"],
                         default=None,
@@ -1588,12 +1589,14 @@ if __name__ == "__main__":
                              "medium=standard shuffle SL8 cap, hard=full shuffle, chaos=fully unconstrained")
     parser.add_argument("--max-sl", type=int, default=None,
                         help="Cap the maximum SL any shuffled gate can receive (1-10)")
-    parser.add_argument("--no-weapons",            action="store_true")
-    parser.add_argument("--no-lore",               action="store_true")
-    parser.add_argument("--shuffle-bonus", action="store_true",
-                        help="Include bonus items (Light Soul) in the shuffle pool")
-    parser.add_argument("--shuffle-gad-temples", action="store_true",
-                        help="Shuffle gad powers as physical pickups (requires EXE patch)")
+    parser.add_argument("--shuffle-weapons", action=argparse.BooleanOptionalAction, default=True,
+                        help="Shuffle weapons (default: on)")
+    parser.add_argument("--shuffle-lore", action=argparse.BooleanOptionalAction, default=True,
+                        help="Shuffle lore items (default: on)")
+    parser.add_argument("--shuffle-light-soul", action="store_true",
+                        help="Include the Light Soul bonus item in the shuffle pool")
+    parser.add_argument("--shuffle-gad-temples", action=argparse.BooleanOptionalAction, default=True,
+                        help="Shuffle gad powers as physical pickups via EXE patch (default: on)")
     parser.add_argument("--starting-item", default=None,
                         help="RSC name of item to place at swamp church (e.g. RSC_X_ENGINEERS_KEY)")
     parser.add_argument("--insanity", nargs="?", const=3, type=int, default=0,
@@ -1629,12 +1632,12 @@ if __name__ == "__main__":
 
     config = {
         "progression_balancing": args.progression_balancing,
-        "shuffle_progression":   not args.no_progression,
+        "shuffle_progression":   args.shuffle_progression,
         "gate_preset":           args.gate_preset,
         "max_sl":                args.max_sl,
-        "shuffle_weapons":       not args.no_weapons,
-        "shuffle_lore":          not args.no_lore,
-        "shuffle_bonus":         args.shuffle_bonus,
+        "shuffle_weapons":       args.shuffle_weapons,
+        "shuffle_lore":          args.shuffle_lore,
+        "shuffle_bonus":         args.shuffle_light_soul,
         "shuffle_gad_temples":   args.shuffle_gad_temples,
         "starting_item":         args.starting_item,
         "insanity":              args.insanity or 0,

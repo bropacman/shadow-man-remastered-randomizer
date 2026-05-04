@@ -3044,4 +3044,4 @@ as4dkeng,enemies.rsc,Trueform,0x14B0,RSC_X_TRUE_FORM,true_form,52,TRUE,TRUE,11,A
 ah2playr,instance.rsc,Violator (Accumulator Reward),0x2D2A,RSC_X_VIOLATOR,weapon,0,FALSE,TRUE,9,Asylum: Playrooms,ENG_KEY & X3_ACCUMULATOR,-5363.4,150.88,-10647.68,
 t1tchgad,quest.rsc,Gad Power Upgrade,0x3E52,RSC_X_GAD_PICKUP,gad,0,FALSE,TRUE,16,Temple of Fire (Toucher),GATE_FIRE_POIGNE,-559.4,340,35710.8,
 t2wlkgad,quest.rsc,Gad Power Upgrade,0x3432,RSC_X_GAD_PICKUP,gad,0,FALSE,TRUE,9,Temple of Prophecy (Marcher),GATE_PROPHECY_INTERIOR,256.0,395,1280.0,
-t3swmgad,quest.rsc,Gad Power Upgrade,0x3A1A,RSC_X_GAD_PICKUP,gad,0,FALSE,TRUE,7,Temple of Blood (Nager),GATE_BLOOD_INTERIOR,-1535.8,561.8,-4988.9,
+t3swmgad,quest.rsc,Gad Power Upgrade,0x3A1A,RSC_X_GAD_PICKUP,gad,0,FALSE,TRUE,7,Temple of Blood (Nager),GATE_BLOOD_INTERIOR,-1535.8,670,-4988.9,
