@@ -310,3 +310,13 @@ completed.
 
 - Game by Nightdive Studios
 - Randomizer by the Shadow Man modding community
+
+---
+
+## Disclaimer
+
+This is an unofficial fan-made tool and is not affiliated with, endorsed by, or sponsored by Nightdive Studios. Shadow Man Remastered is the property of Nightdive Studios.
+
+This tool requires a legitimate purchased copy of Shadow Man Remastered to function — no game assets are distributed. EXE patching is performed locally on the user's own installation. Use at your own risk; verify your game files via Steam if you need to restore a clean install.
+
+This project is released under the [MIT License](LICENSE).
