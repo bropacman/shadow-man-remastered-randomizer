@@ -5,7 +5,7 @@
 </div>
 
 A standalone randomizer for **Shadow Man Remastered** (Nightdive Studios, 2021).
-Randomizes key items, souls, weapons, gad powers, soul gate thresholds, enemies,
+Randomizes key items, souls, weapons, gad powers, coffin gate thresholds, enemies,
 music, and SFX using a custom assumed-fill algorithm that guarantees every seed
 is beatable.
 
@@ -21,8 +21,8 @@ is beatable.
 - **Weapons** — Asson, Shotgun, Sawed-off Shotgun, Enseigne, MP-909, 0.9-SMG, Tête de Mort, Flashlight, Violator
 - **Lore items** — Book of Shadows, Prophecy, Jack's Schematic
 - **Starting item** — choose a specific item (or let the randomizer pick one) to receive at the Louisiana Swampland church before any other pickup
-- **Dark Souls and Govis** — shuffled across all soul slots
-- **Soul gate SL requirements** — coffin gate thresholds reshuffled across deadside
+- **Dark Souls and Govis** — shuffled across all soul, barrel, and cadeaux slots, so they can end up anywhere
+- **Coffin gate SL requirements** — coffin gate thresholds reshuffled across deadside
   (in-world ARC ring decorations updated to match)
 - **Enemies** — enemy types shuffled with three modes: depth-weighted by tier
   (default), purely random by movement type, or themed by context group
@@ -32,7 +32,7 @@ is beatable.
 ### Logic Guarantees
 - Assumed-fill algorithm guarantees all seeds are beatable before patching
 - Starting item is granted before fill runs, so the algorithm accounts for it during logic
-- Soul gate shuffle ensures starting gates (Wasteland, Asylum, Path 3) stay at SL≤3
+- Coffin gate shuffle ensures starting gates (Wasteland, Asylum, Path 3) stay at SL≤3
 - Eclipser lock group prevents circular placement
 - Liveside souls correctly require NIGHT (all three Eclipsers) to collect
 - Full sphere-by-sphere playthrough simulation written to spoiler log
@@ -154,7 +154,7 @@ python patcher.py --restore --game-dir <PATH>
 | `--insanity [1\|2\|3]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. |
 | `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world |
 
-### Soul gates
+### Coffin gates
 
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -250,9 +250,9 @@ python tools/generate_enemies.py
 
 ---
 
-## Soul Gate Thresholds
+## Coffin Gate Thresholds
 
-Soul gates use a non-linear threshold scale:
+Coffin gates use a non-linear threshold scale:
 
 | SL | Souls Required |
 |----|---------------|
