@@ -1,4 +1,8 @@
-# Shadow Man Remastered Randomizer
+<div align="center">
+
+![Shadow Man Remastered Randomizer](assets/SMRR_LOGO.png)
+
+</div>
 
 A standalone randomizer for **Shadow Man Remastered** (Nightdive Studios, 2021).
 Randomizes key items, souls, weapons, gad powers, soul gate thresholds, enemies,
