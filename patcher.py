@@ -922,7 +922,6 @@ def inject_special_item_fx(marker_sites: list, levels_path) -> int:
 
 def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
                       records_by_folder, config, spheres=None) -> None:
-
     starting_rsc = config.get('starting_item', None)
     starting_friendly = _RSC_TO_FRIENDLY.get(starting_rsc, starting_rsc) if starting_rsc else 'none'
 
@@ -1243,6 +1242,11 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             writer.writeheader()
             writer.writerows(object_map)
         print(f"Object map: {map_path}")
+
+    # ── Resolve random starting item before fill ──────────────────────────────
+    if config.get("random_starting_item"):
+        starting_item_rsc = rng.choice(list(STARTING_ITEM_POOL.values()))
+        config["starting_item"] = starting_item_rsc
 
     # ── Step 2: Run assumed fill (includes gate shuffle) ─────────────────────
     print("\nRunning assumed fill...")
@@ -1599,6 +1603,8 @@ if __name__ == "__main__":
                         help="Shuffle gad powers as physical pickups via EXE patch (default: on)")
     parser.add_argument("--starting-item", default=None,
                         help="RSC name of item to place at swamp church (e.g. RSC_X_ENGINEERS_KEY)")
+    parser.add_argument("--random-starting-item", action="store_true",
+                        help="Pick a random starting item using the seed RNG")
     parser.add_argument("--insanity", nargs="?", const=3, type=int, default=0,
                         help="Insanity tier 1-3: 1=soul/govi slots, 2=+cadeaux slots, 3=all slots. Bare --insanity = tier 3.")
     parser.add_argument("--shuffle-enemies", action="store_true",
@@ -1640,6 +1646,7 @@ if __name__ == "__main__":
         "shuffle_bonus":         args.shuffle_light_soul,
         "shuffle_gad_temples":   args.shuffle_gad_temples,
         "starting_item":         args.starting_item,
+        "random_starting_item":  args.random_starting_item,
         "insanity":              args.insanity or 0,
         "shuffle_enemies":       args.shuffle_enemies,
         "enemy_mode":            args.enemy_mode,

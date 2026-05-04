@@ -20,7 +20,7 @@ is beatable.
   temple locations (EXE patch applied automatically; disable with `--no-shuffle-gad-temples`)
 - **Weapons** — Asson, Shotgun, Sawed-off Shotgun, Enseigne, MP-909, 0.9-SMG, Tête de Mort, Flashlight, Violator
 - **Lore items** — Book of Shadows, Prophecy, Jack's Schematic
-- **Starting item** — choose a specific item (or let the randomizer pick one) to receive at the Louisiana Swampland church before any other pickup
+- **Starting item** — choose a specific item to receive at the Louisiana Swampland church before any other pickup, or use random to let the seed pick one reproducibly
 - **Dark Souls and Govis** — shuffled across all soul, barrel, and cadeaux slots, so they can end up anywhere
 - **Coffin gate SL requirements** — coffin gate thresholds reshuffled across deadside
   (in-world ARC ring decorations updated to match)
@@ -117,6 +117,9 @@ python patcher.py --game-dir <PATH> --gate-preset medium
 # Start with the Engineers Key already in hand
 python patcher.py --game-dir <PATH> --starting-item RSC_X_ENGINEERS_KEY
 
+# Let the seed pick a random starting item (reproducible)
+python patcher.py --game-dir <PATH> --random-starting-item
+
 # Throw everything in the blender
 python patcher.py --game-dir <PATH> \
     --shuffle-enemies --shuffle-true-forms \
@@ -150,7 +153,8 @@ python patcher.py --restore --game-dir <PATH>
 | `--shuffle-lore` / `--no-shuffle-lore` | on | Shuffle lore items |
 | `--shuffle-light-soul` | off | Include the Light Soul bonus item in the shuffle pool |
 | `--shuffle-gad-temples` / `--no-shuffle-gad-temples` | on | Gad powers as physical pickups (EXE patch) |
-| `--starting-item RSC_NAME` | none | Place a specific item at the Louisiana Swampland church at run start (e.g. `RSC_X_ENGINEERS_KEY`). Use `--starting-item random` in the GUI to let the randomizer pick one. |
+| `--starting-item RSC_NAME` | none | Place a specific item at the Louisiana Swampland church at run start (e.g. `RSC_X_ENGINEERS_KEY`) |
+| `--random-starting-item` | off | Pick a random starting item using the seed RNG — reproducible for a given seed |
 | `--insanity [1\|2\|3]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. |
 | `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world |
 

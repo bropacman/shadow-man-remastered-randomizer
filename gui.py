@@ -666,8 +666,8 @@ class _Api:
 
         starting_item = config.get("startingItem", "")
         if starting_item == "random":
-            starting_item = random.choice(list(STARTING_ITEM_POOL.values()))
-        if starting_item:
+            cmd.append("--random-starting-item")
+        elif starting_item:
             cmd += ["--starting-item", starting_item]
 
         insanity_tier = int(config.get("insanity", 0))
