@@ -61,7 +61,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
 from access_rules import R, GATE_VANILLA_SL
-from constants import GATE_PRESETS
+from constants import GATE_PRESETS, ITEM_GATE_IDS
 
 # ── Player constant ────────────────────────────────────────────────────────────
 
@@ -248,6 +248,7 @@ def _shuffle_gates(
     locked: frozenset[str] = frozenset(),
     max_sl: int | None = None,
     safe: bool = True,
+    sl_spread: int = 4,
 ) -> dict[str, int]:
     """
     Shuffle SL thresholds across all non-locked gates.
@@ -269,12 +270,18 @@ def _shuffle_gates(
     }
 
     shuffleable = [g for g in GATE_VANILLA_SL if g not in locked]
-    sl_pool = [GATE_VANILLA_SL[g] for g in shuffleable]
-
-    if max_sl is not None:
-        sl_pool = [min(sl, max_sl) for sl in sl_pool]
-
-    rng.shuffle(sl_pool)
+    sl_pool = []
+    for g in shuffleable:
+        center = GATE_VANILLA_SL[g]
+        hi = max_sl if max_sl is not None else 10
+        candidates = list(range(1, hi + 1))
+        if g in ITEM_GATE_IDS:
+            # Truly random — flat weights
+            sl_pool.append(rng.choice(candidates))
+        else:
+            # World gate — weighted toward vanilla depth
+            weights = [max(1, (sl_spread + 1) - abs(sl - center)) for sl in candidates]
+            sl_pool.append(rng.choices(candidates, weights=weights)[0])
     temp_map = dict(zip(shuffleable, sl_pool))
 
     if not safe:
@@ -673,30 +680,28 @@ def assumed_fill(
     lock_gates: frozenset[str] = frozenset(),
     max_sl: int | None = None,
     safe: bool = True,
+    sl_spread: int = 4,
     insanity: int = 0,
     shuffle_weapons: bool = True,
     shuffle_lore: bool = True,
     shuffle_bonus: bool = False,
     shuffle_gad_temples: bool = False,
+    starting_item: str | None = None,
     true_form_loc_remap: dict[str, str] | None = None,
 ) -> tuple[dict[str, str], dict[str, int]]:
 
     # ── Step 1: Gates ─────────────────────────────────────────────────────────
-    if shuffle_gates:
-        gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe)
+    # Add starting item to inventory so logic system knows player already has it
+    if starting_item:
+        STARTING_ITEMS.add(starting_item)
 
+    if shuffle_gates:
+        gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe, sl_spread=sl_spread)
     if gate_remap:
         level_rules = build_gate_rules(gate_remap)
     else:
         gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
         level_rules = _LEVEL_RULES
-
-    preset_zeroed = lock_gates
-    if preset_zeroed:
-        for g in preset_zeroed:
-            if g in gate_remap:
-                gate_remap[g] = 0
-        level_rules = build_gate_rules(gate_remap)
 
     if no_soul_gates:
         for g in gate_remap:
@@ -759,14 +764,25 @@ def assumed_fill(
     # This ensures key items claim their slots while the candidate pool is
     # widest, before souls consume reachable locations.
     def _placement_priority(item) -> float:
-        if item.category in WLB_CATS:
-            return 2.0
-        if item.category == "soul":
-            return rng.uniform(0, 2)
-        # progression, retractor, accumulator, gad
-        return rng.uniform(0.0, 1)
+        if item.category in {"progression", "retractor", "gad"}:
+            return rng.uniform(0.0, 1.0)
+        if item.category in {"weapon", "soul"}:
+            return rng.uniform(0.0, 2.0)
+        # lore, accumulator, bonus
+        return rng.uniform(0.5, 3.0)
 
     item_pool.sort(key=_placement_priority)
+
+    # ── Remove starting item from pool if specified ────────────────────────
+    if starting_item:
+        for i, loc in enumerate(item_pool):
+            if loc.object == starting_item:
+                item_pool.pop(i)
+                print(f"  Starting item: {starting_item} removed from pool")
+                break
+        else:
+            print(f"  WARNING: starting item {starting_item!r} not found in pool")
+
     if verbose:
         item_cat_counts = Counter(item.category for item in item_pool)
         print(f"  Item pool: {len(item_pool)} total")
@@ -794,8 +810,8 @@ def assumed_fill(
             return rng.choice(candidates)
 
         def _weight(loc) -> float:
-            if item.category == "soul":
-                return 1.0
+            # if item.category == "soul":
+            #     return 1.0
 
             # depth_score proxies how hard this slot is to reach.
             # For region-gated slots it mirrors the gate's SL value.
@@ -975,21 +991,21 @@ def assumed_fill(
     if shuffle_lore:    include_cats.add("lore")
     if shuffle_bonus:   include_cats.add("bonus")
 
-    filler_slot_cats_remaining = (FILLER_SLOT_CATS | include_cats) if insanity >= 1 else (FILLER_SLOT_CATS | {"soul"})
-
-    remaining_locs = [
-        loc.loc_key for loc in CHECKABLE_LOCS
-        if loc.loc_key not in placement
-           and loc.category in filler_slot_cats_remaining
-    ]
-    rng.shuffle(remaining_locs)
-
+    # Items to place — always just unfilled barrel/cadeaux (junk/filler)
     filler_items = [
         loc for loc in CHECKABLE_LOCS
         if loc.loc_key not in placement
-        and loc.category in filler_slot_cats_remaining
+           and loc.category in FILLER_SLOT_CATS
     ]
     rng.shuffle(filler_items)
+
+    # Slots to fill — unfilled soul slots + unfilled barrel/cadeaux slots
+    # (key item slots left empty by insanity get filled too)
+    remaining_locs = [
+        loc.loc_key for loc in CHECKABLE_LOCS
+        if loc.loc_key not in placement
+    ]
+    rng.shuffle(remaining_locs)
 
     if filler_items:
         for i, loc_key in enumerate(remaining_locs):
@@ -997,8 +1013,11 @@ def assumed_fill(
     else:
         print("  WARNING: no filler items available for remaining slots")
 
-    return placement, gate_remap
+    # Clean up starting item from STARTING_ITEMS so it doesn't persist between calls
+    if starting_item:
+        STARTING_ITEMS.discard(starting_item)
 
+    return placement, gate_remap
 
 # ── Validation ─────────────────────────────────────────────────────────────────
 
@@ -1007,8 +1026,12 @@ def validate_fill(
     verbose: bool = False,
     gate_remap: dict[str, int] | None = None,
     shuffle_gad_temples: bool = False,
-    true_form_loc_remap: dict[str, str] | None = None,  # ← ADD
+    starting_item: str | None = None,
+    true_form_loc_remap: dict[str, str] | None = None,
 ) -> tuple[bool, str]:
+
+    if starting_item:
+        STARTING_ITEMS.add(starting_item)
 
     placed_objects = [v.object if hasattr(v, "object") else v for v in placement.values()]
     for item_name in ALL_UNIQUES:
@@ -1074,6 +1097,9 @@ def validate_fill(
                     "NO" if isinstance(met, bool) else met)
                 lines.append(f"    {status}  {label}")
 
+    if starting_item:
+        STARTING_ITEMS.discard(starting_item)
+
     return ok, "\n".join(lines)
 
 
@@ -1087,13 +1113,14 @@ if __name__ == "__main__":
     parser.add_argument("--seeds", type=int, default=100)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("--gate-preset",
-                        choices=["story", "easy", "hard", "chaos"],
-                        default=None,
-                        help="Gate difficulty preset")
+                        choices=["open", "easy", "medium", "hard", "chaos"],
+                        default=None)
     parser.add_argument("--max-sl", type=int, default=None,
                         help="Cap the maximum SL any shuffled gate can receive (1-10)")
     parser.add_argument("--shuffle-gad-temples", action="store_true",
                         help="Shuffle gad powers as physical pickups")
+    parser.add_argument("--starting-item", default=None,
+                        help="RSC name of item to place at swamp church start location")
     args = parser.parse_args()
     seeds = [args.seed] if args.seed is not None else [
         random.randint(0, 99_999_999) for _ in range(args.seeds)
@@ -1122,13 +1149,16 @@ if __name__ == "__main__":
             lock_gates=p.get("lock_gates", frozenset()),
             max_sl=args.max_sl if args.max_sl is not None else p.get("max_sl"),
             safe=p.get("safe", True),
+            sl_spread=p.get("sl_spread", 4),
             shuffle_gad_temples=args.shuffle_gad_temples,
+            starting_item=args.starting_item,
         )
         ok, report = validate_fill(
             placement,
             verbose=args.verbose,
             gate_remap=gate_remap,
             shuffle_gad_temples=args.shuffle_gad_temples,
+            starting_item=args.starting_item,  # ← add
         )
 
         if ok:

@@ -147,48 +147,15 @@ def inject_record(
     x: float, y: float, z: float,
     zone: int,
 ) -> tuple[int, bool]:
-    """
-    Inject an RSC_X_GAD_PICKUP record into *data* (modified in-place).
+    from rsc_utils import inject_rsc_record, build_rsc_record, HEADER_SIZE, RECORD_SIZE, NAME_OFF
 
-    Returns (name_offset, already_existed).
-    name_offset is the absolute file offset of the NAME field for the record.
-    already_existed is True if a matching record was already present.
-    """
     existing = _find_existing(bytes(data), zone, x, y, z)
     if existing is not None:
         return existing, True
 
-    count = data[COUNT_BYTE]
-    body_view = memoryview(data)[HEADER_SIZE:]
-    n_total = len(body_view) // RECORD_SIZE
-
-    # Find first empty slot within the live window, else use slot at `count`.
-    slot = None
-    for i in range(count):
-        name = body_view[i*RECORD_SIZE + NAME_OFF : i*RECORD_SIZE + NAME_OFF + NAME_MAXLEN]
-        if all(b == 0 for b in name):
-            slot = i
-            break
-
-    if slot is None:
-        # No empty slot in live window — use the next pre-allocated slot.
-        if count >= n_total:
-            # File has no headroom; append a new record.
-            record = _build_record(x, y, z, zone)
-            data += record
-            slot = count
-        else:
-            slot = count
-
-    record = _build_record(x, y, z, zone)
-    off = HEADER_SIZE + slot * RECORD_SIZE
-    data[off : off + RECORD_SIZE] = record
-
-    # Bump the count if we used the slot at or beyond the old count boundary.
-    if slot >= count:
-        data[COUNT_BYTE] = min(count + 1, 255)
-
-    name_offset = off + NAME_OFF
+    record = build_rsc_record(GAD_PICKUP_RSC, x, y, z, zone)
+    slot = inject_rsc_record(data, record, allow_expand=True)
+    name_offset = HEADER_SIZE + slot * RECORD_SIZE + NAME_OFF
     return name_offset, False
 
 

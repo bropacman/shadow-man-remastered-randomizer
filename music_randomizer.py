@@ -29,6 +29,49 @@ EXCLUDED_TRACKS: frozenset[str] = frozenset({
     "menu.flac"
 })
 
+import struct
+
+# ── FLAC duration parsing ──────────────────────────────────────────────────────
+
+def _flac_duration_seconds(data: bytes) -> float | None:
+    """
+    Parse FLAC STREAMINFO block and return track duration in seconds.
+    No external dependencies — reads raw FLAC header bytes only.
+    Returns None if not a valid FLAC or header is malformed.
+    """
+    if len(data) < 42 or data[:4] != b'fLaC':
+        return None
+    hdr = struct.unpack_from(">I", data, 4)[0]
+    if ((hdr >> 24) & 0x7F) != 0 or (hdr & 0xFFFFFF) < 34:
+        return None
+    # STREAMINFO starts at byte 8; fields of interest are at bytes 10-17
+    b8 = struct.unpack_from(">Q", data, 18)[0]  # file offset 8+10 = 18
+    sample_rate   = (b8 >> 44) & 0xFFFFF
+    total_samples =  b8        & 0xFFFFFFFFF
+    if sample_rate == 0:
+        return None
+    return total_samples / sample_rate
+
+
+# ── Duration bucketing ─────────────────────────────────────────────────────────
+#
+# Tracks are bucketed by duration before shuffling so a 4-second sting never
+# lands in a slot that expects a 3-minute loop, and vice versa.
+# Bucket boundaries are in seconds — adjust if game tracks cluster differently.
+
+DURATION_BUCKETS: list[tuple[str, float, float]] = [
+    ("short",  0.0,   29.9),   # < 1 min: stings, transitions, short loops
+    ("medium", 30.0, 59.9),  # < 1 min: stings, transitions, short loops
+    ("long",  60.0, 9999.0),   # >= 1 min: full level tracks
+]
+
+def _duration_bucket(seconds: float | None) -> str:
+    if seconds is None:
+        return "long"   # unknown → treat as long, safer default
+    for name, lo, hi in DURATION_BUCKETS:
+        if lo <= seconds < hi:
+            return name
+    return "long"
 
 def _stem(internal_path: str) -> str:
     """Return the filename stem (no extension) from an internal KPF path."""
@@ -90,10 +133,41 @@ def shuffle_music(
         return {}
 
     # Shuffle: build a mapping {slot_path: source_path}
-    # slot_paths stay fixed (filenames in mod KPF), source_paths are shuffled
-    sources = shuffleable[:]
-    rng.shuffle(sources)
-    swap_map = dict(zip(shuffleable, sources))  # slot -> source that plays there
+    # Read durations and assign buckets
+    durations: dict[str, float | None] = {}
+    for path in shuffleable:
+        matches = find_file_in_kpf(kpf_index, path)
+        if not matches:
+            durations[path] = None
+            continue
+        internal, kpf_name = matches[0]
+        kpf_full = str(Path(kpf_index.kpf_dir) / kpf_name)
+        # Read just the first 64 bytes — enough for FLAC STREAMINFO
+        try:
+            import zipfile
+            with zipfile.ZipFile(kpf_full, "r") as zf:
+                with zf.open(internal) as f:
+                    header = f.read(64)
+            durations[path] = _flac_duration_seconds(header)
+        except Exception:
+            durations[path] = None
+
+    # Group by bucket and report
+    from collections import defaultdict
+    buckets: dict[str, list[str]] = defaultdict(list)
+    for path in shuffleable:
+        buckets[_duration_bucket(durations[path])].append(path)
+
+    for bname, tracks in sorted(buckets.items()):
+        dur_strs = [f"{durations[t]:.0f}s" if durations[t] else "?" for t in tracks]
+        print(f"  Music [{bname}]: {len(tracks)} tracks  ({', '.join(dur_strs)})")
+
+    # Shuffle within each bucket independently
+    swap_map: dict[str, str] = {}
+    for bname, tracks in buckets.items():
+        sources = tracks[:]
+        rng.shuffle(sources)
+        swap_map.update(zip(tracks, sources))
 
     # Extract swapped files to work_dir/music_shuffle/
     out_root = Path(work_dir) / "music_shuffle"
@@ -101,15 +175,6 @@ def shuffle_music(
 
     mod_files: dict[str, str] = {}
     changed = 0
-
-    for kpf_path in kpf_files:
-        try:
-            zf_names: dict[str, str] = {}
-            with zipfile.ZipFile(kpf_path, "r") as zf:
-                for info in zf.infolist():
-                    zf_names[info.filename.replace("\\", "/")] = kpf_path
-        except zipfile.BadZipFile:
-            continue
 
     for slot_path, source_path in swap_map.items():
         if slot_path == source_path:

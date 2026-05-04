@@ -27,11 +27,6 @@ ENV/
 Thumbs.db
 desktop.ini
 
-# ── Generated / extracted location data ───────────────────────────
-# These are produced by the data extraction pipeline and should be
-# regenerated locally rather than tracked.
-extracted_enemy_locations.py
-extracted_locations.py
 
 # ── Backup files left behind by editors / sed -i ──────────────────
 *.bak

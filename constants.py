@@ -44,11 +44,57 @@ _PRISON_KEY_CARD = "RSC_X_PRISON_KEY_CARD"
 _ACCUMULATOR     = "RSC_X_ACCUMULATOR"
 _GAD_PICKUP      = "RSC_X_GAD_PICKUP"
 
+STARTING_ITEM_POOL: dict[str, str] = {
+    "Engineers Key":      "RSC_X_ENGINEERS_KEY",
+    "Baton":              "RSC_X_BATON",
+    "Flashlight":         "RSC_X_FLASHLIGHT",
+    "Poigne":             "RSC_X_POIGNE",
+    "Calabash":           "RSC_X_CALABASH",
+    "Flambeau":           "RSC_X_FLAMBEAU",
+    "Marteau":            "RSC_X_MARTEAU",
+    "Prison Key Card":    "RSC_X_PRISON_KEY_CARD",
+    "Eclipser Part 1":    "RSC_X_ECLIPSER_PART1",
+    "Eclipser Part 2":    "RSC_X_ECLIPSER_PART2",
+    "Eclipser Part 3":    "RSC_X_ECLIPSER_PART3",
+    "Retractor":          "RSC_X_RETRACT",
+    "Retractor (AL)":     "RSC_X_RETRACT1",
+    "Retractor (AP)":     "RSC_X_RETRACT2",
+    "Accumulator":        "RSC_X_ACCUMULATOR",
+    "Asson":              "RSC_X_ASSON",
+    "Shotgun":            "RSC_X_SHOTGUN",
+    "Sawed-off Shotgun":  "RSC_X_SHOTGUN2",
+    "MP-909":             "RSC_X_MP5",
+    "0.9-SMG":            "RSC_X_MAC10",
+    "Enseigne":           "RSC_X_ENSEIGNE",
+    "Tete de Mort":       "RSC_X_TETEDEMORT",
+    "Book of Shadows":    "RSC_X_BOOK_OF_SHADOWS",
+    "Book of Prophecy":   "RSC_X_PROPHECY",
+    "Jacks Schematic":    "RSC_X_JACKS_SCHEMATIC",
+    "Light Soul":         "RSC_X_LIGHT_SOUL",
+    "Violator":           "RSC_X_VIOLATOR",
+    "Gad Power Upgrade":  "RSC_X_GAD_PICKUP",
+}
+
+# ── Asset overrides ──────────────────────────────────────────────────────────
+# (source relative to randomizer root, dest relative to game dir)
+# Applied unconditionally on every randomizer run.
+ASSET_OVERRIDES: list[tuple[str, str]] = [
+    (r"data\000pot.dds", r"hdtextures\meshes\items\pot\000pot.dds"),
+    (r"data\019crate.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
+    (r"data\020crate.dds", r"hdtextures\levels\uground\objects\tga\020crate.dds"),
+]
+
+# ── MSH overrides ────────────────────────────────────────────────────────────
+# (source msh relative to randomizer root, dest internal KPF path, scale factor)
+MSH_OVERRIDES: list[tuple[str, float]] = [
+    (r"levels/uground/objects/crate.msh", 1.1),
+]
+
 # ── Gate constants ────────────────────────────────────────────────────────────
 
 GATE_VANILLA_SL: dict[str, int] = {
     # ── Deadside gates ────────────────────────────────────────────────────────
-    "GATE_DEADSIDE_MARROW"      :  0,  # ARC0  — Path of Shadows entry          LOCKED
+    "GATE_DEADSIDE_MARROW"      :  0,  # ARC0  — Path of Shadows entry
     "GATE_DEADSIDE_WASTELAND"   :  1,  # ARC1  — deadside → wasteland
     "GATE_DEADSIDE_ASYLUM"      :  2,  # ARC2  — deadside → asylum
     "GATE_DEADSIDE_PATH_3"      :  3,  # ARC3a — lower la lune path
@@ -61,7 +107,7 @@ GATE_VANILLA_SL: dict[str, int] = {
     "GATE_DEADSIDE_LALAME"      :  7,  # ARC7c — la lame / lower deadside
     "GATE_DEADSIDE_BLOOD"       :  8,  # ARC8  — temple of blood approach
     "GATE_DEADSIDE_FOGOMETERS"  :  9,  # ARC9  — fogometers approach
-    "GATE_DEADSIDE_MYSTERY"     : 10,  # ARC10 — final gate                     LOCKED
+    "GATE_DEADSIDE_MYSTERY"     : 10,  # ARC10 — final gate
     # ── Non-deadside gates ────────────────────────────────────────────────────
     "GATE_WASTELAND_ENSEIGNE"   :  6,  # wastland  — interior enseigne gate
     "GATE_FIRE_POIGNE"          :  4,  # t1tchgad  — Temple of Fire lower gate
@@ -70,6 +116,19 @@ GATE_VANILLA_SL: dict[str, int] = {
     "GATE_BLOOD_INTERIOR"       :  9,  # t3swmgad  — Temple of Blood interior
     "GATE_FOGOMETERS_INTERIOR"  : 10,  # ah4fogom  — Fogometers interior         LOCKED
 }
+
+# Gates that only guard a key item and a handful of checks
+ITEM_GATE_IDS: frozenset[str] = frozenset({
+    "GATE_DEADSIDE_LALUNE",
+    "GATE_DEADSIDE_LALAME",
+    "GATE_DEADSIDE_MYSTERY",
+    "GATE_WASTELAND_ENSEIGNE",
+    "GATE_FIRE_POIGNE",
+    "GATE_FIRE_FLAMBEAU",
+    "GATE_PROPHECY_INTERIOR",
+    "GATE_BLOOD_INTERIOR",
+    "GATE_FOGOMETERS_INTERIOR",
+})
 
 # Shuffle Gate Difficulties
 _HARD_LOCKED: frozenset[str] = frozenset({
@@ -88,33 +147,45 @@ _EASY_LOCKED: frozenset[str] = _HARD_LOCKED | frozenset({
 })
 
 GATE_PRESETS: dict[str, dict] = {
-    "story": {
+    "open": {
         "shuffle_gates": False,
         "no_soul_gates": True,
-        "lock_gates":    frozenset(),
-        "max_sl":        None,
-        "safe":          True,
+        "lock_gates": frozenset(),
+        "max_sl": None,
+        "safe": True,
+        "sl_spread": None,  # unused, no shuffling
     },
     "easy": {
         "shuffle_gates": True,
         "no_soul_gates": False,
-        "lock_gates":    _EASY_LOCKED,
-        "max_sl":        8,
-        "safe":          True,
+        "lock_gates": _EASY_LOCKED,
+        "max_sl": 8,
+        "safe": True,
+        "sl_spread": 2,  # stays close to vanilla depth
+    },
+    "medium": {
+        "shuffle_gates": True,
+        "no_soul_gates": False,
+        "lock_gates": _HARD_LOCKED,
+        "max_sl": 8,
+        "safe": True,
+        "sl_spread": 4,  # default variance
     },
     "hard": {
         "shuffle_gates": True,
         "no_soul_gates": False,
-        "lock_gates":    _HARD_LOCKED,
-        "max_sl":        None,
-        "safe":          True,
+        "lock_gates": _HARD_LOCKED,
+        "max_sl": None,
+        "safe": True,
+        "sl_spread": 4,
     },
     "chaos": {
         "shuffle_gates": True,
         "no_soul_gates": False,
-        "lock_gates":    frozenset(),
-        "max_sl":        None,
-        "safe":          False,
+        "lock_gates": frozenset(),
+        "max_sl": None,
+        "safe": False,
+        "sl_spread": 10,  # basically flat — anything goes
     },
 }
 
@@ -192,18 +263,44 @@ RSC_TO_ITEM_ID: dict[str, int] = {
 
 GAD_PICKUP_RSC = "RSC_X_GAD_PICKUP"
 
+# Expected file offsets for RSC_X_GAD_PICKUP records after setup_gad_records injection.
+# If inject_record returns a different offset, extracted_locations.py needs updating.
+GAD_PICKUP_EXPECTED_OFFSETS = {
+    "t1tchgad": 0x3E52,
+    "t2wlkgad": 0x3432,
+    "t3swmgad": 0x3A1A,
+}
+
 # ── Item spawn height adjustments ─────────────────────────────────────────────
 
 TALL_TYPES: set[str] = {"RSC_X_GOVI", "RSC_X_DARK_SOUL"}  # same as DARK_SOUL_TYPES
 
 GOVI_HEIGHT_BOOST        =  120.0  # lift tall soul objects so they don't clip into the floor
 CADEAU_HEIGHT_DROP       = -120.0  # drop short objects so they don't float replacing a tall one
-PROGRESSION_IN_SOUL_LIFT =  0.0  # raise key/weapon/lore items placed in soul or cadeaux slots
+PROGRESSION_IN_SOUL_LIFT =  20.0  # raise key/weapon/lore items placed in soul or cadeaux slots
 
 # RSC name spawned next to key items placed into soul/cadeaux slots (insanity mode).
-# Swap this out to try different visual effects.
-SOUL_SLOT_MARKER_FX        = "RSC_X_HALO" # RSC_X_HALO confirmed working
-SOUL_SLOT_MARKER_FX_Y      = -100.0   # Y offset the slot's native position
+# No level prefix → globally registered asset, renders across all level types.
+SOUL_SLOT_MARKER_FX   = "RSC_X_WEAPON_ALTAR"
+SOUL_SLOT_MARKER_FX_Y = -120.0   # Y offset from slot's native position
+
+# Day/night mirror pairs — same physical space, different level folders.
+# When a marker is injected for one side, it must also be injected into the other
+# so the visual indicator appears regardless of which time-of-day the player enters.
+DAY_NIGHT_MIRRORS: dict[str, str] = {
+    "swampday": "swampnit",
+    "swampnit": "swampday",
+    "tenement": "ntenemnt",
+    "ntenemnt": "tenement",
+    "prison":   "nprison",
+    "nprison":  "prison",
+    "uground":  "nuground",
+    "nuground": "uground",
+    "florida":  "nflorida",
+    "nflorida": "florida",
+    "salvage":  "nsalvage",
+    "nsalvage": "salvage",
+}
 
 # Per-item Y spawn adjustments for items that clip or float at the slot's native height.
 # Applied on top of GOVI_HEIGHT_BOOST / CADEAU_HEIGHT_DROP when those also fire.

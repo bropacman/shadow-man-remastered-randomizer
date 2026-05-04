@@ -44,6 +44,7 @@ import random
 import subprocess
 import threading
 from pathlib import Path
+from constants import STARTING_ITEM_POOL
 
 import webview
 import patcher
@@ -83,21 +84,25 @@ _HTML = r"""<!DOCTYPE html>
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 13px; padding: 18px 22px 14px;
     -webkit-user-select: none; user-select: none; line-height: 1.4;
+    overflow-x: hidden;
   }
   .header { margin-bottom: 14px; }
   .header h1 { font-size: 17px; font-weight: 700; color: #fff; letter-spacing: -0.01em; }
   .header p  { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
-  .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 8px; padding: 12px 15px; margin-bottom: 10px;
-  }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 15px;
+}
   .card-title {
     font-size: 10px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px;
   }
-  .card-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .card-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: flex-start; }
   .card-row .card { flex: 1; margin-bottom: 0; }
+  /* True equal-width two-column grid; each cell is only as tall as its content */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; align-items: start; }
+  .two-col .card { margin-bottom: 0; }
 
   .row { display: flex; align-items: center; gap: 8px; }
   .row + .row { margin-top: 8px; }
@@ -223,15 +228,15 @@ _HTML = r"""<!DOCTYPE html>
 </div>
 
 <!-- Row 1: Game Dir + Seed -->
-<div class="card-row">
-  <div class="card">
+<div class="card-row" style="align-items:stretch">
+  <div class="card" style="flex:1;min-width:280px;display:flex;flex-direction:column;justify-content:center">
     <div class="card-title">Game Directory</div>
     <div class="row">
       <input type="text" id="gameDir" class="dir-input" placeholder="Path to Shadow Man Remastered&hellip;">
       <button class="btn-ghost" onclick="browseDir()">Browse&hellip;</button>
     </div>
   </div>
-  <div class="card" style="flex:0 0 auto;min-width:280px">
+  <div class="card" style="flex:1 ;min-width:280px">
     <div class="card-title">Seed</div>
     <div class="row">
       <input type="number" id="seed" class="seed-input" placeholder="random" min="1" max="2147483647">
@@ -241,40 +246,166 @@ _HTML = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Row 2: Coffin Gates + Cosmetic -->
-<div class="card-row">
-  <div class="card">
-    <div class="card-title">
-      Coffin Gate Soul Levels
-      <span class="tip" style="vertical-align:middle">
-        <span class="tip-icon">?</span>
-        <span class="tip-box">Shuffles the soul level (SL) thresholds on deadside coffin gates. Higher SL gates require more Dark Souls collected before they open. Starting gates are always kept at SL&le;3 so the game is immediately playable.</span>
-      </span>
+<!-- Row 2: Gameplay+Starting Item (left) | Coffin Gates+Progression (right) -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
+
+
+  <!-- Left: Gameplay checkboxes + Starting Item -->
+  <div class="card" style="flex:1 ;min-width:280px">
+    <div class="card-title">Gameplay</div>
+    <div class="check-grid">
+      <label class="check-label">
+        <input type="checkbox" id="shuffleKeyItems" class="default-on" checked>
+        Shuffle Key Items
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles key progression items (Engineer&rsquo;s Key, Poign&eacute;, Baton, Flambeau, Marteau, Calabash, Retractors, etc.) using assumed-fill logic that guarantees every seed is beatable.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleGad" class="default-on" checked>
+        Shuffle Gad Pickups
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Converts Gad powers (Touch, Walk, Swim) into physical pickups and shuffles them across temple locations. Requires an EXE patch, which is applied automatically.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleWeapons" class="default-on" checked>
+        Shuffle Weapons
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapons (Asson, Shotgun, Enseigne, MP5, T&ecirc;te de Mort, Desert Eagle) across item locations. Uncheck to leave weapons in their vanilla spots.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleLore" class="default-on" checked>
+        Shuffle Lore
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles lore items (Book of Shadows, Prophecy, Jack&rsquo;s Schematic) across locations. Uncheck to leave them in vanilla positions.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleLightSoul">
+        Shuffle Light Soul
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item in the shuffle pool. Off by default as it can affect run balance.</span></span>
+      </label>
     </div>
+    <hr class="divider">
+    <div class="card-title" style="margin-bottom:8px">Starting Item</div>
     <div class="row">
-      <select id="gatePreset" onchange="updateGateDesc()">
-        <option value="none">none</option>
-        <option value="story">story</option>
-        <option value="easy">easy</option>
-        <option value="hard">hard</option>
-        <option value="chaos">chaos</option>
+      <select id="startingItem">
+        <option value="">None</option>
+        <option value="random">Random</option>
+        <option value="RSC_X_ENGINEERS_KEY">⭐ Engineers Key</option>
+        <option value="RSC_X_BATON">Baton</option>
+        <option value="RSC_X_CALABASH">Calabash</option>
+        <option value="RSC_X_ECLIPSER_PART1">Eclipser Part 1</option>
+        <option value="RSC_X_ECLIPSER_PART2">Eclipser Part 2</option>
+        <option value="RSC_X_ECLIPSER_PART3">Eclipser Part 3</option>
+        <option value="RSC_X_FLAMBEAU">Flambeau</option>
+        <option value="RSC_X_FLASHLIGHT">Flashlight</option>
+        <option value="RSC_X_GAD_PICKUP">Gad Power Upgrade</option>
+        <option value="RSC_X_MARTEAU">Marteau</option>
+        <option value="RSC_X_POIGNE">Poigne</option>
+        <option value="RSC_X_PRISON_KEY_CARD">Prison Key Card</option>
+        <option value="RSC_X_RETRACT">Retractor</option>
+        <option value="RSC_X_ACCUMULATOR">Accumulator</option>
+        <option value="RSC_X_ASSON">Asson</option>
+        <option value="RSC_X_BOOK_OF_SHADOWS">Book of Shadows</option>
+        <option value="RSC_X_ENSEIGNE">Enseigne</option>
+        <option value="RSC_X_JACKS_SCHEMATIC">Jacks Schematic</option>
+        <option value="RSC_X_LIGHT_SOUL">Light Soul</option>
+        <option value="RSC_X_MAC10">0.9-SMG</option>
+        <option value="RSC_X_MP5">MP-909</option>
+        <option value="RSC_X_PROPHECY">Book of Prophecy</option>
+        <option value="RSC_X_SHOTGUN">Shotgun</option>
+        <option value="RSC_X_SHOTGUN2">Sawed-off Shotgun</option>
+        <option value="RSC_X_TETEDEMORT">T&ecirc;te De Mort</option>
+        <option value="RSC_X_VIOLATOR">Violator</option>
       </select>
-      <span class="gate-desc" id="gateDesc">default shuffle</span>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <label style="color:var(--muted);font-size:11px;white-space:nowrap">Max SL cap:</label>
-      <input type="number" id="maxSl" class="maxsl-input" value="10" min="1" max="10">
-      <span class="hint">1&ndash;10, blank = no cap</span>
-      <span class="tip">
-        <span class="tip-icon">?</span>
-        <span class="tip-box">Caps the highest soul level any shuffled gate can receive. Set to 10 to allow all values; lower values make gates more accessible.</span>
-      </span>
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Places a bonus item at the church in Louisiana Swampland at game start. The selected item is removed from the shuffle pool.</span></span>
     </div>
   </div>
 
-  <div class="card">
+  <!-- Right column: Coffin Gates + Progression stacked -->
+  <div style="display:flex;flex-direction:column;gap:10px">
+
+    <div class="card" style="flex:1 ;min-width:280px">
+      <div class="card-title">
+        Coffin Gate Soul Levels
+        <span class="tip" style="vertical-align:middle">
+          <span class="tip-icon">?</span>
+          <span class="tip-box">Shuffles the soul level (SL) thresholds on deadside coffin gates. Higher SL gates require more Dark Souls collected before they open. Starting gates are always kept at SL&le;3 so the game is immediately playable.</span>
+        </span>
+      </div>
+      <div class="row">
+        <select id="gatePreset" onchange="updateGateDesc()">
+          <option value="none">none</option>
+          <option value="open">open</option>
+          <option value="easy">easy</option>
+          <option value="medium">medium</option>
+          <option value="hard">hard</option>
+          <option value="chaos">chaos</option>
+        </select>
+        <span class="gate-desc" id="gateDesc">default shuffle</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="color:var(--muted);font-size:11px;white-space:nowrap">Max SL cap:</label>
+        <input type="number" id="maxSl" class="maxsl-input" value="10" min="1" max="10">
+        <span class="hint">1&ndash;10, blank = no cap</span>
+        <span class="tip">
+          <span class="tip-icon">?</span>
+          <span class="tip-box">Caps the highest soul level any shuffled gate can receive. Set to 10 to allow all values; lower values make gates more accessible.</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1 ;min-width:280px">
+      <div class="card-title">Progression</div>
+      <div class="row" style="margin-bottom:10px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Insanity Tier</span>
+        <select id="insanity" style="flex:1;margin-left:8px">
+          <option value="0">Off</option>
+          <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
+          <option value="2">Tier 2 &mdash; + Cadeaux slots</option>
+          <option value="3">Full &mdash; All slots</option>
+        </select>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed.<br><b>Tier 1:</b> Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also Cadeaux slots.<br><b>Full:</b> Any slot in the game. Wildly random.</span></span>
+      </div>
+      <div class="row">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Balancing:</span>
+        <input type="range" id="progBalance" min="0" max="100" value="50"
+               oninput="document.getElementById('progBalVal').textContent=this.value">
+        <span class="slider-val" id="progBalVal">50</span>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls how deep into the world progression items tend to be placed. Default 50 is balanced. 0 = items placed early, 100 = items pushed deep.</span></span>
+      </div>
+      <div class="hint" style="margin-top:6px">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Row 3: Enemies + Cosmetics -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
+  <div class="card" style="flex:1 ;min-width:280px">
+    <div class="card-title">Enemies</div>
+    <div class="check-grid" style="margin-bottom:10px">
+      <label class="check-label">
+        <input type="checkbox" id="shuffleEnemies" onchange="onEnemiesChange()">
+        Shuffle Enemies
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes enemy types in each level. Use the Enemy Mode dropdown to control how they are assigned.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleTrueforms">
+        Shuffle Trueforms
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles true-form enemy positions into the same pool as regular enemies. Only meaningful when Shuffle Enemies is also enabled.</span></span>
+      </label>
+    </div>
+    <div class="enemy-row">
+      <span class="lbl">Enemy Mode:</span>
+      <select id="enemyMode" disabled>
+        <option value="difficulty">difficulty &mdash; tier-weighted</option>
+        <option value="full">full &mdash; random by move type</option>
+        <option value="contextual">contextual &mdash; area pools</option>
+      </select>
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><b>difficulty:</b> enemies replaced by others of a similar tier, weighted by area depth.<br><b>full:</b> fully random within the same movement type (ground/flying/etc).<br><b>contextual:</b> shuffled within context groups (deadside/liveside/prison stay separated).</span></span>
+    </div>
+    <span class="hint" id="enemyHint" style="margin-left:4px">enable Shuffle Enemies to unlock</span>
+  </div>
+
+  <div class="card" style="margin-bottom:0; flex: 1">
     <div class="card-title">Cosmetic Shuffles</div>
-    <div class="cosm-row">
+    <div class="cosm-row" style="flex-direction:column;gap:2px">
       <label class="check-label">
         <input type="checkbox" id="shuffleMusic">
         Shuffle Music
@@ -295,92 +426,6 @@ _HTML = r"""<!DOCTYPE html>
   </div>
 </div>
 
-<!-- Gameplay (full width) -->
-<div class="card">
-  <div class="card-title">Gameplay</div>
-
-  <!-- Default-on shuffles -->
-  <div class="check-grid">
-    <label class="check-label">
-      <input type="checkbox" id="shuffleKeyItems" class="default-on" checked>
-      Shuffle Key Items
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles key progression items (Engineer&rsquo;s Key, Poign&eacute;, Baton, Flambeau, Marteau, Calabash, Retractors, etc.) using assumed-fill logic that guarantees every seed is beatable.</span></span>
-    </label>
-    <label class="check-label">
-      <input type="checkbox" id="shuffleGad" class="default-on" checked>
-      Shuffle Gad Pickups
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Converts Gad powers (Touch, Walk, Swim) into physical pickups and shuffles them across temple locations. Requires an EXE patch, which is applied automatically.</span></span>
-    </label>
-    <label class="check-label">
-      <input type="checkbox" id="shuffleWeapons" class="default-on" checked>
-      Shuffle Weapons
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapons (Asson, Shotgun, Enseigne, MP5, T&ecirc;te de Mort, Desert Eagle) across item locations. Uncheck to leave weapons in their vanilla spots.</span></span>
-    </label>
-    <label class="check-label">
-      <input type="checkbox" id="shuffleLore" class="default-on" checked>
-      Shuffle Lore
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles lore items (Book of Shadows, Prophecy, Jack&rsquo;s Schematic) across locations. Uncheck to leave them in vanilla positions.</span></span>
-    </label>
-    <label class="check-label">
-      <input type="checkbox" id="shuffleLightSoul">
-      Shuffle Light Soul
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item in the shuffle pool. Off by default as it can affect run balance.</span></span>
-    </label>
-  </div>
-
-  <hr class="divider">
-
-  <!-- Enemy section -->
-  <div class="card-title" style="margin-bottom:8px">Enemies</div>
-  <div class="check-grid" style="margin-bottom:10px">
-    <label class="check-label">
-      <input type="checkbox" id="shuffleEnemies" onchange="onEnemiesChange()">
-      Shuffle Enemies
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes enemy types in each level. Use the Enemy Mode dropdown to control how they are assigned.</span></span>
-    </label>
-    <label class="check-label">
-      <input type="checkbox" id="shuffleTrueforms">
-      Shuffle Trueforms
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles true-form enemy positions into the same pool as regular enemies. Only meaningful when Shuffle Enemies is also enabled.</span></span>
-    </label>
-  </div>
-  <div class="enemy-row">
-    <span class="lbl">Enemy Mode:</span>
-    <select id="enemyMode" disabled>
-      <option value="difficulty">difficulty &mdash; tier-weighted</option>
-      <option value="full">full &mdash; random by move type</option>
-      <option value="contextual">contextual &mdash; area pools</option>
-    </select>
-    <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><b>difficulty:</b> enemies replaced by others of a similar tier, weighted by area depth.<br><b>full:</b> fully random within the same movement type (ground/flying/etc).<br><b>contextual:</b> shuffled within context groups (deadside/liveside/prison stay separated).</span></span>
-    <span class="hint" id="enemyHint" style="margin-left:4px">enable Shuffle Enemies to unlock</span>
-  </div>
-
-  <hr class="divider">
-
-  <!-- Progression section -->
-  <div class="card-title" style="margin-bottom:8px">Progression</div>
-  <div class="check-grid" style="margin-bottom:10px">
-    <label class="check-label" style="grid-column:1/-1;gap:10px">
-      <span style="white-space:nowrap">Insanity Tier</span>
-      <select id="insanity" style="flex:0 0 auto">
-        <option value="0">Off</option>
-        <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
-        <option value="2">Tier 2 &mdash; + Cadeaux slots</option>
-        <option value="3">Full &mdash; All slots</option>
-      </select>
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed.<br><b>Tier 1:</b> Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also Cadeaux slots.<br><b>Full:</b> Any slot in the game. Wildly random.</span></span>
-    </label>
-  </div>
-  <div class="row">
-    <span style="color:var(--muted);font-size:11px;white-space:nowrap">Progression balancing:</span>
-    <input type="range" id="progBalance" min="0" max="100" value="50"
-           oninput="document.getElementById('progBalVal').textContent=this.value">
-    <span class="slider-val" id="progBalVal">50</span>
-    <span class="hint">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</span>
-    <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls how deep into the world progression items tend to be placed by the assumed-fill algorithm. Default 50 is a balanced middle ground.</span></span>
-  </div>
-</div>
-
 <!-- Actions -->
 <div class="actions">
   <button class="btn-run"     id="runBtn"     onclick="runPatcher()">&#9654;&ensp;Run Randomizer</button>
@@ -396,8 +441,12 @@ _HTML = r"""<!DOCTYPE html>
 
 <script>
 const GATE_DESCS = {
-  none:'default shuffle', story:'all gates open',
-  easy:'7 gates open, SL8 cap', hard:'standard shuffle with safety caps', chaos:'fully unconstrained'
+  none:   'default shuffle',
+  open:   'all gates free, light soul requirements',
+  easy:   'light shuffle, SL5 cap, tight variance',
+  medium: 'standard shuffle, SL8 cap',
+  hard:   'full shuffle, no SL cap',
+  chaos:  'fully unconstrained'
 };
 function updateGateDesc() {
   document.getElementById('gateDesc').textContent = GATE_DESCS[document.getElementById('gatePreset').value] || '';
@@ -422,6 +471,7 @@ function getConfig() {
     gatePreset:       document.getElementById('gatePreset').value,
     maxSl:            document.getElementById('maxSl').value.trim(),
     shuffleGad:       document.getElementById('shuffleGad').checked,
+    startingItem:     document.getElementById('startingItem').value,
     shuffleEnemies:   document.getElementById('shuffleEnemies').checked,
     shuffleTrueforms: document.getElementById('shuffleTrueforms').checked,
     shuffleMusic:     document.getElementById('shuffleMusic').checked,
@@ -614,6 +664,12 @@ class _Api:
             if config.get(key):
                 cmd.append(flag)
 
+        starting_item = config.get("startingItem", "")
+        if starting_item == "random":
+            starting_item = random.choice(list(STARTING_ITEM_POOL.values()))
+        if starting_item:
+            cmd += ["--starting-item", starting_item]
+
         insanity_tier = int(config.get("insanity", 0))
         if insanity_tier > 0:
             cmd += ["--insanity", str(insanity_tier)]
@@ -642,6 +698,12 @@ class _Api:
         if self._process is not None:
             return
         assert self._window is not None
+
+        try:
+            cmd = self._build_cmd(config, restore=restore)
+        except ValueError as exc:
+            self._window.evaluate_js(f"onError({json.dumps(str(exc))})")
+            return
 
         cmd = self._build_cmd(config, restore=restore)
         env = os.environ.copy()
@@ -678,7 +740,7 @@ class _Api:
             if rc == 0:
                 note = (
                     "\n"
-                    "► To play: launch thoth_x64_patched.exe from your Shadow Man Remastered\n"
+                    "\u25ba To play: launch thoth_x64_patched.exe from your Shadow Man Remastered\n"
                     "  install folder, or click \"Launch Game\" above.\n"
                 )
                 self._window.evaluate_js(f"appendOutput({json.dumps(note)})")
@@ -691,8 +753,8 @@ if __name__ == "__main__":
         "Shadow Man Remastered Randomizer",
         html=_HTML,
         js_api=api,
-        width=1020,
-        height=980,
+        width=820,
+        height=900,
     )
     api._set_window(window)
     webview.start()

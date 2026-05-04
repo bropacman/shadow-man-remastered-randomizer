@@ -340,32 +340,13 @@ def _append_gad_pickup_record(
     x: float, y: float, z: float,
     zone: int,
 ) -> int:
+    from rsc_utils import inject_rsc_record, build_rsc_record, HEADER_SIZE, RECORD_SIZE, NAME_OFF
+
     data = bytearray(quest_rsc_path.read_bytes())
-    remainder = (len(data) - HEADER_SIZE) % RECORD_SIZE
-    if remainder:
-        data = data[:len(data) - remainder]
-    body = data[HEADER_SIZE:]
-    n = len(body) // RECORD_SIZE
-    record = bytearray(RECORD_SIZE)
-    struct.pack_into("<fff", record, XYZ_OFF, x, y, z)
-    record[ZONE_OFF]     = zone & 0xFF
-    record[INSTANCE_OFF] = 0
-    name_bytes = GAD_PICKUP_RSC.encode('ascii')[:NAME_MAXLEN - 1]
-    record[NAME_OFF : NAME_OFF + len(name_bytes)] = name_bytes
-    slot = None
-    for i in range(n):
-        if body[i*RECORD_SIZE+NAME_OFF : i*RECORD_SIZE+NAME_OFF+NAME_MAXLEN] == bytes(NAME_MAXLEN):
-            slot = i
-            break
-    if slot is not None:
-        off = HEADER_SIZE + slot * RECORD_SIZE
-        data[off : off + RECORD_SIZE] = record
-    else:
-        data += record
-        off = len(data) - RECORD_SIZE
-    data[9] = min(data[9] + 1, 255)
+    record = build_rsc_record(GAD_PICKUP_RSC, x, y, z, zone)
+    slot = inject_rsc_record(data, record, allow_expand=True)
     quest_rsc_path.write_bytes(bytes(data))
-    return off + NAME_OFF
+    return HEADER_SIZE + slot * RECORD_SIZE + NAME_OFF
 
 
 def inject_gad_pickup_records(
