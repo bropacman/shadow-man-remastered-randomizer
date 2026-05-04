@@ -115,7 +115,7 @@ _HTML = r"""<!DOCTYPE html>
   input[type=text]:focus, input[type=number]:focus, select:focus { border-color: var(--accent); }
   input.dir-input   { flex: 1; }
   input.seed-input  { width: 150px; }
-  input.maxsl-input { width: 60px; }
+  input.maxsl-input { width: 90px; }  /* kept for reference; slider replaces it */
   select { cursor: pointer; }
   select:disabled { opacity: .35; cursor: default; }
 
@@ -341,11 +341,23 @@ _HTML = r"""<!DOCTYPE html>
       </div>
       <div class="row" style="margin-top:8px">
         <label style="color:var(--muted);font-size:11px;white-space:nowrap">Max SL cap:</label>
-        <input type="number" id="maxSl" class="maxsl-input" value="10" min="1" max="10">
-        <span class="hint">1&ndash;10, blank = no cap</span>
+        <select id="maxSl" style="width:120px;flex:none">
+          <option value="">preset</option>
+          <option value="0">0 — all free</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
         <span class="tip">
           <span class="tip-icon">?</span>
-          <span class="tip-box">Caps the highest soul level any shuffled gate can receive. Set to 10 to allow all values; lower values make gates more accessible.</span>
+          <span class="tip-box">Overrides the preset's SL cap. Choose 0–10 to cap the highest gate level; lower values keep gates more accessible. Leave at <b>preset</b> to use the preset's built-in cap.</span>
         </span>
       </div>
     </div>
@@ -354,7 +366,7 @@ _HTML = r"""<!DOCTYPE html>
       <div class="card-title">Progression</div>
       <div class="row" style="margin-bottom:10px">
         <span style="color:var(--muted);font-size:11px;white-space:nowrap">Insanity Tier</span>
-        <select id="insanity" style="flex:1;margin-left:8px">
+        <select id="insanity" style="width:172px;flex:none;margin-left:8px">
           <option value="0">Off</option>
           <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
           <option value="2">Tier 2 &mdash; + Cadeaux slots</option>
@@ -449,7 +461,16 @@ const GATE_DESCS = {
   chaos:  'fully unconstrained'
 };
 function updateGateDesc() {
-  document.getElementById('gateDesc').textContent = GATE_DESCS[document.getElementById('gatePreset').value] || '';
+  const preset = document.getElementById('gatePreset').value;
+  document.getElementById('gateDesc').textContent = GATE_DESCS[preset] || '';
+  const maxSlEl = document.getElementById('maxSl');
+  if (preset === 'open') {
+    maxSlEl.value = '0';
+    maxSlEl.disabled = true;
+  } else {
+    maxSlEl.disabled = false;
+    maxSlEl.value = '';
+  }
 }
 function onEnemiesChange() {
   const on = document.getElementById('shuffleEnemies').checked;
@@ -469,7 +490,7 @@ function getConfig() {
     gameDir:          document.getElementById('gameDir').value.trim(),
     seed:             document.getElementById('seed').value.trim(),
     gatePreset:       document.getElementById('gatePreset').value,
-    maxSl:            document.getElementById('maxSl').value.trim(),
+    maxSl:            document.getElementById('maxSl').value,
     shuffleGad:       document.getElementById('shuffleGad').checked,
     startingItem:     document.getElementById('startingItem').value,
     shuffleEnemies:   document.getElementById('shuffleEnemies').checked,
@@ -753,7 +774,7 @@ if __name__ == "__main__":
         "Shadow Man Remastered Randomizer",
         html=_HTML,
         js_api=api,
-        width=820,
+        width=840,
         height=900,
     )
     api._set_window(window)

@@ -577,7 +577,11 @@ def patch_gate_arc_decos(
                 continue
 
             print(f"  [{folder}] Renaming ARC{arc_num} at ({rx_r},{rz_r}) -> ARC{new_arc_num}")
-            new_name = matched_prefix + str(new_arc_num).encode("ascii")
+            # Always use the full COFFIN_GATE_ARC prefix — all SL numbers (0-10)
+            # exist under this name in deadside. The short COFGATE_ARC variant
+            # only covers a subset of numbers, causing invisible gates when
+            # a non-deadside gate gets shuffled to a number with no COFGATE asset.
+            new_name = b"RSC_X_COFFIN_GATE_ARC" + str(new_arc_num).encode("ascii")
             data[name_pos: name_pos + NAME_MAXLEN] = (
                 new_name + b'\x00' * (NAME_MAXLEN - len(new_name))
             )
