@@ -16,6 +16,7 @@ curious players, or future maintainers.
 6. [Logic Edge Cases](#6-logic-edge-cases)
 7. [Enemy, Music, and SFX Shuffle](#7-enemy-music-and-sfx-shuffle)
 8. [Spoiler Log](#8-spoiler-log)
+9. [Recent Fixes](#9-recent-fixes)
 
 ---
 

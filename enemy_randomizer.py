@@ -278,11 +278,11 @@ def _depth_to_tier(depth: int) -> int:
 # Higher base tier shifts the distribution right while keeping low-tier tails,
 # so early areas still feel manageable but can occasionally surprise you.
 _TIER_WEIGHTS: dict[int, list[int]] = {
-    1: [40, 25, 15, 15,  5],
-    2: [20, 40, 20, 15,  5],
-    3: [10, 20, 40, 20, 10],
-    4: [ 5, 10, 20, 40, 25],
-    5: [ 5,  5, 10, 25, 55],
+    1: [60, 20, 10, 5, 5],
+    2: [40, 30, 20, 5, 5],
+    3: [25, 30, 30, 10, 5],
+    4: [15, 15, 30, 25, 15],
+    5: [10, 10, 20, 25, 35],
 }
 
 

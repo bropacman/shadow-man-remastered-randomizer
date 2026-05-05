@@ -201,6 +201,7 @@ CHECKABLE_LOCS: list = [
 # ── Gate region mapping ────────────────────────────────────────────────────────
 
 LIVESIDE_REGIONS: frozenset[str] = frozenset({
+    "Louisiana Swampland",
     "Down Street Station, London",
     "Gardelle County Jail, Texas",
     "Salvage Yard, Mojave Desert",
