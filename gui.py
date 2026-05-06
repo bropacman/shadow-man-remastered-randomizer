@@ -369,8 +369,8 @@ _HTML = r"""<!DOCTYPE html>
         <select id="insanity" style="width:172px;flex:none;margin-left:8px">
           <option value="0">Off</option>
           <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
-          <option value="2">Tier 2 &mdash; + Cadeaux slots</option>
-          <option value="3">Full &mdash; All slots</option>
+          <option value="2">Tier 2 &mdash; + Cadeaux slots (untested)</option>
+          <option value="3">Full &mdash; All slots (untested)</option>
         </select>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed.<br><b>Tier 1:</b> Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also Cadeaux slots.<br><b>Full:</b> Any slot in the game. Wildly random.</span></span>
       </div>

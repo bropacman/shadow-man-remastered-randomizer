@@ -3109,7 +3109,7 @@ RAW_LOCATIONS: list[RawLocation] = [
     RawLocation("as4dkeng", "enemies.rsc", 0x14B0, "Trueform", "RSC_X_TRUE_FORM", "true_form", "Asylum: Engine Block - Prison", None, None, 52, True, True, "11", 15761.6699, 384.0049, 7415.9126, None),
     RawLocation("ah2playr", "instance.rsc", 0x2D2A, "Violator (Accumulator Reward)", "RSC_X_VIOLATOR", "weapon", "Asylum: Playrooms", "R.eng_key(state, player) and R.x3_accumulator(state, player)", "ENG_KEY & X3_ACCUMULATOR", 0, False, True, "9", -5363.4, 150.88, -10647.68, None),
     RawLocation("t1tchgad", "quest.rsc", 0x3E52, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Fire (Toucher)", "R.gate(\"GATE_FIRE_POIGNE\", state, player)", "GATE_FIRE_POIGNE", 0, False, True, "16", -559.4, 340.0, 35710.8, None),
-    RawLocation("t2wlkgad", "quest.rsc", 0x3432, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Prophecy (Marcher)", "R.gate(\"GATE_PROPHECY_INTERIOR\", state, player)", "GATE_PROPHECY_INTERIOR", 0, False, True, "9", 256.0, 395.0, 1280.0, None),
+    RawLocation("t2wlkgad", "quest.rsc", 0x3432, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Prophecy (Marcher)", "R.gate(\"GATE_PROPHECY_INTERIOR\", state, player)", "GATE_PROPHECY_INTERIOR", 0, False, True, "9", 256.0, 400.0, 1280.0, None),
     RawLocation("t3swmgad", "quest.rsc", 0x3A1A, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Blood (Nager)", "R.gate(\"GATE_BLOOD_INTERIOR\", state, player)", "GATE_BLOOD_INTERIOR", 0, False, True, "7", -1535.8, 670.0, -4988.9, None),
 ]
 

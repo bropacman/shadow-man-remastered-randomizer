@@ -261,7 +261,23 @@ RSC_TO_ITEM_ID: dict[str, int] = {
     "RSC_X_VIOLATOR":       ITEM_IDS["IDD_VIOLATOR"],
 }
 
-GAD_PICKUP_RSC = "RSC_X_GAD_PICKUP"
+GAD_PICKUP_RSC  = "RSC_X_GAD_PICKUP"
+GAD_BLOCKER_RSC = "RSC_X_WEAPON_ALTAR"
+
+# (folder, filename, x, y, z, zone) — injection sites for RSC_X_GAD_PICKUP.
+GAD_INJECTION_SITES: list[tuple[str, str, float, float, float, int]] = [
+    ("t1tchgad", "quest.rsc", -559.4,  360.0,  35710.8, 16),
+    ("t2wlkgad", "quest.rsc",  256.0,  420.0,   1280.0,  9),
+    ("t3swmgad", "quest.rsc", -1535.8, 680.0,  -4988.9,  7),
+]
+
+# (folder, x, y, z, zone) — placeholder coords matching GAD pickup sites.
+# Update x/y/z once real platform-blocking positions are confirmed in-game.
+GAD_BLOCKER_SITES: list[tuple[str, float, float, float, int]] = [
+    ("t1tchgad", -559.4,  210.0,  35710.8, 16),
+    ("t2wlkgad",  256.0,  270.0,   1280.0,  9),
+    ("t3swmgad", -1535.8, 530.0,  -4988.9,  7),
+]
 
 # Expected file offsets for RSC_X_GAD_PICKUP records after setup_gad_records injection.
 # If inject_record returns a different offset, extracted_locations.py needs updating.

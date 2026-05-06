@@ -38,7 +38,8 @@ from pathlib import Path
 from constants import (LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANILLA_SL, GATE_PRESETS,
                        CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, PROGRESSION_IN_SOUL_LIFT, ITEM_Y_ADJUST,
                        SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y, DAY_NIGHT_MIRRORS, GAD_PICKUP_EXPECTED_OFFSETS,
-                       STARTING_ITEM_POOL, ASSET_OVERRIDES, MSH_OVERRIDES)
+                       STARTING_ITEM_POOL, ASSET_OVERRIDES, MSH_OVERRIDES,
+                       GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES)
 from enemy_randomizer import randomize_enemies, enemy_spoiler_section, randomize_true_forms, true_form_spoiler_section
 from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
 
@@ -336,7 +337,11 @@ def patch_rsc_file(filepath: str, patches: dict, record_templates: dict = None) 
 # the level-side event that causes the cinematic + death sequence.
 # Zeroing @0x2E disables the event dispatch while leaving geometry intact.
 
-GAD_CUTSCENE_EVENT_IDS = frozenset({0xFA00, 0xC800})
+GAD_CUTSCENE_EVENT_IDS = frozenset({
+    0xFA00,  # fires on button-press triggers near gad platform
+    0xC800,  # fires on button-press triggers near gad platform
+    0x2602,  # fires on platform approach after all buttons pressed
+})
 GAD_TEMPLE_LEVELS      = frozenset({"t1tchgad", "t2wlkgad", "t3swmgad"})
 
 E2O_TRIGGER_TYPE = 0x0D00
@@ -347,12 +352,16 @@ EVT_RECORD_SIZE = 58
 EVT_AABB_OFF = 0x20
 EVT_AABB_SIZE = 24
 
+# Signature at bytes[4:6] that uniquely identifies gad cutscene trigger records.
+# Confirmed across t1tchgad, t2wlkgad, t3swmgad — one record per file.
+_GAD_EVT_SIGNATURE = bytes([0xFF, 0xA6])
+
 def _zero_gad_cutscene_evt(levels_path: Path, folder: str) -> bool:
     """
-    Zero the AABB float data in all cutscene.evt records for gad temple levels.
-    Structural/flag bytes are preserved so the file remains parseable.
-    A zero-sized box at origin will never intersect the player.
-    Returns True if file was modified.
+    Zero the AABB float data only in cutscene.evt records whose bytes[4:6]
+    match _GAD_EVT_SIGNATURE — the gad pickup cutscene trigger.
+    Exit cutscene records have a different signature and are left untouched.
+    Returns True if at least one record was zeroed.
     """
     if folder not in GAD_CUTSCENE_EVT_LEVELS:
         return False
@@ -362,12 +371,18 @@ def _zero_gad_cutscene_evt(levels_path: Path, folder: str) -> bool:
         return False
     data = bytearray(evt_path.read_bytes())
     n = (len(data) - EVT_HEADER_SIZE) // EVT_RECORD_SIZE
+    zeroed = 0
     for i in range(n):
-        pos = EVT_HEADER_SIZE + i * EVT_RECORD_SIZE + EVT_AABB_OFF
-        if pos + EVT_AABB_SIZE <= len(data):
-            data[pos : pos + EVT_AABB_SIZE] = bytes(EVT_AABB_SIZE)
-    evt_path.write_bytes(bytes(data))
-    return True
+        pos = EVT_HEADER_SIZE + i * EVT_RECORD_SIZE
+        if data[pos+4:pos+6] != _GAD_EVT_SIGNATURE:
+            continue
+        aabb_start = pos + EVT_AABB_OFF
+        if aabb_start + EVT_AABB_SIZE <= len(data):
+            data[aabb_start : aabb_start + EVT_AABB_SIZE] = bytes(EVT_AABB_SIZE)
+            zeroed += 1
+    if zeroed:
+        evt_path.write_bytes(bytes(data))
+    return zeroed > 0
 
 def _zero_gad_cutscene_triggers(data: bytearray, folder: str) -> int:
     """
@@ -1165,7 +1180,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         print(f"Seed: {seed}  |  Mode: Direct file edit  |  Game dir: {game_dir}")
 
     # ── Pre-step: always inject gad records so they appear in parsed data ─────
-    from setup_gad_records import GAD_INJECTION_SITES, inject_record, _find_existing
+    from setup_gad_records import inject_record, _find_existing
     if config.get("shuffle_gad_temples", False):
         print("\nInjecting RSC_X_GAD_PICKUP records...")
     for folder, filename, x, y, z, zone in GAD_INJECTION_SITES:
@@ -1183,6 +1198,22 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             if config.get("shuffle_gad_temples", False):
                 status = "already present" if already else "injected"
                 print(f"  {folder}/{filename} @ 0x{off:04X} ({status})")
+
+    # ── Pre-step: inject GAD platform blocker into instance.rsc ─────────────────
+    if config.get("shuffle_gad_temples", False):
+        from rsc_utils import build_rsc_record, inject_rsc_record
+        _blocker_tag = GAD_BLOCKER_RSC.encode("ascii")
+        for _folder, _bx, _by, _bz, _bzone in GAD_BLOCKER_SITES:
+            _blocker_path = levels_path / _folder / "instance.rsc"
+            if not _blocker_path.exists():
+                continue
+            _bdata = bytearray(_blocker_path.read_bytes())
+            if _blocker_tag not in _bdata:
+                inject_rsc_record(_bdata, build_rsc_record(GAD_BLOCKER_RSC, _bx, _by, _bz, _bzone), allow_expand=True)
+                _blocker_path.write_bytes(bytes(_bdata))
+                print(f"  [gad_blocker] {GAD_BLOCKER_RSC} injected into {_folder}/instance.rsc  [PLACEHOLDER COORDS]")
+            else:
+                print(f"  [gad_blocker] {GAD_BLOCKER_RSC} already present in {_folder}/instance.rsc")
 
     out_path = Path(output_dir) if output_dir else work_path
     out_path.mkdir(parents=True, exist_ok=True)
