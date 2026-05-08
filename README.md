@@ -120,10 +120,17 @@ python patcher.py --game-dir <PATH> --starting-item RSC_X_ENGINEERS_KEY
 # Let the seed pick a random starting item (reproducible)
 python patcher.py --game-dir <PATH> --random-starting-item
 
+# Enable Teddy Bear map tracker hints
+python patcher.py --game-dir <PATH> --patch-tracker
+
+# Tracker with cryptic hints (hides item names)
+python patcher.py --game-dir <PATH> --patch-tracker --obscure-hints
+
 # Throw everything in the blender
 python patcher.py --game-dir <PATH> \
     --shuffle-enemies --shuffle-true-forms \
-    --shuffle-music --shuffle-voices --shuffle-weapons-sfx
+    --shuffle-music --shuffle-voices --shuffle-weapons-sfx \
+    --patch-tracker
 
 # Restore vanilla
 python patcher.py --restore --game-dir <PATH>
@@ -164,6 +171,13 @@ python patcher.py --restore --game-dir <PATH>
 |------|---------|-------------|
 | `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = most gates locked to vanilla, free gates reshuffled with SL7 cap; `medium` = only the three entry gates locked, everything else reshuffled with SL8 cap; `hard` = same locks as medium but no SL cap; `chaos` = no locks, no cap, no safety checks |
 | `--max-sl N` | none | Cap the maximum SL any shuffled gate can receive (1–10) |
+
+### Map tracker (Teddy Bear hints)
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--patch-tracker` | off | Rewrite `levels.txt` map badges to show randomized item locations. Without this flag all item badges are stripped so no incorrect vanilla hints appear. |
+| `--obscure-hints` | off | Replace badge labels with cryptic tier phrases (`Path of Prophecy` for progression, `Lost in the Shadows` for weapons) instead of item names. Requires `--patch-tracker`. |
 
 ### Enemies, music, SFX
 
