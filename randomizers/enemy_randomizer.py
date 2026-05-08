@@ -362,9 +362,14 @@ def randomize_true_forms(
                 continue
 
             key = (dst.level_id, dst.source_file)
+            # For true forms: carry the source soul ID into the destination slot
+            # so the game tracks the correct dark soul (36, 38, etc.).
+            # For regular enemies: preserve the destination's instance_id.
+            reward = src.instance_id if src.loc_key in true_form_keys and src.instance_id else \
+                     (dst.instance_id if dst.instance_id else 0)
             patches_by_folder.setdefault(key, {})[dst.offset] = {
                 "name":        src.object,
-                "reward":      dst.instance_id if dst.instance_id else 0,
+                "reward":      reward,
                 "logic":       int(dst.zone) if dst.zone else 0,
                 "y_adjust":    0.0,
                 "source_file": dst.source_file,

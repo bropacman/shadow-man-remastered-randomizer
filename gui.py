@@ -289,9 +289,7 @@ _HTML = r"""<!DOCTYPE html>
         <option value="RSC_X_ENGINEERS_KEY">⭐ Engineers Key</option>
         <option value="RSC_X_BATON">Baton</option>
         <option value="RSC_X_CALABASH">Calabash</option>
-        <option value="RSC_X_ECLIPSER_PART1">Eclipser Part 1</option>
-        <option value="RSC_X_ECLIPSER_PART2">Eclipser Part 2</option>
-        <option value="RSC_X_ECLIPSER_PART3">Eclipser Part 3</option>
+        <option value="RSC_X_ECLIPSER_PART1">Eclipser</option>
         <option value="RSC_X_FLAMBEAU">Flambeau</option>
         <option value="RSC_X_FLASHLIGHT">Flashlight</option>
         <option value="RSC_X_GAD_PICKUP">Gad Power Upgrade</option>
@@ -311,7 +309,7 @@ _HTML = r"""<!DOCTYPE html>
         <option value="RSC_X_SHOTGUN">Shotgun</option>
         <option value="RSC_X_SHOTGUN2">Sawed-off Shotgun</option>
         <option value="RSC_X_TETEDEMORT">T&ecirc;te De Mort</option>
-        <option value="RSC_X_VIOLATOR">Violator</option>
+        <option value="RSC_Q_VIOLATOR">Violator</option>
       </select>
       <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Places a bonus item at the church in Louisiana Swampland at game start. The selected item is removed from the shuffle pool.</span></span>
     </div>
@@ -417,7 +415,7 @@ _HTML = r"""<!DOCTYPE html>
 
   <div class="card" style="margin-bottom:0; flex: 1">
     <div class="card-title">Cosmetic Shuffles</div>
-    <div class="cosm-row" style="flex-direction:column;gap:2px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px">
       <label class="check-label">
         <input type="checkbox" id="shuffleMusic">
         Shuffle Music
@@ -434,7 +432,22 @@ _HTML = r"""<!DOCTYPE html>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapon fire and reload sounds within each weapon category. Purely cosmetic.</span></span>
       </label>
     </div>
-    <div class="hint" style="margin-top:10px">No effect on logic or seed beatable-ness.</div>
+    <div class="hint" style="margin-top:6px">No effect on logic or seed beatable-ness.</div>
+    <div style="border-top:1px solid #333;margin-top:8px;padding-top:8px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px">Teddy Bear Hints</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px">
+        <label class="check-label">
+          <input type="checkbox" id="patchTracker" onchange="onTrackerChange()">
+          Patch Tracker
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Rewrites map badge hints to reflect randomized item locations. Off by default (strips all item badges to avoid wrong vanilla hints).</span></span>
+        </label>
+        <label class="check-label" id="obscureHintsLabel" style="opacity:0.4;pointer-events:none">
+          <input type="checkbox" id="obscureHints" disabled>
+          Obscure Hints
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Replaces tracker badge labels with cryptic tier phrases instead of item names. Requires Patch Tracker.</span></span>
+        </label>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -477,6 +490,15 @@ function onEnemiesChange() {
   document.getElementById('enemyMode').disabled = !on;
   document.getElementById('enemyHint').textContent = on ? '' : 'enable Shuffle Enemies to unlock';
 }
+function onTrackerChange() {
+  const on = document.getElementById('patchTracker').checked;
+  const lbl = document.getElementById('obscureHintsLabel');
+  const cb  = document.getElementById('obscureHints');
+  lbl.style.opacity       = on ? '1'    : '0.4';
+  lbl.style.pointerEvents = on ? 'auto' : 'none';
+  cb.disabled = !on;
+  if (!on) cb.checked = false;
+}
 function randomizeSeed() {
   document.getElementById('seed').value = Math.floor(Math.random() * 2147483647) + 1;
 }
@@ -498,6 +520,8 @@ function getConfig() {
     shuffleMusic:     document.getElementById('shuffleMusic').checked,
     shuffleVoices:    document.getElementById('shuffleVoices').checked,
     shuffleWeaponsSfx:document.getElementById('shuffleWeaponsSfx').checked,
+    patchTracker:     document.getElementById('patchTracker').checked,
+    obscureHints:     document.getElementById('obscureHints').checked,
     insanity:         parseInt(document.getElementById('insanity').value),
     shuffleLightSoul: document.getElementById('shuffleLightSoul').checked,
     shuffleKeyItems:  document.getElementById('shuffleKeyItems').checked,
@@ -680,6 +704,8 @@ class _Api:
             ("shuffleVoices",     "--shuffle-voices"),
             ("shuffleWeaponsSfx", "--shuffle-weapons-sfx"),
             ("shuffleLightSoul",  "--shuffle-light-soul"),
+            ("patchTracker",      "--patch-tracker"),
+            ("obscureHints",      "--obscure-hints"),
         ]
         for key, flag in flag_map:
             if config.get(key):

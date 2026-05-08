@@ -2998,7 +2998,7 @@ t2wlkgad,quest.rsc,Govi - Dark Soul 89,0x2D72,RSC_X_GOVI,soul,89,TRUE,TRUE,19,Te
 t2wlkgad,quest.rsc,Govi - Dark Soul 91,0x3282,RSC_X_GOVI,soul,91,TRUE,TRUE,22,Temple of Prophecy (Marcher),N,7908.52,1399.32,11840.02,
 t3swmgad,quest.rsc,Govi - Dark Soul 115,0x3432,RSC_X_GOVI,soul,115,TRUE,TRUE,9,Temple of Blood (Nager),POIGNE,-7841.63,631.32,-3713.11,
 t3swmgad,quest.rsc,Govi - Dark Soul 116,0x39D2,RSC_X_GOVI,soul,116,TRUE,TRUE,10,Temple of Blood (Nager),FLAMBEAU & MARTEAU & BATON & CALABASH,-5881.95,375.32,-9833.36,
-t1tchgad,quest.rsc,Govi - Dark Soul 60,0x3DC2,RSC_X_GOVI,soul,60,TRUE,TRUE,22,Temple of Fire (Toucher),GATE_FIRE_POIGNE | POIGNE,3740.99,1527.31,1505.12,
+t1tchgad,quest.rsc,Govi - Dark Soul 60,0x3DC2,RSC_X_GOVI,soul,60,TRUE,TRUE,22,Temple of Fire (Toucher),POIGNE,3740.99,1527.31,1505.12,
 uground,enemies.rsc,Jack the Ripper,0x0DF2,RSC_X_JACK,boss,11,TRUE,TRUE,5,"Down Street Station, London",NIGHT,14334.3457,10570.1514,-15030.459,
 uground,quest.rsc,Jack’s Schematics,0x2FB2,RSC_X_JACKS_SCHEMATIC,lore,0,FALSE,TRUE,24,"Down Street Station, London",N,13503.33,10910.43,-271.81,
 ah4fogom,quest.rsc,Light Soul,0x2742,RSC_X_LIGHT_SOUL,bonus,0,FALSE,TRUE,11,Asylum: The Fogometers,GATE_FOGOMETERS_INTERIOR & CADEAUX_666,-21559.89,2208.18,10457.86,shuffle or reward for all life altars hmm...

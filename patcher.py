@@ -39,8 +39,9 @@ from constants import (LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANI
                        CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, PROGRESSION_IN_SOUL_LIFT, ITEM_Y_ADJUST,
                        SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y, DAY_NIGHT_MIRRORS, GAD_PICKUP_EXPECTED_OFFSETS,
                        STARTING_ITEM_POOL, ASSET_OVERRIDES, MSH_OVERRIDES,
-                       GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES)
-from enemy_randomizer import randomize_enemies, enemy_spoiler_section, randomize_true_forms, true_form_spoiler_section
+                       GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES,
+                       GATE_E2O_POSITIONS, E2O_MATCH_RADIUS)
+from randomizers.enemy_randomizer import randomize_enemies, enemy_spoiler_section, randomize_true_forms, true_form_spoiler_section
 from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
 
 if getattr(sys, 'frozen', False):
@@ -76,28 +77,7 @@ VANILLA_SL_THRESHOLDS = {
 }
 
 # XZ positions for matching gate_id -> links.e2o 0x0C00 record (tolerance +-500 units)
-GATE_E2O_POSITIONS: dict[str, tuple[str, int, int]] = {
-    "GATE_DEADSIDE_MARROW"      : ("deadside",    -836,  20326),
-    "GATE_DEADSIDE_WASTELAND"   : ("deadside",     437,  23503),
-    "GATE_DEADSIDE_ASYLUM"      : ("deadside",    -641,  25394),
-    "GATE_DEADSIDE_PATH_3"      : ("deadside",   -2580,  26716),
-    "GATE_DEADSIDE_LALUNE"      : ("deadside",   -3245,  29072),
-    "GATE_DEADSIDE_CAGEWAYS"    : ("deadside",    2319,  24462),
-    "GATE_DEADSIDE_PLAYROOMS"   : ("deadside",    4034,  21491),
-    "GATE_DEADSIDE_PATH_6"      : ("deadside",    -989,  19729),
-    "GATE_DEADSIDE_LAVADUCTS"   : ("deadside",    -509,  15790),
-    "GATE_DEADSIDE_PATH_7"      : ("deadside",     305,  22806),
-    "GATE_DEADSIDE_LALAME"      : ("deadside",   -1234,  11068),
-    "GATE_DEADSIDE_BLOOD"       : ("deadside",   -3147,  15634),
-    "GATE_DEADSIDE_FOGOMETERS"  : ("deadside",   -1746,  14396),
-    "GATE_DEADSIDE_MYSTERY"     : ("deadside",   -2865,   5298),
-    "GATE_WASTELAND_ENSEIGNE"   : ("wastland",    5057,   7727),
-    "GATE_FIRE_POIGNE"          : ("t1tchgad",     920,   4399),
-    "GATE_FIRE_FLAMBEAU"        : ("t1tchgad",    6322,   4686),
-    "GATE_PROPHECY_INTERIOR"    : ("t2wlkgad",   -3940, -13135),
-    "GATE_BLOOD_INTERIOR"       : ("t3swmgad",   -1899, -11809),
-    "GATE_FOGOMETERS_INTERIOR"  : ("ah4fogom",  -14955,  11890),
-}
+# GATE_E2O_POSITIONS and E2O_MATCH_RADIUS imported from constants
 
 # links.e2o format constants
 E2O_HEADER        = b"Ee2ov004"
@@ -346,6 +326,17 @@ GAD_TEMPLE_LEVELS      = frozenset({"t1tchgad", "t2wlkgad", "t3swmgad"})
 
 E2O_TRIGGER_TYPE = 0x0D00
 
+# XZ world position of the gad platform in each temple, used to restrict cutscene
+# trigger zeroing to records that are near the platform.  Coffin gate interaction
+# triggers share the same event IDs but are thousands of units away, so a generous
+# radius keeps them untouched.
+# Built lazily from GAD_INJECTION_SITES: (folder, filename, x, y, z, zone).
+_GAD_PLATFORM_XZ: dict[str, tuple[float, float]] = {
+    folder: (x, z) for folder, _fn, x, _y, z, _zone in GAD_INJECTION_SITES
+}
+_GAD_TRIGGER_RADIUS = 10_000   # game units; known gad triggers are ≤~500 from platform;
+                                # nearest coffin gate is ~6800+ away
+
 GAD_CUTSCENE_EVT_LEVELS = frozenset({"t1tchgad", "t2wlkgad", "t3swmgad"})
 EVT_HEADER_SIZE = 16
 EVT_RECORD_SIZE = 58
@@ -386,12 +377,20 @@ def _zero_gad_cutscene_evt(levels_path: Path, folder: str) -> bool:
 
 def _zero_gad_cutscene_triggers(data: bytearray, folder: str) -> int:
     """
-    Zero @0x2E on all 0x0D00 event trigger records whose value is a known
-    gad cutscene or lava-death event ID.  Returns count of records zeroed.
-    Safe to call unconditionally — no-ops for non-temple folders.
+    Zero @0x2E on 0x0D00 event trigger records whose value is a known
+    gad cutscene or lava-death event ID AND whose XZ position is within
+    _GAD_TRIGGER_RADIUS of the gad platform.
+
+    The proximity guard is critical: coffin gate interaction triggers share
+    the same event IDs (0xFA00 / 0xC800) but are thousands of units away
+    from the gad platform.  Without it, coffin gates in temple levels
+    become non-interactable.
+
+    Returns count of records zeroed.
     """
     if folder not in GAD_TEMPLE_LEVELS:
         return 0
+    plat = _GAD_PLATFORM_XZ.get(folder)
     n = (len(data) - E2O_RECORD_OFF) // E2O_RECORD_SIZE
     zeroed = 0
     for i in range(n):
@@ -399,9 +398,17 @@ def _zero_gad_cutscene_triggers(data: bytearray, folder: str) -> int:
         if struct.unpack_from("<H", data, pos + E2O_TYPE_OFF)[0] != E2O_TRIGGER_TYPE:
             continue
         val = struct.unpack_from("<H", data, pos + E2O_SL_OFF)[0]
-        if val in GAD_CUTSCENE_EVENT_IDS:
-            struct.pack_into("<H", data, pos + E2O_SL_OFF, 0)
-            zeroed += 1
+        if val not in GAD_CUTSCENE_EVENT_IDS:
+            continue
+        # Proximity guard — skip records far from the gad platform
+        if plat is not None:
+            rx = struct.unpack_from("<f", data, pos + E2O_X_OFF)[0]
+            rz = struct.unpack_from("<f", data, pos + E2O_Z_OFF)[0]
+            dist = ((rx - plat[0]) ** 2 + (rz - plat[1]) ** 2) ** 0.5
+            if dist > _GAD_TRIGGER_RADIUS:
+                continue
+        struct.pack_into("<H", data, pos + E2O_SL_OFF, 0)
+        zeroed += 1
     return zeroed
 
 # ── Soul gate SL shuffling via links.e2o ──────────────────────────────────────
@@ -1085,6 +1092,20 @@ def repack_after_patch(game_dir, patches_by_folder, gate_remap, config,
                     internal = matches[0][0] if matches else f"levels/{folder}/{filename}"
                     mod_files[internal] = str(local)
 
+    # levels.txt tracker patch
+    _ltxt = Path(work_dir) / "scripts" / "levels.txt"
+    if _ltxt.exists():
+        matches = find_file_in_kpf(kpf_index, "scripts/levels.txt")
+        internal = matches[0][0] if matches else "scripts/levels.txt"
+        mod_files[internal] = str(_ltxt)
+
+    # loc_english.txt tracker patch
+    _leng = Path(work_dir) / "localization" / "loc_english.txt"
+    if _leng.exists():
+        matches = find_file_in_kpf(kpf_index, "localization/loc_english.txt")
+        internal = matches[0][0] if matches else "localization/loc_english.txt"
+        mod_files[internal] = str(_leng)
+
     if extra_mod_files:
         mod_files.update(extra_mod_files)
 
@@ -1378,6 +1399,13 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Step 4b: Starting item patch ─────────────────────────────────────────────
     starting_item_rsc = config.get("starting_item")
+    # Eclipser is stored as Part 1 in the pool but the actual piece is random.
+    if starting_item_rsc == "RSC_X_ECLIPSER_PART1":
+        starting_item_rsc = rng.choice([
+            "RSC_X_ECLIPSER_PART1",
+            "RSC_X_ECLIPSER_PART2",
+            "RSC_X_ECLIPSER_PART3",
+        ])
     if starting_item_rsc:
         swamp_instance = levels_path / "swampday" / "instance.rsc"
         if swamp_instance.exists():
@@ -1402,6 +1430,66 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             print(f"  Starting item: {starting_item_rsc} placed at swampday church")
         else:
             print(f"  WARNING: swampday/instance.rsc not found — starting item not placed")
+
+    # ── Step 4c: levels.txt tracker ──────────────────────────────────────────
+    # By default, strip all item directives (vanilla hints would be wrong after
+    # randomization).  Set patch_tracker=True in config to get accurate badges
+    # derived from actual randomized locations.
+    _levels_txt_src = work_path / "scripts" / "levels.txt"
+    if not _levels_txt_src.exists():
+        # kpf_handler may extract it as levels/levels.txt
+        _levels_txt_src = work_path / "levels" / "levels.txt"
+    if _levels_txt_src.exists():
+        _levels_txt_out = work_path / "scripts" / "levels.txt"
+        _levels_txt_out.parent.mkdir(parents=True, exist_ok=True)
+        if config.get("patch_tracker", False):
+            from patchers.levels_txt_patcher import patch_levels_txt
+            print("\nPatching levels.txt tracker (accurate randomized hints)...")
+            patch_levels_txt(_levels_txt_src, progression_placement, gate_remap, _levels_txt_out,
+                             true_form_loc_remap=true_form_loc_remap)
+        else:
+            from patchers.levels_txt_patcher import strip_levels_txt
+            print("\nStripping levels.txt item directives (vanilla hints suppressed)...")
+            strip_levels_txt(_levels_txt_src, _levels_txt_out)
+    else:
+        print("\n  [levels_txt] WARNING: levels.txt not found in work dir — tracker not patched")
+
+    # ── Step 4d: loc_english.txt tracker labels ───────────────────────────────
+    # Patch localization/loc_english.txt so hint-panel labels match randomized
+    # placement.  Currently: collapse all three GAD-power keys to "Gad Power"
+    # so the hint is correct regardless of which power ended up in each temple.
+    if config.get("patch_tracker", False):
+        _leng_out = work_path / "localization" / "loc_english.txt"
+        _leng_src = _leng_out  # may already exist if extracted earlier
+
+        # Extract from KPF if not yet on disk
+        if not _leng_src.exists() and using_kpf:
+            try:
+                from kpf_handler import find_file_in_kpf, extract_file_from_kpf
+                _leng_matches = find_file_in_kpf(kpf_index, "localization/loc_english.txt")
+                if _leng_matches:
+                    _leng_src = _leng_out
+                    extract_file_from_kpf(
+                        str(Path(kpf_index.kpf_dir) / _leng_matches[0][1]),
+                        _leng_matches[0][0],
+                        str(_leng_src),
+                    )
+                else:
+                    print("\n  [loc_english] WARNING: loc_english.txt not found in KPF — skipping")
+                    _leng_src = None
+            except Exception as _e:
+                print(f"\n  [loc_english] WARNING: extraction failed: {_e}")
+                _leng_src = None
+
+        if _leng_src and _leng_src.exists():
+            from patchers.loc_english_patcher import patch_loc_english_for_tracker
+            print("\nPatching loc_english.txt tracker labels...")
+            patch_loc_english_for_tracker(
+                _leng_src,
+                _leng_out,
+                shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+                obscure_hints=config.get("obscure_hints", False),
+            )
 
     # ── Step 5: Spoiler log ───────────────────────────────────────────────────
     spoiler_path = out_path / f"spoiler_seed_{seed}.txt"
@@ -1560,12 +1648,12 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     sfx_files = {}
 
     if config.get("shuffle_music", False) and using_kpf:
-        from music_randomizer import shuffle_music
+        from randomizers.music_randomizer import shuffle_music
         music_files = shuffle_music(rng, kpf_files, str(work_path), dry_run=dry_run)
 
     if (config.get("shuffle_voices", False) or config.get("shuffle_weapons_sfx", False)) \
             and using_kpf:
-        from sfx_randomizer import shuffle_sfx
+        from randomizers.sfx_randomizer import shuffle_sfx
         sfx_files = shuffle_sfx(
             rng, kpf_files, str(work_path),
             shuffle_voices=config.get("shuffle_voices", False),
@@ -1574,7 +1662,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         )
 
     if sfx_files:
-        from sfx_randomizer import sfx_spoiler_section
+        from randomizers.sfx_randomizer import sfx_spoiler_section
         sfx_lines = sfx_spoiler_section(sfx_files, str(work_path))
         with open(str(spoiler_path), "a", encoding="utf-8") as f:
             f.write("\n" + "\n".join(sfx_lines))
@@ -1657,6 +1745,14 @@ if __name__ == "__main__":
                         help="Shuffle Shadow Man generic voice lines")
     parser.add_argument("--shuffle-weapons-sfx", action="store_true",
                         help="Shuffle weapon fire/reload sounds within each category")
+    parser.add_argument("--patch-tracker", action="store_true",
+                        help="Rewrite levels.txt map badges to reflect randomized item locations "
+                             "(default: strip all item badges to avoid incorrect vanilla hints)")
+    parser.add_argument("--obscure-hints", action="store_true",
+                        help="Replace tracker badge labels with cryptic tier phrases instead of "
+                             "item names (requires --patch-tracker). "
+                             "Progression items show 'Path of Prophecy', "
+                             "weapons show 'Lost in the Shadows'.")
     args = parser.parse_args()
 
     if args.restore:
@@ -1689,6 +1785,8 @@ if __name__ == "__main__":
         "shuffle_music":         args.shuffle_music,
         "shuffle_voices":        args.shuffle_voices,
         "shuffle_weapons_sfx":   args.shuffle_weapons_sfx,
+        "patch_tracker":         args.patch_tracker,
+        "obscure_hints":         args.obscure_hints,
     }
     if args.config and Path(args.config).exists():
         yaml_data = yaml.safe_load(Path(args.config).read_text())

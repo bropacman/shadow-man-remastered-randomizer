@@ -1,0 +1,399 @@
+$level 0 //Louisiana Swampland
+{
+	// $sky_speed 50
+    $cadeaux 32
+    $nightfall "NONE"
+    $nettie "NONE"
+    $darksoul 1 "ECLIPSE"
+    $darksoul 2 "ECLIPSE BATON"
+    $darksoul 3 "ECLIPSE CALABASH"
+    $darksoul 4 "ECLIPSE"
+    $darksoul 5 "ECLIPSE"
+    $darksoul 6 "ECLIPSE"
+    $darksoul 7 "ECLIPSE"
+    $darksoul 8 "ECLIPSE"
+    $secret 13 "ECLIPSE CALABASH SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "ECLIPSE"
+}
+
+$level 1 //New York Tenement
+{
+    $cadeaux 30
+    $teddy_point 114 171 142 500
+    $avery "ECLIPSE POIGNE"
+    $soulgate "ECLIPSE POIGNE"
+    $prism "AVERY_DEAD"
+    $flashlight "NONE"
+    $accumulator "NONE" 1189.125488 914.551025 2379.802246 8
+    $darksoul 9 "AVERY_DEAD"
+    $secret 4 "SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "NONE"
+}
+    
+$level 2 //Texas Prison
+{
+    $cadeaux 26
+    $teddy_point 1617 -916 34 300
+    $batty "KEYCARD ECLIPSE"
+    $soulgate "KEYCARD ECLIPSE"
+    $prism "BATTY_DEAD"
+    $keycard "NONE"
+    $mp909 "KEYCARD"
+    $shotgun "KEYCARD"
+    $accumulator "KEYCARD" -3684.061768 -493.342590 -1025.200562 13 //18
+    $darksoul 10 "BATTY_DEAD"
+    $secret 6 "KEYCARD SL10 GSECRET"
+    $teddy_cp "KEYCARD"
+    // $steddy "NONE"
+}
+
+$level 3 //London Underground
+{
+    $cadeaux 28
+    $teddy_point 18957 12524 -5236 500
+    $jack "ECLIPSE"
+    $soulgate "JACK_DEAD ECLIPSE"
+    $prism "JACK_DEAD"
+    $journal "NONE"
+    $accumulator "NONE" 3426.407227 13202.643555 -2578.215576 12
+    $darksoul 11 "JACK_DEAD"
+    $secret 3 "SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "NONE"
+}
+
+$level 4 //Florida Summer Camp
+{
+    $cadeaux 32
+    $teddy_point 4449 98 20866 600
+    $milton "ECLIPSE"
+    $soulgate "ECLIPSE"
+    $prism "MILTON_DEAD"
+    $mac10 "NONE"
+    $accumulator "ECLIPSE" 7630.767578 -7577.622559 39709.656250 14
+    $darksoul 12 "MILTON_DEAD"
+    $secret 16 "ECLIPSE SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "ECLIPSE"
+}
+
+$level 5 //Mojave Desert Salvage Yard
+{
+    $cadeaux 35
+    $teddy_point -512 130 849 500
+    $marco "ECLIPSE WALKGAD"
+    $soulgate "MARCO_DEAD ECLIPSE WALKGAD"
+    $prism "MARCO_DEAD"
+    $sawedshotgun "ECLIPSE WALKGAD"
+    $accumulator "ECLIPSE WALKGAD" -6422.191406 50.145775 12388.789062 2
+    $darksoul 13 "MARCO_DEAD"
+    $secret 1 "ECLIPSE WALKGAD SL10 GSECRET"
+    $secret 9 "SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "NONE"
+}
+
+$level 6 //Deadside Marrow Gates
+{
+    $cadeaux 46
+    $teddy_point -1495 1400 23300 500
+    $pathsofshadow "MARROWGATES" -835.594727 1408.051147 20326.312500 8     //10
+    $enter_wastelands "PATHSOFSHADOW SL1"
+    $enter_asylum "PATHSOFSHADOW SL2"
+    $enter_templeoffire "PATHSOFSHADOW SL3"
+    $enter_cageways "PATHSOFSHADOW SL4"
+    $enter_playrooms "PATHSOFSHADOW SL5"
+    $enter_templeofprophecy "PATHSOFSHADOW SL6"
+    $enter_lavaducts "PATHSOFSHADOW SL7"
+    $enter_templeofblood "PATHSOFSHADOW SL8"
+    $enter_fogometers "PATHSOFSHADOW SL9"
+    $coffingate "PATHSOFSHADOW SL10 POIGNE" -2864.653809 1088.051147 5297.727539 0        //0
+    $coffingate "PATHSOFSHADOW SL1" 436.710693 1920.051147 23503.193359 9                 //11
+    $coffingate "PATHSOFSHADOW SL2" -640.696472 1344.051147 25393.527344 11               //15
+    $coffingate "PATHSOFSHADOW SL3" -3245.265625 1344.051147 29071.826172 12              //16
+    $coffingate "PATHSOFSHADOW SL3" -2579.702393 576.051147 26716.478516 12               //16
+    $coffingate "PATHSOFSHADOW SL7" 304.788025 -1989.589111 22806.142578 14               //18
+    $coffingate "PATHSOFSHADOW SL4" 2318.771240 -1983.940796 24462.207031 14              //18
+    $coffingate "PATHSOFSHADOW SL5" 4033.605225 -2559.948730 21490.736328 15              //19
+    $coffingate "PATHSOFSHADOW SL6" -988.703308 -3519.948242 19729.115234 16              //20
+    $coffingate "PATHSOFSHADOW SL7" -508.651031 -2719.948730 15790.372070 17              //21
+    $coffingate "PATHSOFSHADOW SL9" -1745.616699 -2719.948730 14395.601562 17             //21
+    $coffingate "PATHSOFSHADOW SL8" -3147.204590 -2719.948730 15633.636719 17             //21
+    $coffingate "PATHSOFSHADOW SL7" -1233.697998 -4063.947754 11067.697266 18             //22
+    $prophecy "PATHSOFSHADOW"
+    $lalune "PATHSOFSHADOW SL3"
+    $lesoleil "PATHSOFSHADOW SL5"
+    $lalame "PATHSOFSHADOW SL7"
+    $bookofshadows "SL10 POIGNE"
+    $darksoul 14 "POIGNE"
+    $darksoul 15 "POIGNE"
+    $darksoul 16 "TOUCHGAD"
+    $darksoul 17 "PATHSOFSHADOW"
+    $secret 18 "SL10 POIGNE GSECRET"
+    $teddy_cp "PATHSOFSHADOW"
+    $jaunty "NONE"
+    // $steddy "MARROWGATES"
+}
+
+$level 7 //Deadside Wasteland
+{
+    $cadeaux 59
+    $teddy_point 4615 -2388 2184 500
+    $enter_templeoflife "NONE"
+    $yort "TEMPLEOFLIFE"
+    $coffingate "SL6" 5057.026855 -1856.277588 7727.353516 0
+    $asson "NONE"
+    $baton "YORT_DEAD"
+    $enseigne "SL6"
+    $darksoul 18 "NONE"
+    $darksoul 19 "NONE"
+    $darksoul 20 "NONE"
+    $darksoul 21 "NONE"
+    $darksoul 22 "TOUCHGAD"
+    $darksoul 23 "TEMPLEOFLIFE TOUCHGAD"
+    $darksoul 24 "POIGNE"
+    $darksoul 25 "POIGNE"
+    $darksoul 26 "POIGNE"
+    $darksoul 27 "POIGNE"
+    $darksoul 28 "WALKGAD"
+    $darksoul 29 "SWIMGAD"
+    $darksoul 30 "WALKGAD"
+    $lifealtar 0 "YORT_DEAD LIFE_ALTAR"
+    $lifealtar 1 "YORT_DEAD LIFE_ALTAR"
+    $lifealtar 2 "YORT_DEAD LIFE_ALTAR"
+    $lifealtar 3 "YORT_DEAD LIFE_ALTAR"
+    $lifealtar 4 "YORT_DEAD LIFE_ALTAR"
+    $secret 11 "YORT_DEAD SL10 GSECRET"
+    $teddy_cp "TEMPLEOFLIFE"
+    // $steddy "POIGNE"
+}
+
+$level 8 //Asylum Station 1 - The Gateway
+{
+    $cadeaux 40
+    $teddy_point 3688 107 5714 500
+    $enter_experooms "ENGKEY"
+    $enter_schismchambers "ENGKEY"
+    $engineerskey "NONE"
+    $darksoul 32 "NONE"
+    $darksoul 37 "WALKGAD"
+    $darksoul 39 "TOUCHGAD"
+    $darksoul 54 "TOUCHGAD"
+    $darksoul 55 "WALKGAD"
+    $secret 7 "TOUCHGAD SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "WALKGAD"
+}
+    
+$level 9 //Asylum Station 2 - Experimentation Rooms
+{
+    $cadeaux 32
+    $teddy_point 400 -405 -5900 500
+    $enter_schismchambers "NONE"
+    $tetedemort "ENGKEY"
+    $retractor "ENGKEY" 3259.058105 434.606476 -18166.191406 7
+    $violator2 "ENGKEY WALKGAD"
+    $darksoul 33 "ENGKEY"
+    $darksoul 34 "ENGKEY"
+    $darksoul 35 "ENGKEY"
+    $darksoul 36 "ENGKEY WALKGAD"
+    $secret 19 "ENGKEY SL10 GSECRET"
+    $teddy_cp "ENGKEY"
+    // $steddy "ENGKEY"
+}
+
+$level 10 //Asylum Station 3 - Schism Chambers
+{
+    $cadeaux 37
+    $teddy_point -1375 2411 15472 500
+    $enter_experooms "NONE"
+    $schism 1 "RETRACTOR"
+    $schism 2 "RETRACTOR"
+    $schism 3 "RETRACTOR"
+    $schism 4 "RETRACTOR"
+    $schism 5 "RETRACTOR"
+    $darksoul 31 "NONE"
+    $secret 0 "WALKGAD SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "NONE"
+}
+
+$level 11 //Asylum Station 4 - The Dark Engine
+{
+    $cadeaux 0
+    $teddy_point 5502 1664 -320 500
+    $legion "LEGION"
+    $piston 1 "ENGKEY"
+    $piston 2 "ENGKEY MILTON_DOOR JACK_JOURNAL"
+    $piston 3 "ENGKEY MARCO_DOOR JACK_JOURNAL"
+    $piston 4 "ENGKEY JACK_DOOR JACK_JOURNAL"
+    $piston 5 "ENGKEY AVERY_DOOR JACK_JOURNAL"
+    $piston 6 "ENGKEY BATTY_DOOR JACK_JOURNAL"
+    $darksoul 38 "ENGKEY MARCO_DOOR"
+    $darksoul 40 "ENGKEY MILTON_DOOR"
+    $darksoul 41 "ENGKEY JACK_DOOR"
+    $darksoul 42 "ENGKEY JACK_DOOR"
+    $darksoul 43 "ENGKEY BATTY_DOOR"
+    $darksoul 44 "ENGKEY BATTY_DOOR"
+    $darksoul 45 "ENGKEY BATTY_DOOR"
+    $darksoul 46 "ENGKEY BATTY_DOOR"
+    $darksoul 47 "AVERY_DOOR"
+    $darksoul 48 "ENGKEY AVERY_DOOR"
+    $darksoul 49 "ENGKEY JACK_DOOR"
+    $darksoul 50 "ENGKEY BATTY_DOOR"
+    $darksoul 51 "ENGKEY BATTY_DOOR"
+    $darksoul 52 "ENGKEY MARCO_DOOR"
+    $darksoul 53 "ENGKEY MILTON_DOOR"
+    $secret 20 "ENGKEY BATTY_DOOR SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "ENGKEY JACK_DOOR"
+}
+
+$level 12 //Gad Temple 1 - Touch Gad
+{
+    $cadeaux 55
+    $teddy_point -524 1900 17172 500
+    $touchgad "NONE"
+    $coffingate "SL5" 6322.216309 383.671936 4686.297852 5
+    $coffingate "SL4 TOUCHGAD" 919.849915 2177.330322 4398.827148 21
+    $poigne "SL4 TOUCHGAD"
+    $flambeau "SL5"
+    $darksoul 56 "POIGNE"
+    $darksoul 57 "TOUCHGAD CALABASH"
+    $darksoul 58 "TOUCHGAD"
+    $darksoul 59 "TOUCHGAD"
+    $darksoul 60 "POIGNE"
+    $darksoul 61 "NONE"
+    $darksoul 62 "TOUCHGAD WALKGAD"
+    $darksoul 63 "WALKGAD"
+    $darksoul 64 "SWIMGAD"
+    $darksoul 65 "SWIMGAD BATON"
+    $darksoul 66 "NONE"
+    $secret 2 "FLAMBEAU SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "NONE"
+}
+
+$level 13 //Asylum Hub 1 - The Cageways
+{
+    $cadeaux 36
+    $teddy_point 7508 235 7937 300
+    $enter_darkengine "ENGKEY"
+    $retractor "ENGKEY" 16406.490234 945.292847 17216.921875 9
+    $darksoul 67 "ENGKEY WALKGAD"
+    $darksoul 68 "ENGKEY WALKGAD"
+    $darksoul 69 "ENGKEY WALKGAD"
+    $darksoul 70 "ENGKEY TOUCHGAD"
+    $darksoul 71 "ENGKEY"
+    $darksoul 72 "ENGKEY"
+    $darksoul 73 "ENGKEY"
+    $darksoul 74 "NONE"
+    $darksoul 75 "ENGKEY WALKGAD"
+    $darksoul 76 "ENGKEY WALKGAD"
+    $darksoul 77 "ENGKEY"
+    $secret 15 "ENGKEY WALKGAD SL10 GSECRET"
+    $teddy_cp "ENGKEY"
+    // $steddy "NONE"
+}
+
+$level 14 //Asylum Hub 2 - The Playrooms
+{
+    $cadeaux 36
+    $teddy_point -6223 130 -8256 -200
+    $retractor "ENGKEY" 1305.958862 2225.288574 -8125.869141 11
+    $violator "ENGKEY VIO_PLINTH"
+    $darksoul 78 "ENGKEY"
+    $darksoul 79 "ENGKEY WALKGAD"
+    $darksoul 80 "ENGKEY POIGNE"
+    $darksoul 81 "ENGKEY POIGNE"
+    $darksoul 82 "ENGKEY POIGNE"
+    $darksoul 83 "ENGKEY"
+    $darksoul 84 "ENGKEY"
+    $darksoul 85 "ENGKEY"
+    $darksoul 86 "ENGKEY"
+    $darksoul 87 "ENGKEY WALKGAD"
+    $secret 8 "ENGKEY SL10 GSECRET"
+    $teddy_cp "ENGKEY"
+    // $steddy "WALKGAD"
+}
+
+$level 15 //Gad Temple 2 - Walk Gad
+{
+    $cadeaux 42
+    $teddy_point -45 1068 -11507 500
+    $walkgad "TOUCHGAD"
+    $coffingate "SL7" -3940.169922 960.047058 -13134.502930 0
+    $marteau "SL7"
+    $darksoul 88 "BATON"
+    $darksoul 89 "NONE"
+    $darksoul 90 "NONE"
+    $darksoul 91 "NONE"
+    $darksoul 92 "TOUCHGAD"
+    $darksoul 93 "POIGNE"
+    $darksoul 94 "POIGNE"
+    $darksoul 95 "POIGNE"
+    $darksoul 96 "POIGNE"
+    $darksoul 97 "WALKGAD"
+    $darksoul 98 "WALKGAD"
+    $darksoul 99 "WALKGAD"
+    $darksoul 100 "CALABASH"
+    $secret 10 "TOUCHGAD SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "NONE"
+}
+
+$level 16 //Asylum Hub 3 - The Lavaducts
+{
+    $cadeaux 32
+    $teddy_point 26445 2284 15085 500
+    $retractor "NONE" 24698.183594 4133.437500 23727.269531 10
+    $darksoul 101 "WALKGAD"
+    $darksoul 102 "ENGKEY SWIMGAD"
+    $darksoul 103 "ENGKEY"
+    $darksoul 104 "NONE"
+    $darksoul 105 "WALKGAD"
+    $darksoul 106 "ENGKEY SWIMGAD"
+    $darksoul 107 "NONE"
+    $darksoul 108 "ENGKEY SWIMGAD"
+    $darksoul 109 "ENGKEY SWIMGAD"
+    $secret 21 "ENGKEY SWIMGAD SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "NONE"
+}
+
+$level 17 //Gad Temple 3 - Swim Gad
+{
+    $cadeaux 35
+    $teddy_point -1551 364 -7370 500
+    $swimgad "WALKGAD"
+    $coffingate "SL9" -1899.431030 1279.721680 -11809.279297 0
+    $calabash "SL9"
+    $darksoul 110 "SWIMGAD"
+    $darksoul 111 "SWIMGAD"
+    $darksoul 112 "CALABASH"
+    $darksoul 113 "SWIMGAD"
+    $darksoul 114 "NONE"
+    $darksoul 115 "POIGNE"
+    $darksoul 116 "FLAMBEAU BATON MARTEAU CALABASH"
+    $darksoul 117 "WALKGAD"
+    $secret 12 "SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "SWIMGAD"
+}
+
+$level 18 //Asylum Hub 4 - The Fogometers
+{
+    $cadeaux 33
+    $teddy_point 207 97 6633 500
+    $coffingate "ENGKEY SL10" -14955.261719 1920.051147 11889.827148 10
+    $lightsoul "ENGKEY LIGHT_SOUL"
+    $retractor "ENGKEY" 601.352783 1712.344238 13794.140625 9
+    $darksoul 118 "ENGKEY"
+    $darksoul 119 "ENGKEY"
+    $darksoul 120 "ENGKEY"
+    $secret 5 "SL10 GSECRET"
+    $teddy_cp "NONE"
+    // $steddy "ENGKEY BATON POIGNE"
+}

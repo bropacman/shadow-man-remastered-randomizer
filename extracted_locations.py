@@ -3064,7 +3064,7 @@ RAW_LOCATIONS: list[RawLocation] = [
     RawLocation("t2wlkgad", "quest.rsc", 0x3282, "Govi - Dark Soul 91", "RSC_X_GOVI", "soul", "Temple of Prophecy (Marcher)", None, None, 91, True, True, "22", 7908.52, 1399.32, 11840.02, None),
     RawLocation("t3swmgad", "quest.rsc", 0x3432, "Govi - Dark Soul 115", "RSC_X_GOVI", "soul", "Temple of Blood (Nager)", "R.poigne(state, player)", "POIGNE", 115, True, True, "9", -7841.63, 631.32, -3713.11, None),
     RawLocation("t3swmgad", "quest.rsc", 0x39D2, "Govi - Dark Soul 116", "RSC_X_GOVI", "soul", "Temple of Blood (Nager)", "R.flambeau(state, player) and R.marteau(state, player) and R.baton(state, player) and R.calabash(state, player)", "FLAMBEAU & MARTEAU & BATON & CALABASH", 116, True, True, "10", -5881.95, 375.32, -9833.36, None),
-    RawLocation("t1tchgad", "quest.rsc", 0x3DC2, "Govi - Dark Soul 60", "RSC_X_GOVI", "soul", "Temple of Fire (Toucher)", "R.gate(\"GATE_FIRE_POIGNE\", state, player) or R.poigne(state, player)", "GATE_FIRE_POIGNE | POIGNE", 60, True, True, "22", 3740.99, 1527.31, 1505.12, None),
+    RawLocation("t1tchgad", "quest.rsc", 0x3DC2, "Govi - Dark Soul 60", "RSC_X_GOVI", "soul", "Temple of Fire (Toucher)", "R.poigne(state, player)", "POIGNE", 60, True, True, "22", 3740.99, 1527.31, 1505.12, None),
     RawLocation("uground", "enemies.rsc", 0x0DF2, "Jack the Ripper", "RSC_X_JACK", "boss", "Down Street Station, London", "R.night(state, player)", "NIGHT", 11, True, True, "5", 14334.3457, 10570.1514, -15030.459, None),
     RawLocation("uground", "quest.rsc", 0x2FB2, "Jack’s Schematics", "RSC_X_JACKS_SCHEMATIC", "lore", "Down Street Station, London", None, None, 0, False, True, "24", 13503.33, 10910.43, -271.81, None),
     RawLocation("ah4fogom", "quest.rsc", 0x2742, "Light Soul", "RSC_X_LIGHT_SOUL", "bonus", "Asylum: The Fogometers", "R.gate(\"GATE_FOGOMETERS_INTERIOR\", state, player) and R.cadeaux_666(state, player)", "GATE_FOGOMETERS_INTERIOR & CADEAUX_666", 0, False, True, "11", -21559.89, 2208.18, 10457.86, "shuffle or reward for all life altars hmm..."),
@@ -3110,7 +3110,7 @@ RAW_LOCATIONS: list[RawLocation] = [
     RawLocation("ah2playr", "instance.rsc", 0x2D2A, "Violator (Accumulator Reward)", "RSC_X_VIOLATOR", "weapon", "Asylum: Playrooms", "R.eng_key(state, player) and R.x3_accumulator(state, player)", "ENG_KEY & X3_ACCUMULATOR", 0, False, True, "9", -5363.4, 150.88, -10647.68, None),
     RawLocation("t1tchgad", "quest.rsc", 0x3E52, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Fire (Toucher)", "R.gate(\"GATE_FIRE_POIGNE\", state, player)", "GATE_FIRE_POIGNE", 0, False, True, "16", -559.4, 340.0, 35710.8, None),
     RawLocation("t2wlkgad", "quest.rsc", 0x3432, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Prophecy (Marcher)", "R.gate(\"GATE_PROPHECY_INTERIOR\", state, player)", "GATE_PROPHECY_INTERIOR", 0, False, True, "9", 256.0, 400.0, 1280.0, None),
-    RawLocation("t3swmgad", "quest.rsc", 0x3A1A, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Blood (Nager)", "R.gate(\"GATE_BLOOD_INTERIOR\", state, player)", "GATE_BLOOD_INTERIOR", 0, False, True, "7", -1535.8, 670.0, -4988.9, None),
+    RawLocation("t3swmgad", "quest.rsc", 0x3A1A, "Gad Power Upgrade", "RSC_X_GAD_PICKUP", "gad", "Temple of Blood (Nager)", "R.gate(\"GATE_BLOOD_INTERIOR\", state, player)", "GATE_BLOOD_INTERIOR", 0, False, True, "7", -1535.8, 660.0, -4988.9, None),
 ]
 
 # ── Derived lookups (built once at import time) ───────────────────────────────

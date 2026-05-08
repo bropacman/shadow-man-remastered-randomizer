@@ -53,12 +53,8 @@ STARTING_ITEM_POOL: dict[str, str] = {
     "Flambeau":           "RSC_X_FLAMBEAU",
     "Marteau":            "RSC_X_MARTEAU",
     "Prison Key Card":    "RSC_X_PRISON_KEY_CARD",
-    "Eclipser Part 1":    "RSC_X_ECLIPSER_PART1",
-    "Eclipser Part 2":    "RSC_X_ECLIPSER_PART2",
-    "Eclipser Part 3":    "RSC_X_ECLIPSER_PART3",
+    "Eclipser":           "RSC_X_ECLIPSER_PART1",
     "Retractor":          "RSC_X_RETRACT",
-    "Retractor (AL)":     "RSC_X_RETRACT1",
-    "Retractor (AP)":     "RSC_X_RETRACT2",
     "Accumulator":        "RSC_X_ACCUMULATOR",
     "Asson":              "RSC_X_ASSON",
     "Shotgun":            "RSC_X_SHOTGUN",
@@ -71,7 +67,7 @@ STARTING_ITEM_POOL: dict[str, str] = {
     "Book of Prophecy":   "RSC_X_PROPHECY",
     "Jacks Schematic":    "RSC_X_JACKS_SCHEMATIC",
     "Light Soul":         "RSC_X_LIGHT_SOUL",
-    "Violator":           "RSC_X_VIOLATOR",
+    "Violator":           "RSC_Q_VIOLATOR",
     "Gad Power Upgrade":  "RSC_X_GAD_PICKUP",
 }
 
@@ -115,6 +111,33 @@ GATE_VANILLA_SL: dict[str, int] = {
     "GATE_PROPHECY_INTERIOR"    :  7,  # t2wlkgad  — Temple of Prophecy interior
     "GATE_BLOOD_INTERIOR"       :  9,  # t3swmgad  — Temple of Blood interior
     "GATE_FOGOMETERS_INTERIOR"  : 10,  # ah4fogom  — Fogometers interior         LOCKED
+}
+
+# XZ positions for matching gate_id → physical location in game world.
+# Used by the e2o patcher and the levels.txt coffingate patcher.
+# Tolerance for matching: E2O_MATCH_RADIUS game units.
+E2O_MATCH_RADIUS: int = 500
+GATE_E2O_POSITIONS: dict[str, tuple[str, int, int]] = {
+    "GATE_DEADSIDE_MARROW"      : ("deadside",    -836,  20326),
+    "GATE_DEADSIDE_WASTELAND"   : ("deadside",     437,  23503),
+    "GATE_DEADSIDE_ASYLUM"      : ("deadside",    -641,  25394),
+    "GATE_DEADSIDE_PATH_3"      : ("deadside",   -2580,  26716),
+    "GATE_DEADSIDE_LALUNE"      : ("deadside",   -3245,  29072),
+    "GATE_DEADSIDE_CAGEWAYS"    : ("deadside",    2319,  24462),
+    "GATE_DEADSIDE_PLAYROOMS"   : ("deadside",    4034,  21491),
+    "GATE_DEADSIDE_PATH_6"      : ("deadside",    -989,  19729),
+    "GATE_DEADSIDE_LAVADUCTS"   : ("deadside",    -509,  15790),
+    "GATE_DEADSIDE_PATH_7"      : ("deadside",     305,  22806),
+    "GATE_DEADSIDE_LALAME"      : ("deadside",   -1234,  11068),
+    "GATE_DEADSIDE_BLOOD"       : ("deadside",   -3147,  15634),
+    "GATE_DEADSIDE_FOGOMETERS"  : ("deadside",   -1746,  14396),
+    "GATE_DEADSIDE_MYSTERY"     : ("deadside",   -2865,   5298),
+    "GATE_WASTELAND_ENSEIGNE"   : ("wastland",    5057,   7727),
+    "GATE_FIRE_POIGNE"          : ("t1tchgad",     920,   4399),
+    "GATE_FIRE_FLAMBEAU"        : ("t1tchgad",    6322,   4686),
+    "GATE_PROPHECY_INTERIOR"    : ("t2wlkgad",   -3940, -13135),
+    "GATE_BLOOD_INTERIOR"       : ("t3swmgad",   -1899, -11809),
+    "GATE_FOGOMETERS_INTERIOR"  : ("ah4fogom",  -14955,  11890),
 }
 
 # Gates that only guard a key item and a handful of checks
@@ -286,6 +309,34 @@ GAD_PICKUP_EXPECTED_OFFSETS = {
     "t2wlkgad": 0x3432,
     "t3swmgad": 0x3A1A,
 }
+
+# ── Soul instance ID sets ─────────────────────────────────────────────────────
+
+# Dark souls dropped by the five liveside bosses.  These are never in the
+# randomizer pool and their vanilla $darksoul entries must be preserved as-is.
+BOSS_SOUL_IDS: frozenset[int] = frozenset({
+    9,   # Avery Marx      (tenement)
+    10,  # Victor Batrachian (prison)
+    11,  # Jack the Ripper   (uground)
+    12,  # Milton Pike       (florida)
+    13,  # Marco Cruz        (salvage)
+})
+
+# Dark souls dropped by Trueform enemies.  These will eventually be shuffled
+# but are left vanilla until in-game functionality is confirmed.
+TRUE_FORM_SOUL_IDS: frozenset[int] = frozenset({
+    36,                                 # as2exper
+    38, 40, 41, 42, 43, 44, 45, 46,    # as4dkeng
+    47, 48, 49, 52,                     # as4dkeng (cont.)
+    87,                                 # ah2playr
+    120,                                # ah4fogom
+})
+
+# Combined set of soul IDs whose $darksoul lines must never be stripped or
+# moved by the tracker patcher — they stay at their vanilla locations.
+PRESERVED_SOUL_IDS: frozenset[int] = BOSS_SOUL_IDS
+# TRUE_FORM_SOUL_IDS are now handled dynamically via true_form_loc_remap in the
+# tracker patcher — they are no longer preserved at vanilla positions.
 
 # ── Item spawn height adjustments ─────────────────────────────────────────────
 
