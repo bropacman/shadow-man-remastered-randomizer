@@ -1432,64 +1432,87 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             print(f"  WARNING: swampday/instance.rsc not found — starting item not placed")
 
     # ── Step 4c: levels.txt tracker ──────────────────────────────────────────
-    # By default, strip all item directives (vanilla hints would be wrong after
-    # randomization).  Set patch_tracker=True in config to get accurate badges
-    # derived from actual randomized locations.
+    # Always generate all variants so the user can swap modes without re-running:
+    #   levels_stripped.txt — item directives removed (no hints)
+    #   levels_hints.txt    — accurate randomized item hints
+    # The active variant (based on config) is copied to levels.txt for packing.
     _levels_txt_src = work_path / "scripts" / "levels.txt"
     if not _levels_txt_src.exists():
-        # kpf_handler may extract it as levels/levels.txt
         _levels_txt_src = work_path / "levels" / "levels.txt"
     if _levels_txt_src.exists():
-        _levels_txt_out = work_path / "scripts" / "levels.txt"
-        _levels_txt_out.parent.mkdir(parents=True, exist_ok=True)
+        from patchers.levels_txt_patcher import patch_levels_txt, strip_levels_txt
+        _scripts_dir = work_path / "scripts"
+        _scripts_dir.mkdir(parents=True, exist_ok=True)
+
+        _levels_stripped = _scripts_dir / "levels_stripped.txt"
+        _levels_hints    = _scripts_dir / "levels_hints.txt"
+        _levels_active   = _scripts_dir / "levels.txt"
+
+        print("\nGenerating levels.txt variants...")
+        strip_levels_txt(_levels_txt_src, _levels_stripped)
+        patch_levels_txt(_levels_txt_src, progression_placement, gate_remap,
+                         _levels_hints, true_form_loc_remap=true_form_loc_remap)
+
+        # Copy selected variant to the active file for KPF packing
+        import shutil as _shutil
         if config.get("patch_tracker", False):
-            from patchers.levels_txt_patcher import patch_levels_txt
-            print("\nPatching levels.txt tracker (accurate randomized hints)...")
-            patch_levels_txt(_levels_txt_src, progression_placement, gate_remap, _levels_txt_out,
-                             true_form_loc_remap=true_form_loc_remap)
+            _shutil.copy2(_levels_hints, _levels_active)
+            print("  [levels_txt] Active: levels_hints.txt (accurate randomized hints)")
         else:
-            from patchers.levels_txt_patcher import strip_levels_txt
-            print("\nStripping levels.txt item directives (vanilla hints suppressed)...")
-            strip_levels_txt(_levels_txt_src, _levels_txt_out)
+            _shutil.copy2(_levels_stripped, _levels_active)
+            print("  [levels_txt] Active: levels_stripped.txt (no hints)")
+        print("  [levels_txt] Swap hint mode: copy levels_hints.txt or levels_stripped.txt "
+              "over levels.txt and reinstall the KPF")
     else:
         print("\n  [levels_txt] WARNING: levels.txt not found in work dir — tracker not patched")
 
     # ── Step 4d: loc_english.txt tracker labels ───────────────────────────────
-    # Patch localization/loc_english.txt so hint-panel labels match randomized
-    # placement.  Currently: collapse all three GAD-power keys to "Gad Power"
-    # so the hint is correct regardless of which power ended up in each temple.
-    if config.get("patch_tracker", False):
-        _leng_out = work_path / "localization" / "loc_english.txt"
-        _leng_src = _leng_out  # may already exist if extracted earlier
+    # Generates loc_english_hints.txt (item names) from the read-only vanilla
+    # source and copies it to loc_english.txt for packing when patch_tracker
+    # is enabled.
+    #
+    # IMPORTANT: use loc_english_vanilla.txt as the read-only source so that
+    # re-runs always patch from clean vanilla, not from a previously patched
+    # output (which would corrupt the file on every successive run).
+    _loc_dir   = work_path / "localization"
+    _loc_dir.mkdir(parents=True, exist_ok=True)
+    _leng_vanilla = _loc_dir / "loc_english_vanilla.txt"
 
-        # Extract from KPF if not yet on disk
-        if not _leng_src.exists() and using_kpf:
-            try:
-                from kpf_handler import find_file_in_kpf, extract_file_from_kpf
-                _leng_matches = find_file_in_kpf(kpf_index, "localization/loc_english.txt")
-                if _leng_matches:
-                    _leng_src = _leng_out
-                    extract_file_from_kpf(
-                        str(Path(kpf_index.kpf_dir) / _leng_matches[0][1]),
-                        _leng_matches[0][0],
-                        str(_leng_src),
-                    )
-                else:
-                    print("\n  [loc_english] WARNING: loc_english.txt not found in KPF — skipping")
-                    _leng_src = None
-            except Exception as _e:
-                print(f"\n  [loc_english] WARNING: extraction failed: {_e}")
-                _leng_src = None
+    # Extract vanilla from KPF if not yet saved
+    if not _leng_vanilla.exists() and using_kpf:
+        try:
+            from kpf_handler import find_file_in_kpf, extract_file_from_kpf
+            _leng_matches = find_file_in_kpf(kpf_index, "localization/loc_english.txt")
+            if _leng_matches:
+                extract_file_from_kpf(
+                    str(Path(kpf_index.kpf_dir) / _leng_matches[0][1]),
+                    _leng_matches[0][0],
+                    str(_leng_vanilla),
+                )
+            else:
+                print("\n  [loc_english] WARNING: loc_english.txt not found in KPF — skipping")
+                _leng_vanilla = None
+        except Exception as _e:
+            print(f"\n  [loc_english] WARNING: extraction failed: {_e}")
+            _leng_vanilla = None
 
-        if _leng_src and _leng_src.exists():
-            from patchers.loc_english_patcher import patch_loc_english_for_tracker
-            print("\nPatching loc_english.txt tracker labels...")
-            patch_loc_english_for_tracker(
-                _leng_src,
-                _leng_out,
-                shuffle_gad_temples=config.get("shuffle_gad_temples", False),
-                obscure_hints=config.get("obscure_hints", False),
-            )
+    _leng_base = _leng_vanilla  # alias for clarity below
+    if _leng_base and _leng_base.exists():
+        from patchers.loc_english_patcher import patch_loc_english_for_tracker
+        _leng_hints  = _loc_dir / "loc_english_hints.txt"
+        _leng_active = _loc_dir / "loc_english.txt"
+
+        print("\nGenerating loc_english.txt...")
+        patch_loc_english_for_tracker(
+            _leng_base, _leng_hints,
+            shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+        )
+
+        # Copy to active file for KPF packing
+        import shutil as _shutil
+        if config.get("patch_tracker", False):
+            _shutil.copy2(_leng_hints, _leng_active)
+            print("  [loc_english] Active: loc_english_hints.txt")
 
     # ── Step 5: Spoiler log ───────────────────────────────────────────────────
     spoiler_path = out_path / f"spoiler_seed_{seed}.txt"
@@ -1748,11 +1771,6 @@ if __name__ == "__main__":
     parser.add_argument("--patch-tracker", action="store_true",
                         help="Rewrite levels.txt map badges to reflect randomized item locations "
                              "(default: strip all item badges to avoid incorrect vanilla hints)")
-    parser.add_argument("--obscure-hints", action="store_true",
-                        help="Replace tracker badge labels with cryptic tier phrases instead of "
-                             "item names (requires --patch-tracker). "
-                             "Progression items show 'Path of Prophecy', "
-                             "weapons show 'Lost in the Shadows'.")
     args = parser.parse_args()
 
     if args.restore:
@@ -1786,7 +1804,6 @@ if __name__ == "__main__":
         "shuffle_voices":        args.shuffle_voices,
         "shuffle_weapons_sfx":   args.shuffle_weapons_sfx,
         "patch_tracker":         args.patch_tracker,
-        "obscure_hints":         args.obscure_hints,
     }
     if args.config and Path(args.config).exists():
         yaml_data = yaml.safe_load(Path(args.config).read_text())

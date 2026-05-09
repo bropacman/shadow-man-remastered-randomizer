@@ -123,9 +123,6 @@ python patcher.py --game-dir <PATH> --random-starting-item
 # Enable Teddy Bear map tracker hints
 python patcher.py --game-dir <PATH> --patch-tracker
 
-# Tracker with cryptic hints (hides item names)
-python patcher.py --game-dir <PATH> --patch-tracker --obscure-hints
-
 # Throw everything in the blender
 python patcher.py --game-dir <PATH> \
     --shuffle-enemies --shuffle-true-forms \
@@ -177,7 +174,6 @@ python patcher.py --restore --game-dir <PATH>
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--patch-tracker` | off | Rewrite `levels.txt` map badges to show randomized item locations. Without this flag all item badges are stripped so no incorrect vanilla hints appear. |
-| `--obscure-hints` | off | Replace badge labels with cryptic tier phrases (`Path of Prophecy` for progression, `Lost in the Shadows` for weapons) instead of item names. Requires `--patch-tracker`. |
 
 ### Enemies, music, SFX
 

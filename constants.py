@@ -338,6 +338,99 @@ PRESERVED_SOUL_IDS: frozenset[int] = BOSS_SOUL_IDS
 # TRUE_FORM_SOUL_IDS are now handled dynamically via true_form_loc_remap in the
 # tracker patcher — they are no longer preserved at vanilla positions.
 
+
+# ── Tracker hint labels ───────────────────────────────────────────────────────
+# Phrases shown in the map tracker hint panel.
+# GAD_LABEL: generic label used for all three Gad powers when gad temples are
+#   shuffled (so the hint doesn't name a specific power that may have moved).
+# HINT_TIERS: categorical labels used in obscure-hints mode.  Each tier maps to
+#   a cryptic phrase so item locations are hinted by category, not by name.
+# DIRECTIVE_HINT_TIER: maps levels.txt directive names to a HINT_TIERS key.
+
+GAD_LABEL: str = "Find Gad Power"
+
+HINT_TIERS: dict[str, str] = {
+    "progression": "Path of the Lord of Deadside",
+    "darksoul":    "The Power of the Dark Souls are here",
+    "lore":        "Something here should be wasteful",
+    "weapon":      "Something here should be useful",
+}
+
+# Maps levels.txt directive names to their loc_english.txt i_* inventory key.
+# Used in obscure-hints mode to override the inventory name that feeds the
+# m_obj_findthe "{}" tracker fallback.  Note: this also changes the name shown
+# in the player's inventory screen — acceptable for a full obscure experience.
+DIRECTIVE_INVENTORY_KEY: dict[str, str] = {
+    # Voodoo / key items
+    "asson":         "i_asson",
+    "baton":         "i_baton",
+    "calabash":      "i_calabash",
+    "engineerskey":  "i_engineers_key",
+    "enseigne":      "i_enseigne",
+    "flambeau":      "i_flambeau",
+    "keycard":       "i_key_card",
+    "marteau":       "i_marteau",
+    # L'Eclipser pieces
+    "lalune":        "i_eclipser_lune",
+    "lesoleil":      "i_eclipser_soleil",
+    "lalame":        "i_eclipser_lame",
+    # Lore
+    "bookofshadows": "i_book_of_shadows",
+    "prophecy":      "i_prophecy",
+    "journal":       "i_jacks_journal",
+    # Weapons
+    "flashlight":    "i_flashlight",
+    "mac10":         "i_smg",
+    "mp909":         "i_mp909",
+    "sawedshotgun":  "i_shotgun2",
+    "shotgun":       "i_shotgun",
+    "tetedemort":    "i_tetedemort",
+    "violator2":     "i_violator2",
+}
+
+DIRECTIVE_HINT_TIER: dict[str, str] = {
+    # Voodoo / key items
+    "poigne":        "progression",
+    "flambeau":      "progression",
+    "marteau":       "progression",
+    "calabash":      "progression",
+    "baton":         "progression",
+    "asson":         "progression",
+    "enseigne":      "progression",
+    "engineerskey":  "progression",
+    "keycard":       "progression",
+    # L'Eclipser pieces
+    "lalune":        "progression",
+    "lesoleil":      "progression",
+    "lalame":        "progression",
+    # Gad powers
+    "touchgad":      "progression",
+    "walkgad":       "progression",
+    "swimgad":       "progression",
+    # Other progression
+    "darksoul":      "darksoul",
+    "lightsoul":     "progression",
+    "accumulator":   "progression",
+    "retractor":     "progression",
+    # Lore
+    "bookofshadows": "lore",
+    "prophecy":      "lore",
+    "journal":       "lore",
+    # Plural forms (shown when multiple of the same item are in a level)
+    "darksouls":     "darksoul",
+    "retractors":    "progression",
+    "accumulators":  "progression",
+    # Weapons
+    "violator":      "weapon",    # vanilla m_obj_violator key
+    "violator2":     "weapon",
+    "tetedemort":    "weapon",
+    "mac10":         "weapon",
+    "mp909":         "weapon",
+    "shotgun":       "weapon",
+    "sawedshotgun":  "weapon",
+    "flashlight":    "weapon",
+}
+
 # ── Item spawn height adjustments ─────────────────────────────────────────────
 
 TALL_TYPES: set[str] = {"RSC_X_GOVI", "RSC_X_DARK_SOUL"}  # same as DARK_SOUL_TYPES

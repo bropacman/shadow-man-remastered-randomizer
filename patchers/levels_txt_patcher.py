@@ -360,23 +360,36 @@ def strip_levels_txt(source_path: Path, output_path: Path) -> None:
     all_directives.update(GAD_DIRECTIVE.values())
     all_directives.update(_STRIP_ONLY_DIRECTIVES)
 
+    # All item directives stay in their original level blocks (removing dark
+    # souls entirely crashes the engine's 120-soul count check).  Instead,
+    # every matched directive has its condition replaced with "SL10" — which
+    # requires collecting all 120 dark souls first, so hints never surface
+    # during normal play.  XYZ coordinates (retractor, accumulator, etc.) are
+    # preserved intact after the condition token.
     patterns = [_directive_re(d) for d in all_directives]
+    patterns.append(_directive_re("coffingate"))
+    _cond_re = re.compile(r'^(\s*\$\w+(?:\s+\d+)?\s+)"[^"]*"(.*)', re.IGNORECASE)
 
     blocks = _parse(source_path.read_text(encoding="utf-8"))
-    removed_total = 0
+    hidden_total = 0
+
     for b in blocks:
-        kept = []
+        new_lines = []
         for line in b["lines"]:
             if any(p.search(line) for p in patterns):
-                removed_total += 1
+                m = _cond_re.match(line)
+                if m:
+                    new_lines.append(f'{m.group(1)}"SL10"{m.group(2)}')
+                    hidden_total += 1
+                # lines that don't match the condition pattern are dropped
             else:
-                kept.append(line)
-        b["lines"] = kept
+                new_lines.append(line)
+        b["lines"] = new_lines
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(_serialize(blocks), encoding="utf-8")
     print(f"  [levels_txt] Stripped → {output_path.name}  "
-          f"({removed_total} item directive(s) removed)")
+          f"({hidden_total} item directive(s) hidden behind SL10)")
 
 
 def patch_levels_txt(
@@ -479,14 +492,21 @@ def patch_levels_txt(
     # Bulk-strip randomizable $darksoul entries up front so vanilla souls that
     # share a block with randomized placements don't produce duplicate "Find X
     # Dark Souls" groups.
-    # Boss souls (IDs 9-13) are preserved — they never move.
-    # True form souls are stripped here and re-injected via true_form_loc_remap.
+    # Boss souls (IDs 9-13) are always preserved — they never move.
+    # True form souls are preserved when shuffle_true_forms is off (no remap
+    # means they stay at their vanilla locations); stripped and re-injected via
+    # true_form_loc_remap when shuffle_true_forms is on.
+    from constants import TRUE_FORM_SOUL_IDS
+    preserve_ids = set(PRESERVED_SOUL_IDS)
+    if not true_form_loc_remap:
+        preserve_ids.update(TRUE_FORM_SOUL_IDS)
+
     _darksoul_id_re = re.compile(r'^\s*\$darksoul\s+(\d+)\b', re.IGNORECASE)
     for b in blocks:
         kept = []
         for line in b["lines"]:
             m = _darksoul_id_re.match(line)
-            if m and int(m.group(1)) not in PRESERVED_SOUL_IDS:
+            if m and int(m.group(1)) not in preserve_ids:
                 continue   # strip — will be re-injected from randomizer fill
             kept.append(line)
         b["lines"] = kept
