@@ -127,7 +127,7 @@ def shuffle_music(
         print("  WARNING: all music tracks are excluded — nothing to shuffle")
         return {}
 
-    print(f"  Music: {len(shuffleable)} tracks to shuffle, {len(excluded)} excluded")
+    print(f"  Deadside's soundtrack stirs — {len(shuffleable)} tracks to shuffle, {len(excluded)} untouched")
 
     if dry_run:
         return {}
@@ -203,7 +203,7 @@ def shuffle_music(
         mod_files[slot_path] = str(local_path)
         changed += 1
 
-    print(f"  Music: {changed} track(s) swapped into mod KPF")
+    print(f"  Music: {changed} track(s) echoing through a different part of Deadside")
     return mod_files
 
 

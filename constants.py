@@ -153,13 +153,24 @@ ITEM_GATE_IDS: frozenset[str] = frozenset({
     "GATE_FOGOMETERS_INTERIOR",
 })
 
+# Explicit open-gate order: the 7 linear deadside coffin gates in sequence.
+# Beyond these, gates branch and have no clear linear order — open_gates_n > 7
+# will shuffle the remainder randomly using the seed RNG.
+COFFIN_GATE_ORDER: tuple[str, ...] = (
+    "GATE_DEADSIDE_MARROW",     # 1 — Path of Shadows entry
+    "GATE_DEADSIDE_WASTELAND",  # 2 — deadside → wasteland
+    "GATE_DEADSIDE_ASYLUM",     # 3 — deadside → asylum
+    "GATE_DEADSIDE_PATH_3",     # 4 — lower la lune path
+    "GATE_DEADSIDE_CAGEWAYS",   # 5 — cageways entry
+    "GATE_DEADSIDE_PLAYROOMS",  # 6 — playrooms entry
+    "GATE_DEADSIDE_PATH_6",     # 7 — le soleil path
+)
+
 # Shuffle Gate Difficulties
 _HARD_LOCKED: frozenset[str] = frozenset({
     "GATE_DEADSIDE_MARROW",
     "GATE_DEADSIDE_WASTELAND",
     "GATE_DEADSIDE_ASYLUM",
-    # "GATE_DEADSIDE_MYSTERY",
-    # "GATE_FOGOMETERS_INTERIOR",
 })
 
 _EASY_LOCKED: frozenset[str] = _HARD_LOCKED | frozenset({
@@ -173,42 +184,42 @@ GATE_PRESETS: dict[str, dict] = {
     "open": {
         "shuffle_gates": False,
         "no_soul_gates": True,
+        "open_gates_n": 0,      # moot — no_soul_gates already opens everything
         "lock_gates": frozenset(),
         "max_sl": None,
         "safe": True,
-        "sl_spread": None,  # unused, no shuffling
     },
     "easy": {
         "shuffle_gates": True,
         "no_soul_gates": False,
+        "open_gates_n": 6,      # first 3 gates open by default on easy
         "lock_gates": _EASY_LOCKED,
         "max_sl": 7,
         "safe": True,
-        "sl_spread": 2,  # stays close to vanilla depth
     },
     "medium": {
         "shuffle_gates": True,
         "no_soul_gates": False,
+        "open_gates_n": 3,
         "lock_gates": _HARD_LOCKED,
         "max_sl": 8,
         "safe": True,
-        "sl_spread": 4,  # default variance
     },
     "hard": {
         "shuffle_gates": True,
         "no_soul_gates": False,
+        "open_gates_n": 1,
         "lock_gates": _HARD_LOCKED,
         "max_sl": None,
         "safe": True,
-        "sl_spread": 4,
     },
     "chaos": {
         "shuffle_gates": True,
         "no_soul_gates": False,
+        "open_gates_n": 0,
         "lock_gates": frozenset(),
         "max_sl": None,
         "safe": False,
-        "sl_spread": 10,  # basically flat — anything goes
     },
 }
 

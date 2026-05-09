@@ -15,7 +15,7 @@ if _PATCHER_FLAG in sys.argv:
     # Force UTF-8 stdout so the patcher can print Unicode (✓, ✅ etc.)
     # without hitting the Windows cp1252 codec limit.
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
     from pathlib import Path
     import runpy
@@ -327,6 +327,7 @@ _HTML = r"""<!DOCTYPE html>
         </span>
       </div>
       <div class="row">
+        <label style="color:var(--muted);font-size:11px;white-space:nowrap">Preset:</label>
         <select id="gatePreset" onchange="updateGateDesc()">
           <option value="none">none</option>
           <option value="open">open</option>
@@ -356,6 +357,23 @@ _HTML = r"""<!DOCTYPE html>
         <span class="tip">
           <span class="tip-icon">?</span>
           <span class="tip-box">Overrides the preset's SL cap. Choose 0–10 to cap the highest gate level; lower values keep gates more accessible. Leave at <b>preset</b> to use the preset's built-in cap.</span>
+        </span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="color:var(--muted);font-size:11px;white-space:nowrap">Open first N gates:</label>
+        <select id="openGatesN" style="width:120px;flex:none">
+          <option value="">preset</option>
+          <option value="0">0 — none</option>
+          <option value="1">1 — Marrow</option>
+          <option value="2">2 — + Wasteland</option>
+          <option value="3">3 — + Asylum</option>
+          <option value="4">4 — + Temple of Fire</option>
+          <option value="5">5 — + Cageways</option>
+          <option value="6">6 — + Playrooms</option>
+        </select>
+        <span class="tip">
+          <span class="tip-icon">?</span>
+          <span class="tip-box">Forces the first N linear coffin gates to SL0, regardless of the gate preset. Gates are opened in sequence: Marrow → Wasteland → Asylum → Temple of Fire → Cageways → Playrooms. Beyond 6, gates are chosen randomly. Overrides the preset default.</span>
         </span>
       </div>
     </div>
@@ -405,10 +423,10 @@ _HTML = r"""<!DOCTYPE html>
       <span class="lbl">Enemy Mode:</span>
       <select id="enemyMode" disabled>
         <option value="difficulty">difficulty &mdash; tier-weighted</option>
-        <option value="full">full &mdash; random by move type</option>
         <option value="contextual">contextual &mdash; area pools</option>
+        <option value="full">full &mdash; random by movement type</option>
       </select>
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><b>difficulty:</b> enemies replaced by others of a similar tier, weighted by area depth.<br><b>full:</b> fully random within the same movement type (ground/flying/etc).<br><b>contextual:</b> shuffled within context groups (deadside/liveside/prison stay separated).</span></span>
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><b>difficulty:</b> enemies replaced by others of a similar tier, weighted by area depth.<br><b>contextual:</b> shuffled within context groups (deadside/liveside/prison stay separated).<br><b>full:</b> fully random within the same movement type (ground/flying/etc).</span></span>
     </div>
     <span class="hint" id="enemyHint" style="margin-left:4px">enable Shuffle Enemies to unlock</span>
   </div>
@@ -460,23 +478,28 @@ _HTML = r"""<!DOCTYPE html>
 
 <script>
 const GATE_DESCS = {
-  none:   'default shuffle',
-  open:   'all gates free, light soul requirements',
-  easy:   'light shuffle, SL7 cap, tight variance',
-  medium: 'standard shuffle, SL8 cap',
-  hard:   'full shuffle, no SL cap',
-  chaos:  'fully unconstrained'
+  none:   'default coffin gates',
+  open:   'all gates free — no souls required',
+  easy:   'light shuffle, SL7 cap, 6 gates open',
+  medium: 'standard shuffle, SL8 cap, 3 gates open',
+  hard:   'full shuffle, no SL cap, 1 gate open',
+  chaos:  'fully unconstrained — anything goes'
 };
 function updateGateDesc() {
   const preset = document.getElementById('gatePreset').value;
   document.getElementById('gateDesc').textContent = GATE_DESCS[preset] || '';
   const maxSlEl = document.getElementById('maxSl');
+  const openGatesEl = document.getElementById('openGatesN');
   if (preset === 'open') {
     maxSlEl.value = '0';
     maxSlEl.disabled = true;
+    openGatesEl.value = '';
+    openGatesEl.disabled = true;
   } else {
     maxSlEl.disabled = false;
     maxSlEl.value = '';
+    openGatesEl.disabled = false;
+    openGatesEl.value = '';
   }
 }
 function onEnemiesChange() {
@@ -505,7 +528,8 @@ function getConfig() {
     shuffleMusic:     document.getElementById('shuffleMusic').checked,
     shuffleVoices:    document.getElementById('shuffleVoices').checked,
     shuffleWeaponsSfx:document.getElementById('shuffleWeaponsSfx').checked,
-    patchTracker:     document.getElementById('patchTracker').checked,
+    patchTracker:        document.getElementById('patchTracker').checked,
+    openGatesN:          document.getElementById('openGatesN').value,
     insanity:         parseInt(document.getElementById('insanity').value),
     shuffleLightSoul: document.getElementById('shuffleLightSoul').checked,
     shuffleKeyItems:  document.getElementById('shuffleKeyItems').checked,
@@ -578,27 +602,12 @@ window.addEventListener('pywebviewready', async () => {
 
 import re as _re
 
-# Lines from patcher.py that are internal debug noise — hidden from the GUI.
-# Errors / failures always show through regardless.
+# Only hide lines that would spoil randomized item placements.
+# Everything else can show — vague progress descriptions are fine.
 _HIDE = [
-    _re.compile(r'^\s+\w[\w\s]+:\s+\d+ souls'),   # per-level item summary
-    _re.compile(r'Soul audit for'),
-    _re.compile(r'\s+0x[0-9A-Fa-f]+:'),            # hex address detail
-    _re.compile(r'Verification:\s+\d+ passed'),
-    _re.compile(r'\[(QUEST|PICKUPS|FX|INSTANCE|RESOURCE|ENEMIES)\]\s'),
-    _re.compile(r'RSC patches:'),
-    _re.compile(r'\d+ RSC patches generated'),
-    _re.compile(r'Patching RSC items'),
-    _re.compile(r'Applying RSC patches'),
-    _re.compile(r'Object map:'),
-    _re.compile(r'Parsing RSC files'),
-    _re.compile(r'Spoiler log written to:'),        # interim line; final "Spoiler log:" kept
-    _re.compile(r'Core data KPF:'),
-    _re.compile(r'Extracted \d+ file'),
-    _re.compile(r'Assumed fill\s*:'),
-    _re.compile(r'Soul thresholds:'),
-    _re.compile(r'-> planned='),
-    _re.compile(r'\[fx\.rsc|instance\.rsc|enemies\.rsc|quest\.rsc|resource\.rsc|pickups\.rsc'),
+    _re.compile(r'Soul audit for'),                # header for item-swap detail block
+    _re.compile(r'-> planned='),                   # explicit old→new item placement spoiler
+    _re.compile(r'removed from pool'),             # reveals starting item before run ends
 ]
 
 _ALWAYS_SHOW = _re.compile(r'error|fail|warn|exception|traceback', _re.IGNORECASE)
@@ -711,6 +720,10 @@ class _Api:
         if max_sl:
             cmd += ["--max-sl", max_sl]
 
+        open_gates_n = config.get("openGatesN", "").strip()
+        if open_gates_n:
+            cmd += ["--open-gates", open_gates_n]
+
         prog = config.get("progBalance", "50")
         if str(prog) != "50":
             cmd += ["--progression-balancing", str(prog)]
@@ -738,6 +751,7 @@ class _Api:
         cmd = self._build_cmd(config, restore=restore)
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUNBUFFERED"] = "1"
 
         try:
             self._process = subprocess.Popen(

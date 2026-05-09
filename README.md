@@ -32,7 +32,8 @@ is beatable.
 ### Logic Guarantees
 - Assumed-fill algorithm guarantees all seeds are beatable before patching
 - Starting item is granted before fill runs, so the algorithm accounts for it during logic
-- Coffin gate shuffle ensures starting gates (Wasteland, Asylum, Path 3) stay at SL≤3
+- Coffin gate shuffle uses a pool-based approach (gates share a pool of SL values drawn from vanilla) so distribution stays bounded — no pile-up at max SL
+- Safe mode enforces per-region SL caps on early gates so the game is always immediately accessible
 - Eclipser lock group prevents circular placement
 - Liveside souls correctly require NIGHT (all three Eclipsers) to collect
 - Full sphere-by-sphere playthrough simulation written to spoiler log
@@ -166,8 +167,9 @@ python patcher.py --restore --game-dir <PATH>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = most gates locked to vanilla, free gates reshuffled with SL7 cap; `medium` = only the three entry gates locked, everything else reshuffled with SL8 cap; `hard` = same locks as medium but no SL cap; `chaos` = no locks, no cap, no safety checks |
-| `--max-sl N` | none | Cap the maximum SL any shuffled gate can receive (1–10) |
+| `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = many gates locked, SL7 cap, 6 gates forced open; `medium` = entry gates locked, SL8 cap, 3 gates forced open; `hard` = entry gates locked, no SL cap, 1 gate forced open; `chaos` = no locks, no cap, no safety |
+| `--max-sl N` | none | Override the preset's SL cap — cap the highest SL any shuffled gate can receive (0–10) |
+| `--open-gates N` | preset | Override the preset's open-gates default — force the first N linear coffin gates to SL0 (order: Marrow → Wasteland → Asylum → Temple of Fire → Cageways → Playrooms; beyond 6 chosen randomly) |
 
 ### Map tracker (Teddy Bear hints)
 
@@ -206,11 +208,15 @@ shadow-man-remastered-randomizer/
 ├── BaseClasses.py                ← Lightweight state/region base classes
 ├── constants.py                  ← File lists, level folders, EXE item type IDs
 ├── kpf_handler.py                ← KPF archive extraction and mod packing
-├── gad_pickup_patch.py           ← EXE patch for gad pickup type_id dispatch
-├── setup_gad_records.py          ← Injects RSC_X_GAD_PICKUP records into temples
-├── enemy_randomizer.py           ← Enemy type shuffle logic
-├── music_randomizer.py           ← Music shuffle logic
-├── sfx_randomizer.py             ← Voice and weapon SFX shuffle logic
+│
+├── patchers/
+│   ├── gad_pickup_patch.py       ← EXE patch for gad pickup type_id dispatch
+│   └── setup_gad_records.py      ← Injects RSC_X_GAD_PICKUP records into temples
+│
+├── randomizers/
+│   ├── enemy_randomizer.py       ← Enemy type shuffle logic
+│   ├── music_randomizer.py       ← Music shuffle logic
+│   └── sfx_randomizer.py         ← Voice and weapon SFX shuffle logic
 │
 ├── data/
 │   ├── locations.csv             ← Source of truth for all item locations + logic
@@ -282,9 +288,7 @@ Coffin gates use a non-linear threshold scale:
 | 9  | 95 |
 | 10 | 120 (locked) |
 
-Gates SL0 (Marrow), SL10 (Mystery), and Fogometers Interior are always locked
-at their vanilla values. All other gates are freely shuffled with the constraint
-that the three starting gates (Wasteland, Asylum, Path 3) never exceed SL3.
+Gate SL values are shuffled using a pool drawn from vanilla SL values (clamped to the preset's max SL cap), so the overall distribution stays close to vanilla — you won't end up with eight gates all at max SL. Safe mode adds per-region caps on early gates so the game is always immediately accessible. The `--open-gates N` option forces the first N linear coffin gates to SL0 regardless of the shuffle result.
 
 ---
 

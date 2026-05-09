@@ -18,9 +18,8 @@ a = Analysis(
         ('kpf_handler.py', '.'),
         ('gad_pickup_patch.py', '.'),
         ('setup_gad_records.py', '.'),
-        ('enemy_randomizer.py', '.'),
-        ('music_randomizer.py', '.'),
-        ('sfx_randomizer.py', '.'),
+        ('randomizers', 'randomizers'),
+        ('patchers', 'patchers'),
     ],
     hiddenimports=[
         'webview.platforms.winforms',

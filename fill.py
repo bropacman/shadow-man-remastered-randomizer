@@ -61,7 +61,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
 from access_rules import R, GATE_VANILLA_SL
-from constants import GATE_PRESETS, ITEM_GATE_IDS
+from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER
 
 # ── Player constant ────────────────────────────────────────────────────────────
 
@@ -249,20 +249,18 @@ def _shuffle_gates(
     locked: frozenset[str] = frozenset(),
     max_sl: int | None = None,
     safe: bool = True,
-    sl_spread: int = 4,
 ) -> dict[str, int]:
     """
     Shuffle SL thresholds across all non-locked gates.
 
     locked:  gates excluded from shuffling — always keep their vanilla SL.
-    max_sl:  if set, clamps the shuffleable SL pool to values <= max_sl.
+    max_sl:  if set, clamps the pool to values <= max_sl.
     safe:    if True, enforces a hierarchy of gate caps before returning:
                1. Gates with fixed souls or named slots: SL <= 9
                2. Starting gates (WASTELAND, ASYLUM, PATH_3): SL <= 3
                3. WASTELAND: SL <= 2  (tighter — needs 7-soul start circuit)
                4. PATH_3: SL <= 5    (Temple of Fire must open mid-game)
-             Caps are enforced in this order so tighter constraints don't
-             get undone by looser ones running after them.
+             Caps are enforced in order so tighter constraints aren't undone.
     """
     starting_gates = {
         "GATE_DEADSIDE_WASTELAND",
@@ -271,18 +269,13 @@ def _shuffle_gates(
     }
 
     shuffleable = [g for g in GATE_VANILLA_SL if g not in locked]
-    sl_pool = []
-    for g in shuffleable:
-        center = GATE_VANILLA_SL[g]
-        hi = max_sl if max_sl is not None else 10
-        candidates = list(range(1, hi + 1))
-        if g in ITEM_GATE_IDS:
-            # Truly random — flat weights
-            sl_pool.append(rng.choice(candidates))
-        else:
-            # World gate — weighted toward vanilla depth
-            weights = [max(1, (sl_spread + 1) - abs(sl - center)) for sl in candidates]
-            sl_pool.append(rng.choices(candidates, weights=weights)[0])
+    hi = max_sl if max_sl is not None else 10
+    # Pool = linearly-spaced values from 1..hi, one per shuffleable gate.
+    # Guarantees a uniform spread — no pile-up at the cap. SL0 is reserved
+    # for open_gates_n; the shuffle itself never produces free gates.
+    n = len(shuffleable)
+    sl_pool = [round(1 + (hi - 1) * i / max(n - 1, 1)) for i in range(n)]
+    rng.shuffle(sl_pool)
     temp_map = dict(zip(shuffleable, sl_pool))
 
     if not safe:
@@ -678,10 +671,10 @@ def assumed_fill(
     gate_remap: dict[str, int] | None = None,
     shuffle_gates: bool = False,
     no_soul_gates: bool = False,
+    open_gates_n: int = 0,
     lock_gates: frozenset[str] = frozenset(),
     max_sl: int | None = None,
     safe: bool = True,
-    sl_spread: int = 4,
     insanity: int = 0,
     shuffle_weapons: bool = True,
     shuffle_lore: bool = True,
@@ -697,7 +690,7 @@ def assumed_fill(
         STARTING_ITEMS.add(starting_item)
 
     if shuffle_gates:
-        gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe, sl_spread=sl_spread)
+        gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe)
     if gate_remap:
         level_rules = build_gate_rules(gate_remap)
     else:
@@ -707,6 +700,15 @@ def assumed_fill(
     if no_soul_gates:
         for g in gate_remap:
             gate_remap[g] = 0
+        level_rules = build_gate_rules(gate_remap)
+
+    if open_gates_n > 0:
+        remainder = [g for g in GATE_VANILLA_SL if g not in COFFIN_GATE_ORDER]
+        rng.shuffle(remainder)
+        ordered = list(COFFIN_GATE_ORDER) + remainder
+        for g in ordered[:open_gates_n]:
+            if g in gate_remap:
+                gate_remap[g] = 0
         level_rules = build_gate_rules(gate_remap)
 
     if verbose:
@@ -1150,7 +1152,6 @@ if __name__ == "__main__":
             lock_gates=p.get("lock_gates", frozenset()),
             max_sl=args.max_sl if args.max_sl is not None else p.get("max_sl"),
             safe=p.get("safe", True),
-            sl_spread=p.get("sl_spread", 4),
             shuffle_gad_temples=args.shuffle_gad_temples,
             starting_item=args.starting_item,
         )

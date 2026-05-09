@@ -685,14 +685,8 @@ def apply_msh_overrides(randomizer_dir, work_path, kpf_index=None) -> dict:
 # ── Debug helpers ─────────────────────────────────────────────────────────────
 
 def audit_govi_patches(filepath: str, patches: dict, records: list) -> None:
-    data = open(filepath, "rb").read()
-    soul_records = [r for r in records if r.name in DARK_SOUL_TYPES]
-    print(f"  Soul audit for {filepath} - {len(soul_records)} soul records:")
-    for rec in soul_records:
-        current = data[rec.offset:rec.offset+32].split(b'\x00')[0].decode('ascii', errors='replace')
-        patch   = patches.get(rec.offset)
-        planned = patch['name'] if patch else "NOT IN PATCH MAP"
-        print(f"    0x{rec.offset:04X}: current={current!r} -> planned={planned!r}")
+    # Debug helper — intentionally silent in normal output to avoid spoiling placements.
+    pass
 
 
 def verify_patch(filepath: str, patches: dict) -> None:
@@ -729,19 +723,19 @@ def run_assumed_fill(rng: random.Random, config: dict,
             "shuffle_gates": p["shuffle_gates"],
             "no_soul_gates": p["no_soul_gates"],
             "lock_gates": p["lock_gates"],
-            "max_sl": config.get("max_sl") if config.get("max_sl") is not None else p["max_sl"],
+            "max_sl":       config.get("max_sl")       if config.get("max_sl")       is not None else p["max_sl"],
+            "open_gates_n": config.get("open_gates_n") if config.get("open_gates_n") is not None else p.get("open_gates_n", 0),
             "safe": p["safe"],
-            "sl_spread": p.get("sl_spread", 4),
         }
-        print(f"  Gate preset  : {gate_preset}")
+        print(f"  Soul gate decree : {gate_preset}")
     else:
         gate_kwargs = {
             "shuffle_gates": config.get("shuffle_soul_gates", False),
             "no_soul_gates": False,
             "lock_gates": frozenset(),
-            "max_sl": None,
+            "max_sl":       None,
+            "open_gates_n": config.get("open_gates_n", 0),
             "safe": True,
-            "sl_spread": 4,
         }
 
     if not shuffle_prog:
@@ -753,17 +747,16 @@ def run_assumed_fill(rng: random.Random, config: dict,
                     locked=gate_kwargs["lock_gates"],
                     max_sl=gate_kwargs["max_sl"],
                     safe=gate_kwargs["safe"],
-                    sl_spread=gate_kwargs["sl_spread"],
                 )
                 changed = sum(1 for g, sl in gate_remap.items()
                               if sl != GATE_VANILLA_SL.get(g))
-                print(f"  Assumed fill : skipped (--no-shuffle-progression)")
-                print(f"  Gate shuffle : {changed} gate(s) changed")
+                print(f"  Progression untouched (--no-shuffle-progression)")
+                print(f"  Soul gate seals: {changed} reforged")
             except ImportError:
                 print("  WARNING: fill.py not found - gate shuffle skipped")
                 gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
         else:
-            print("  Assumed fill : skipped (--no-shuffle-progression)")
+            print("  Progression untouched (--no-shuffle-progression)")
             gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
         return {}, gate_remap
 
@@ -787,16 +780,20 @@ def run_assumed_fill(rng: random.Random, config: dict,
 
     changed = sum(1 for g, sl in gate_remap.items()
                   if sl != GATE_VANILLA_SL.get(g))
-    print(f"  Assumed fill : {len(placement)} RSC placements  "
-          f"[gates: {changed} changed]")
+    print(f"  Relics scattered: {len(placement)} placements  "
+          f"[soul gates: {changed} reforged]")
 
     if gate_preset == "chaos":
         formerly_locked = {"GATE_DEADSIDE_MARROW", "GATE_DEADSIDE_MYSTERY", "GATE_FOGOMETERS_INTERIOR"}
         shuffled_locked = [g for g in formerly_locked
                            if gate_remap.get(g) != GATE_VANILLA_SL.get(g)]
         if shuffled_locked:
-            print(f"  ⚠️  CHAOS: {len(shuffled_locked)} formerly-locked gate(s) shuffled — "
+            print(f"  ⚠️  CHAOS: {len(shuffled_locked)} sealed gate(s) have been broken open — "
                   f"expect unusual progression")
+
+    n = gate_kwargs.get("open_gates_n", 0)
+    if n:
+        print(f"  First {n} gate(s) forced open (SL0)")
 
     return placement, gate_remap
 
@@ -951,6 +948,10 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
     starting_rsc = config.get('starting_item', None)
     starting_friendly = _RSC_TO_FRIENDLY.get(starting_rsc, starting_rsc) if starting_rsc else 'none'
 
+    max_sl     = config.get('max_sl')
+    open_gates = config.get('open_gates_n')
+    insanity   = config.get('insanity', 0)
+
     lines = [
         "=" * 60,
         "SHADOW MAN REMASTERED - RANDOMIZER SPOILER LOG",
@@ -959,14 +960,21 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"Progression balancing: {config.get('progression_balancing', 50)}/100",
         f"Randomize key items: {config.get('shuffle_progression', True)}",
         f"Starting item: {starting_friendly}",
+        f"Insanity tier: {insanity}" if insanity else "Insanity tier: off",
         f"Gate preset: {config.get('gate_preset', 'none')}",
+        f"Max SL override: {max_sl}" if max_sl is not None else "Max SL override: none",
+        f"Open first N gates: {open_gates}" if open_gates is not None else "Open first N gates: preset",
         f"Shuffle gad temples: {config.get('shuffle_gad_temples', False)}",
         f"Shuffle weapons: {config.get('shuffle_weapons', True)}",
         f"Shuffle lore: {config.get('shuffle_lore', True)}",
         f"Shuffle light soul: {config.get('shuffle_bonus', False)}",
         f"Shuffle enemies: {config.get('shuffle_enemies', False)}",
         f"Enemy mode: {config.get('enemy_mode', 'difficulty')}",
+        f"Shuffle true forms: {config.get('shuffle_true_forms', False)}",
         f"Shuffle music: {config.get('shuffle_music', False)}",
+        f"Shuffle voices: {config.get('shuffle_voices', False)}",
+        f"Shuffle weapon SFX: {config.get('shuffle_weapons_sfx', False)}",
+        f"Patch tracker: {config.get('patch_tracker', False)}",
         "",
     ]
 
@@ -976,6 +984,8 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         lines.append("── PLAYTHROUGH ─────────────────────────────────────────────────────")
         lines.append("")
         for s in spheres:
+            if not s["items"] and not s["cadeaux"]:
+                continue
             header = (f"  Sphere {s['sphere']:<2}"
                       f"  [Souls: {s['souls_start']}→{s['souls_end']}, SL{s['sl']}]")
             if s["new_areas"]:
@@ -1030,7 +1040,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    print(f"Spoiler log written to: {output_path}")
+    print(f"Spoiler log: {output_path}")
 
 
 # ── KPF repack ────────────────────────────────────────────────────────────────
@@ -1049,7 +1059,7 @@ def repack_after_patch(game_dir, patches_by_folder, gate_remap, config,
         print("\nNo KPF files found - cannot determine internal paths")
         return
 
-    print("\nBuilding randomizer mod KPF...")
+    print("\nForging the mod KPF — binding the ritual into the world...")
     kpf_index = build_kpf_index(kpf_files)
     mod_files = {}
     for folder in LEVEL_FOLDERS:
@@ -1110,7 +1120,7 @@ def repack_after_patch(game_dir, patches_by_folder, gate_remap, config,
         mod_files.update(extra_mod_files)
 
     if not mod_files:
-        print("  Nothing to pack into mod KPF")
+        print("  Nothing to seal — the KPF stays untouched")
         return
     build_and_install_mod(game_dir, mod_files)
 
@@ -1118,7 +1128,7 @@ def repack_after_patch(game_dir, patches_by_folder, gate_remap, config,
 # ── Validation ────────────────────────────────────────────────────────────────
 
 def validate_final_seed(work_dir: str, progression_placement: dict = None, patches_by_folder: dict = None) -> None:
-    print("\n── Final seed validation ──────────────────────────")
+    print("\n── Run validation ──────────────────────────────────")
     levels_path = Path(work_dir) / "levels"
     error_count = 0
 
@@ -1163,9 +1173,9 @@ def validate_final_seed(work_dir: str, progression_placement: dict = None, patch
             error_count += len(missing)
 
     if error_count == 0:
-        print(f"  ✅ Patch validation passed.")
+        print(f"  ✅ Seed confirmed beatable.")
     else:
-        print(f"  ❌ {error_count} patching error(s) found.")
+        print(f"  ❌ {error_count} validation error(s) — seed may not be beatable. Check output above.")
 
 def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=True):
     from kpf_handler import (find_kpf_files, build_kpf_index,
@@ -1182,28 +1192,28 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     if using_kpf:
         work_path = game_path / f"_randomizer_work_{seed}"
         work_path.mkdir(exist_ok=True)
-        print(f"Shadow Man Remastered Randomizer")
-        print(f"Seed: {seed}  |  Mode: KPF repack  |  Found {len(kpf_files)} KPF archives")
+        print(f"☽  Shadow Man Remastered Randomizer  ☽")
+        print(f"Seed: {seed}  |  The voodoo stirs tonight  |  {len(kpf_files)} archives to reshape")
         print()
-        print("Extracting game files from KPFs...")
+        print("Tearing open the veil between worlds...")
         kpf_index = extract_game_files(kpf_files, str(work_path), LEVEL_FOLDERS)
         # Don't pass game_dir — we always want to extract from vanilla base KPFs,
         # not the previously installed randomizer mod.
         # kpf_index = extract_game_files(kpf_files, str(work_path), LEVEL_FOLDERS, game_dir=str(game_path))
         levels_kpf = which_kpf_has_levels(kpf_index)
-        print(f"  Core data KPF: {levels_kpf}")
+        print(f"  Archive of souls: {levels_kpf}")
         levels_path = work_path / "levels"
     else:
         work_path   = game_path
         levels_path = game_path / "levels"
         kpf_index   = None
-        print(f"Shadow Man Remastered Randomizer")
-        print(f"Seed: {seed}  |  Mode: Direct file edit  |  Game dir: {game_dir}")
+        print(f"☽  Shadow Man Remastered Randomizer  ☽")
+        print(f"Seed: {seed}  |  Marking Deadside directly  |  {game_dir}")
 
     # ── Pre-step: always inject gad records so they appear in parsed data ─────
     from setup_gad_records import inject_record, _find_existing
     if config.get("shuffle_gad_temples", False):
-        print("\nInjecting RSC_X_GAD_PICKUP records...")
+        print("\nPreparing the Gad shrines for their new guardians...")
     for folder, filename, x, y, z, zone in GAD_INJECTION_SITES:
         rsc_path = levels_path / folder / filename
         if rsc_path.exists():
@@ -1252,7 +1262,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         print(f"  WARNING: GAD_PICKUP records missing after injection: {missing}")
 
     # ── Step 1: Parse RSC files ───────────────────────────────────────────────
-    print("Parsing RSC files...")
+    print("Reading the whispers of Deadside...")
     records_by_folder: dict = {}
     for folder in LEVEL_FOLDERS:
         folder_path = levels_path / folder
@@ -1279,7 +1289,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         weps  = sum(1 for r in records if r.category == "weapon")
         prog  = sum(1 for r in records if r.category == "progression")
         lore  = sum(1 for r in records if r.category == "lore")
-        print(f"  {folder:<12}: {souls} souls  {weps} weapons  {prog} keys  {lore} lore"
+        print(f"  {folder:<12}: {souls} dark souls  {weps} weapons  {prog} relics  {lore} codex"
               f"  [{', '.join(files_found)}]")
 
     # Object map CSV
@@ -1297,7 +1307,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             writer = csv.DictWriter(f, fieldnames=object_map[0].keys())
             writer.writeheader()
             writer.writerows(object_map)
-        print(f"Object map: {map_path}")
+        print(f"World manifest: {map_path}")
 
     # ── Resolve random starting item before fill ──────────────────────────────
     if config.get("random_starting_item"):
@@ -1305,7 +1315,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         config["starting_item"] = starting_item_rsc
 
     # ── Step 2: Run assumed fill (includes gate shuffle) ─────────────────────
-    print("\nRunning assumed fill...")
+    print("\nLegion's chaos reshapes the world — scattering the relics...")
     progression_placement, gate_remap = run_assumed_fill(rng, config)
 
     # Compute true form remap now (needs gate_remap) so simulate_playthrough
@@ -1338,7 +1348,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         for g in GATE_VANILLA_SL
     )
     if gates_changed:
-        print("\nWriting soul gate requirements to links.e2o...")
+        print("\nReforging the soul gate seals across Deadside...")
         randomize_gate_sl_links(gate_remap, levels_path=levels_path)
 
         if not (levels_path / "deadside" / "events.rsc").exists() and using_kpf:
@@ -1357,7 +1367,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Step 3b: Suppress gad temple cutscenes ────────────────────────────────
     if config.get("shuffle_gad_temples", False):
-        print("\nSuppressing gad temple cutscene triggers...")
+        print("\nSilencing the old rites of the Gad temples...")
 
         # Ensure cutscene.evt is extracted for each temple level
         if using_kpf:
@@ -1389,13 +1399,13 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                 print(f"  [{folder}] Zeroed cutscene.evt")
 
     # ── Step 4: RSC item patching ─────────────────────────────────────────────
-    print("\nPatching RSC items...")
+    print("\nScattering the relics across Deadside...")
     patches_by_folder, marker_sites = write_placement_patches(
         records_by_folder,
         progression_placement=progression_placement,
         shuffle_gad_temples=config.get("shuffle_gad_temples", False),
     )
-    print(f"  {sum(len(p) for p in patches_by_folder.values())} RSC patches generated")
+    print(f"  {sum(len(p) for p in patches_by_folder.values())} hiding spots claimed")
 
     # ── Step 4b: Starting item patch ─────────────────────────────────────────────
     starting_item_rsc = config.get("starting_item")
@@ -1427,7 +1437,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                     "source_file": "instance.rsc",
                 }
             }, record_templates={starting_item_rsc: template} if template else None)
-            print(f"  Starting item: {starting_item_rsc} placed at swampday church")
+            print(f"  A gift stirs in the Bayou swamp — {starting_item_rsc} awaits Michael's arrival")
         else:
             print(f"  WARNING: swampday/instance.rsc not found — starting item not placed")
 
@@ -1448,7 +1458,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         _levels_hints    = _scripts_dir / "levels_hints.txt"
         _levels_active   = _scripts_dir / "levels.txt"
 
-        print("\nGenerating levels.txt variants...")
+        print("\nWeaving the oracle scrolls...")
         strip_levels_txt(_levels_txt_src, _levels_stripped)
         patch_levels_txt(_levels_txt_src, progression_placement, gate_remap,
                          _levels_hints, true_form_loc_remap=true_form_loc_remap)
@@ -1457,11 +1467,11 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         import shutil as _shutil
         if config.get("patch_tracker", False):
             _shutil.copy2(_levels_hints, _levels_active)
-            print("  [levels_txt] Active: levels_hints.txt (accurate randomized hints)")
+            print("  Oracle mode: hints revealed (levels_hints.txt)")
         else:
             _shutil.copy2(_levels_stripped, _levels_active)
-            print("  [levels_txt] Active: levels_stripped.txt (no hints)")
-        print("  [levels_txt] Swap hint mode: copy levels_hints.txt or levels_stripped.txt "
+            print("  Oracle mode: secrets kept (levels_stripped.txt)")
+        print("  To switch hint mode: copy levels_hints.txt or levels_stripped.txt "
               "over levels.txt and reinstall the KPF")
     else:
         print("\n  [levels_txt] WARNING: levels.txt not found in work dir — tracker not patched")
@@ -1502,7 +1512,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         _leng_hints  = _loc_dir / "loc_english_hints.txt"
         _leng_active = _loc_dir / "loc_english.txt"
 
-        print("\nGenerating loc_english.txt...")
+        print("\nRenaming the relics in the Book of Names...")
         patch_loc_english_for_tracker(
             _leng_base, _leng_hints,
             shuffle_gad_temples=config.get("shuffle_gad_temples", False),
@@ -1512,7 +1522,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         import shutil as _shutil
         if config.get("patch_tracker", False):
             _shutil.copy2(_leng_hints, _leng_active)
-            print("  [loc_english] Active: loc_english_hints.txt")
+            print("  Relic names updated for the tracker (loc_english_hints.txt)")
 
     # ── Step 5: Spoiler log ───────────────────────────────────────────────────
     spoiler_path = out_path / f"spoiler_seed_{seed}.txt"
@@ -1523,7 +1533,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     )
 
     if dry_run:
-        print("\nDry run complete - no files modified")
+        print("\nThe ritual was a vision — no files were changed. Remove --dry-run to commit it.")
         return
 
     # ── Build record templates from parsed data ───────────────────────────────
@@ -1535,7 +1545,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
 
     # ── Step 6: Apply RSC patches ─────────────────────────────────────────────
-    print("\nApplying RSC patches...")
+    print("\nBinding the chaos into the world...")
 
     for folder in LEVEL_FOLDERS:
         folder_path = levels_path / folder
@@ -1559,7 +1569,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Step 6b: Enemy shuffle ────────────────────────────────────────────────
     if config.get("shuffle_enemies", False) or config.get("shuffle_true_forms", False):
-        print("\nShuffling enemies...")
+        print("\nLegion repositions his minions across Deadside...")
 
         tf_patches = tf_patches_early  # computed in Step 2, rng already advanced
 
@@ -1594,9 +1604,9 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     # ── Step 6b.5: Inject special item FX for insanity placements ────────────
     if marker_sites:
         # print("\nSKIPPING Injecting special item FX markers for key items in soul/cadeaux slots...")
-        print("\nInjecting special item FX markers for key items in soul/cadeaux slots...")
+        print("\nMarking the sacred hiding places with voodoo sigils...")
         n_markers = inject_special_item_fx(marker_sites, levels_path)
-        print(f"  {n_markers} {SOUL_SLOT_MARKER_FX} record(s) injected")
+        print(f"  {n_markers} {SOUL_SLOT_MARKER_FX} sigil(s) bound")
 
     # ── Step 6c: Append enemy/true form sections to spoiler log ──────────────
     if enemy_patches or true_form_loc_remap:
@@ -1623,9 +1633,9 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                 shuffle_temples=True,
                 dry_run=dry_run,
             )
-            print(f"\nEXE: patches written to {patched.name}")
+            print(f"\nThe Asylum's code has been rewritten — EXE patched: {patched.name}")
         else:
-            print(f"\nEXE: prison key card fix written to {patched.name}")
+            print(f"\nPrison key card fixed — EXE patched: {patched.name}")
     else:
         print("\nWARNING: thoth_x64.exe not found - EXE patches skipped")
 
@@ -1641,7 +1651,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                 for gate_id in GATE_VANILLA_SL
             },
         }, f, indent=2)
-    print(f"\nSoul thresholds: {threshold_json}")
+    print(f"\nSoul gate manifest sealed: {threshold_json}")
 
     # ── Step 9: ARC deco patch + KPF repack ──────────────────────────────────
     if gates_changed and using_kpf:
@@ -1714,7 +1724,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         )
 
     validate_final_seed(str(work_path), progression_placement, patches_by_folder)
-    print(f"\nDone! Seed {seed} applied.")
+    print(f"\n✨ The ritual is complete. Seed {seed} has been bound to Deadside.")
     print(f"Spoiler log: {spoiler_path}")
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
@@ -1768,6 +1778,8 @@ if __name__ == "__main__":
                         help="Shuffle Shadow Man generic voice lines")
     parser.add_argument("--shuffle-weapons-sfx", action="store_true",
                         help="Shuffle weapon fire/reload sounds within each category")
+    parser.add_argument("--open-gates", type=int, default=None, metavar="N",
+                        help="Force the first N gates (by vanilla SL order) to SL0, overriding the preset default")
     parser.add_argument("--patch-tracker", action="store_true",
                         help="Rewrite levels.txt map badges to reflect randomized item locations "
                              "(default: strip all item badges to avoid incorrect vanilla hints)")
@@ -1778,12 +1790,12 @@ if __name__ == "__main__":
             from kpf_handler import find_mods_dir, remove_mod_kpf
             mods_dir = find_mods_dir(args.game_dir)
             if remove_mod_kpf(mods_dir):
-                print("Vanilla restored — randomizer mod removed.")
+                print("The Mark has faded. Liveside restored to its natural state.")
             else:
-                print("No randomizer mod found — already vanilla.")
+                print("No trace of the ritual found — the world is already untouched.")
         except ImportError:
             print("kpf_handler.py not found")
-        exit(0)
+        sys.exit(0)
 
     config = {
         "progression_balancing": args.progression_balancing,
@@ -1804,6 +1816,7 @@ if __name__ == "__main__":
         "shuffle_voices":        args.shuffle_voices,
         "shuffle_weapons_sfx":   args.shuffle_weapons_sfx,
         "patch_tracker":         args.patch_tracker,
+        "open_gates_n":          args.open_gates,
     }
     if args.config and Path(args.config).exists():
         yaml_data = yaml.safe_load(Path(args.config).read_text())

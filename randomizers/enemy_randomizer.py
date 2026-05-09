@@ -206,8 +206,8 @@ def _print_summary(patches_by_folder: dict, total_shuffled: int,
             type_counter[pd["name"]] += 1
 
     levels_changed = len({folder for folder, _ in patches_by_folder})
-    print(f"  Enemy shuffle [{mode}]: {total_shuffled} slots changed "
-          f"across {levels_changed} levels  ({total_skipped} no-ops)")
+    print(f"  Legion's minions reshuffled [{mode}]: {total_shuffled} creatures displaced "
+          f"across {levels_changed} levels  ({total_skipped} unchanged)")
     if type_counter:
         top = type_counter.most_common(5)
         print(f"  Top placements: "
