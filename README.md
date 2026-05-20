@@ -5,9 +5,9 @@
 </div>
 
 A standalone randomizer for **Shadow Man Remastered** (Nightdive Studios, 2021).
-Randomizes key items, souls, weapons, gad powers, coffin gate thresholds, enemies,
-music, and SFX using a custom assumed-fill algorithm that guarantees every seed
-is beatable.
+Randomizes key items, souls, weapons, gad powers, coffin gate thresholds, entrances,
+enemies, music, and SFX using a custom assumed-fill algorithm that guarantees every
+seed is beatable.
 
 ---
 
@@ -25,9 +25,17 @@ is beatable.
 - **Coffin gate SL requirements** — coffin gate thresholds reshuffled across deadside
   (in-world ARC ring decorations updated to match)
 - **Enemies** — enemy types shuffled with three modes: depth-weighted by tier
-  (default), purely random by movement type, or themed by context group
+  (default), purely random by movement type, or themed by context group; optional
+  cross-movement-type mixing
+- **Ambient creatures** — rats, egrets, flies, butterflies, and friendly fish shuffled
+  across their spawn slots (three modes: global free-for-all, per-movement-type, or
+  per-context-group); purely cosmetic
 - **Music** — track-to-track global shuffle (optional)
-- **SFX** — Shadow Man voice lines and weapon sounds (optional)
+- **Entrances** — hub portals reshuffled so deadside and dark engine spokes connect in a new order (two modes: deadside-only or full cross-hub)
+- **SFX** — Shadow Man voice lines, weapon sounds, and enemy SFX (pain, startle, and
+  attack sets shuffled within their own pools)
+- **Sky textures** — sky layer TGAs shuffled across levels per-filename (horizon swaps
+  with horizon, clouds with clouds, etc.); purely cosmetic
 
 ### Logic Guarantees
 - Assumed-fill algorithm guarantees all seeds are beatable before patching
@@ -47,7 +55,7 @@ is beatable.
 
 ## Requirements
 
-- Python 3.11 or newer
+- Python 3.10 or newer
 - Shadow Man Remastered (Steam or GOG)
 - PyYAML (`pip install -r requirements.txt`)
 
@@ -62,7 +70,7 @@ No Python required — double-click and go.
 
 ### Running from source
 
-**1. Install Python 3.11 or newer** if you don't have it — grab it from [python.org](https://www.python.org/downloads/). During install, check **"Add Python to PATH"**.
+**1. Install Python 3.10 or newer** if you don't have it — grab it from [python.org](https://www.python.org/downloads/). During install, check **"Add Python to PATH"**.
 
 **2. Download the randomizer.** Either:
 - Click **Code → Download ZIP** on the [GitHub page](https://github.com/jonathanmanos/shadow-man-remastered-randomizer), then extract it anywhere, or
@@ -109,6 +117,21 @@ python patcher.py --game-dir <PATH> --shuffle-enemies
 # Themed enemy shuffle (deadside / liveside / prison stay separated)
 python patcher.py --game-dir <PATH> --shuffle-enemies --enemy-mode contextual
 
+# Let ground/flying/swimming enemies mix freely
+python patcher.py --game-dir <PATH> --shuffle-enemies --enemy-mix-movement
+
+# Shuffle ambient creatures (rats, egrets, flies, butterflies, fish)
+python patcher.py --game-dir <PATH> --shuffle-ambients
+
+# Shuffle ambient creatures within movement-type pools (ground/flying/swimming stay separate)
+python patcher.py --game-dir <PATH> --shuffle-ambients --ambient-mode full
+
+# Shuffle enemy pain/startle/attack SFX within each sound-type pool
+python patcher.py --game-dir <PATH> --shuffle-enemies-sfx
+
+# Shuffle sky textures across levels
+python patcher.py --game-dir <PATH> --shuffle-sky
+
 # Light shuffle with SL8 cap
 python patcher.py --game-dir <PATH> --gate-preset easy
 
@@ -124,10 +147,18 @@ python patcher.py --game-dir <PATH> --random-starting-item
 # Enable Teddy Bear map tracker hints
 python patcher.py --game-dir <PATH> --patch-tracker
 
+# Shuffle deadside portals only
+python patcher.py --game-dir <PATH> --entrance-mode deadside_only
+
+# Shuffle all 14 portals (deadside + dark engine) together
+python patcher.py --game-dir <PATH> --entrance-mode cross_hub
+
 # Throw everything in the blender
 python patcher.py --game-dir <PATH> \
-    --shuffle-enemies --shuffle-true-forms \
-    --shuffle-music --shuffle-voices --shuffle-weapons-sfx \
+    --shuffle-enemies --shuffle-true-forms --enemy-mix-movement \
+    --shuffle-ambients --shuffle-sky \
+    --shuffle-music --shuffle-voices --shuffle-weapons-sfx --shuffle-enemies-sfx \
+    --entrance-mode cross_hub --gate-preset easy \
     --patch-tracker
 
 # Restore vanilla
@@ -177,16 +208,27 @@ python patcher.py --restore --game-dir <PATH>
 |------|---------|-------------|
 | `--patch-tracker` | off | Rewrite `levels.txt` map badges to show randomized item locations. Without this flag all item badges are stripped so no incorrect vanilla hints appear. |
 
-### Enemies, music, SFX
+### Entrance randomizer
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--entrance-mode MODE` | `off` | `deadside_only` = shuffles the 9 Deadside hub portals among themselves (Dark Engine soul gates stay vanilla); `cross_hub` = all 14 portals (Deadside + Dark Engine) shuffled together, a Deadside portal may lead to a Dark Engine spoke. Works best with open coffin gate settings and Insanity Tier ≥ 1. |
+
+### Enemies, music, SFX, and cosmetics
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--shuffle-enemies` | off | Randomize enemy types in each level |
 | `--enemy-mode MODE` | `difficulty` | `difficulty` = depth-weighted by tier, `full` = random within movement type, `contextual` = shuffle within context-group pools |
+| `--enemy-mix-movement` | off | Allow enemies to swap across movement-type pools (ground/flying/swimming mix freely) |
 | `--shuffle-true-forms` | off | Shuffle true-form enemy positions with regular enemies |
+| `--shuffle-ambients` | off | Shuffle friendly/ambient creatures (rats, egrets, flies, butterflies, fish) across spawn slots |
+| `--ambient-mode MODE` | `global` | `global` = one free-for-all pool (default), `full` = shuffle within movement type, `contextual` = shuffle within context-group + movement-type pools |
 | `--shuffle-music` | off | Shuffle music tracks globally across all levels |
 | `--shuffle-voices` | off | Shuffle Shadow Man generic voice lines |
 | `--shuffle-weapons-sfx` | off | Shuffle weapon fire/reload sounds within each category |
+| `--shuffle-enemies-sfx` | off | Shuffle enemy SFX within each sound-type pool (pain sets swap with pain sets, startle with startle, attack with attack) |
+| `--shuffle-sky` | off | Shuffle sky textures across levels (per-filename pool — `000sky.tga` swaps with other `000sky.tga` files across levels, etc.) |
 
 Run `python patcher.py --help` for the authoritative list.
 
@@ -198,10 +240,10 @@ Run `python patcher.py --help` for the authoritative list.
 shadow-man-remastered-randomizer/
 │
 ├── patcher.py                    ← Main entry point, orchestrates all steps
-├── gui.py                        ← Tkinter GUI wrapper (runs patcher.py as a subprocess)
+├── gui.py                        ← pywebview GUI wrapper (runs patcher.py as a subprocess)
 ├── Launch Randomizer.bat         ← Double-click to open the GUI (no terminal needed)
 ├── build.bat                     ← Builds a standalone .exe via PyInstaller
-├── fill.py                       ← Assumed-fill placement algorithm + simulation
+├── fill.py                       ← Assumed-fill placement algorithm + simulation (entrance-aware)
 ├── access_rules.py               ← All logic rules (gates, items, soul levels)
 ├── regions.py                    ← Region graph and connections
 ├── locations.py                  ← Location class definitions used by the graph
@@ -214,6 +256,7 @@ shadow-man-remastered-randomizer/
 │   └── setup_gad_records.py      ← Injects RSC_X_GAD_PICKUP records into temples
 │
 ├── randomizers/
+│   ├── entrance_randomizer.py    ← Hub portal shuffle logic (deadside_only / cross_hub)
 │   ├── enemy_randomizer.py       ← Enemy type shuffle logic
 │   ├── music_randomizer.py       ← Music shuffle logic
 │   └── sfx_randomizer.py         ← Voice and weapon SFX shuffle logic
@@ -239,13 +282,14 @@ CSVs and are not tracked in git — run the scripts in `tools/` to (re)create th
 1. **Extract** — pulls quest/instance/fx/resource/enemies RSC files from KPF archives
 2. **Inject** — adds `RSC_X_GAD_PICKUP` records to temple files (if gad shuffle enabled)
 3. **Parse** — reads all RSC records from extracted files
-4. **Fill** — runs assumed-fill to place progression items logically
+4. **Fill** — runs assumed-fill to place progression items logically (entrance-aware variant used when entrance randomizer is enabled)
 5. **Gate shuffle** — writes new SL thresholds to `links.e2o` files
-6. **Patch RSC** — writes new item names to all RSC files
-7. **Patch enemies** — shuffles enemy type names in enemies RSC files (if enabled)
-8. **Patch EXE** — writes prison key card position fix (always) + gad pickup dispatch (if enabled)
-9. **Update decos** — renames ARC coffin gate decorations to match new SL values
-10. **Repack** — packs all modified files into `shadowman_randomizer.kpf`
+6. **Entrance shuffle** — rewrites level exit scripts so hub portals connect to new spokes (if enabled)
+7. **Patch RSC** — writes new item names to all RSC files
+8. **Patch enemies** — shuffles enemy type names in enemies RSC files (if enabled)
+9. **Patch EXE** — writes prison key card position fix (always) + gad pickup dispatch (if enabled)
+10. **Update decos** — renames ARC coffin gate decorations to match new SL values
+11. **Repack** — packs all modified files into `shadowman_randomizer.kpf`
 
 ---
 
@@ -308,11 +352,6 @@ game so you can inspect it. Safe to delete. Re-run the patcher to start clean.
 just delete `mods/shadowman_randomizer.kpf`.
 
 ---
-
-## Known Limitations
-
-- Ambient enemy shuffle (flies, rats, egrets etc.) is catalogued and categorised
-  but disabled pending stability testing
 
 ---
 
