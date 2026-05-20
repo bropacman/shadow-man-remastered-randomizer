@@ -32,7 +32,7 @@ REQUIRED_COLUMNS = {
 
 VALID_CATEGORIES = {
     "barrel", "cadeaux", "soul", "weapon", "actor","other","retractor","accumulator",
-    "progression", "lore", "bonus","enemy","true_form","boss","gad"
+    "progression", "lore", "bonus","enemy","true_form","boss","gad","eclipser"
 }
 
 # sub_region sentinel meaning "no gate — freely accessible in the level"

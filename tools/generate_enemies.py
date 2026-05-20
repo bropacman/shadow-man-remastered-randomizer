@@ -34,7 +34,7 @@ REQUIRED_COLUMNS = {
     "notes", "context_group", "movement_type", "level_region", "sub_region",
 }
 
-VALID_CATEGORIES     = {"enemy", "enemy_locked","ambient","ambient_locked"}
+VALID_CATEGORIES     = {"enemy", "enemy_locked", "ambient", "ambient_locked", "boss", "boss_locked"}
 VALID_SOURCE_FILES   = {"enemies.rsc", "enemys.rsc", "objects.rsc", "resource.rsc", "events.rsc", "instance.rsc", "day.rsc", "night.rsc"}
 VALID_CONTEXT_GROUPS = {"deadside", "deadside_interior", "liveside","liveside_day","liveside_night","liveside_night_interior", "asylum", "any", ""}
 VALID_MOVEMENT_TYPES = {"ground", "flying", "swimming", ""}
@@ -204,6 +204,19 @@ AMBIENT_BY_CONTEXT: dict[tuple[str, str], list[EnemyLocation]] = {}
 for _loc in ENEMY_LOCATIONS:
     if _loc.category == "ambient" and _loc.context_group and _loc.movement_type:
         AMBIENT_BY_CONTEXT.setdefault((_loc.context_group, _loc.movement_type), []).append(_loc)
+
+# All ambient slots in one flat list (global mode — no bucketing)
+AMBIENT_ALL: list[EnemyLocation] = [
+    _loc for _loc in ENEMY_LOCATIONS if _loc.category == "ambient"
+]
+
+# (level_id, object) -> list of boss records
+# Used by boss_randomizer to patch ALL records for a given boss in a level
+# (primary spawn + encounter phases) when shuffling bosses between levels.
+BOSS_BY_LEVEL_RSC: dict[tuple[str, str], list[EnemyLocation]] = {}
+for _loc in ENEMY_LOCATIONS:
+    if _loc.category == "boss":
+        BOSS_BY_LEVEL_RSC.setdefault((_loc.level_id, _loc.object), []).append(_loc)
 '''
 
 
@@ -276,17 +289,33 @@ def main():
     OUT_PATH.write_text(generate(rows), encoding="utf-8")
     print(f"✓ Generated {len(rows)} enemy locations → {OUT_PATH.name}")
 
-    by_cat = Counter(r['category'] for r in rows)
-    by_mt  = Counter(r['movement_type'] for r in rows if r['category'] == 'enemy')
-    by_cg  = Counter(r['context_group'] for r in rows if r['category'] == 'enemy')
+    by_cat     = Counter(r['category'] for r in rows)
+    by_mt      = Counter(r['movement_type'] for r in rows if r['category'] == 'enemy')
+    by_cg      = Counter(r['context_group'] for r in rows if r['category'] == 'enemy')
+    amb_by_mt  = Counter(r['movement_type'] for r in rows if r['category'] == 'ambient')
+    amb_by_cg  = Counter(r['context_group'] for r in rows if r['category'] == 'ambient')
+    boss_by_cg = Counter(r['context_group'] for r in rows if r['category'] == 'boss')
 
-    print(f"\n  enemy={by_cat['enemy']}  enemy_locked={by_cat['enemy_locked']}")
+    print(f"\n  enemy={by_cat['enemy']}  enemy_locked={by_cat['enemy_locked']}"
+          f"  ambient={by_cat['ambient']}  ambient_locked={by_cat['ambient_locked']}"
+          f"  boss={by_cat['boss']}  boss_locked={by_cat['boss_locked']}")
     print("\nShuffleable by movement_type:")
     for mt, n in sorted(by_mt.items()):
         print(f"  {mt or '(empty)':<12} {n}")
     print("\nShuffleable by context_group:")
     for cg, n in sorted(by_cg.items()):
         print(f"  {cg or '(empty)':<25} {n}")
+    if by_cat['ambient']:
+        print("\nAmbient by movement_type:")
+        for mt, n in sorted(amb_by_mt.items()):
+            print(f"  {mt or '(empty)':<12} {n}")
+        print("\nAmbient by context_group:")
+        for cg, n in sorted(amb_by_cg.items()):
+            print(f"  {cg or '(empty)':<25} {n}")
+    if by_cat['boss']:
+        print("\nBoss by context_group:")
+        for cg, n in sorted(boss_by_cg.items()):
+            print(f"  {cg or '(empty)':<25} {n}")
 
 
 if __name__ == "__main__":
