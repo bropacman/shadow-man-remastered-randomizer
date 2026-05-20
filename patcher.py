@@ -25,6 +25,7 @@ Usage:
 
 import sys
 import os
+import re
 import csv
 import json
 import shutil
@@ -35,14 +36,46 @@ import yaml
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from constants import (LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANILLA_SL, GATE_PRESETS,
-                       CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, PROGRESSION_IN_SOUL_LIFT, ITEM_Y_ADJUST,
-                       SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y, DAY_NIGHT_MIRRORS, GAD_PICKUP_EXPECTED_OFFSETS,
-                       STARTING_ITEM_POOL, ASSET_OVERRIDES, MSH_OVERRIDES,
-                       GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES,
-                       GATE_E2O_POSITIONS, E2O_MATCH_RADIUS)
-from randomizers.enemy_randomizer import randomize_enemies, enemy_spoiler_section, randomize_true_forms, true_form_spoiler_section
+from constants import (
+    LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANILLA_SL, GATE_PRESETS,
+    CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, ITEM_Y_ADJUST,
+    SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y, DARK_SOUL_SLOT_MARKER_FX_Y, DAY_NIGHT_MIRRORS, GAD_PICKUP_EXPECTED_OFFSETS,
+    STARTING_ITEM_POOL, ASSET_OVERRIDES, MSH_OVERRIDES, BARREL_SLOT_MARKER_FX, BARREL_SLOT_MARKER_FX_Y,
+    GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES, GAD_ASSET_OVERRIDES,
+    GATE_E2O_POSITIONS, E2O_MATCH_RADIUS, LEVEL_NAMES, BARREL_RSC_SUBSTITUTIONS,
+    PROGRESSION_IN_GOVI_LIFT, DARK_SOUL_SLOT_ITEM_DROP, PROGRESSION_IN_CADEAUX_LIFT, PROGRESSION_IN_BARREL_LIFT,
+)
+from fill import (
+    simulate_playthrough, CHECKABLE_LOCS, FIXED_SOUL_LOCS,
+    apply_true_form_remap, STARTING_ITEMS, assumed_fill, validate_fill, _shuffle_gates,
+)
+import regions as _regions
+from randomizers.enemy_randomizer import (
+    randomize_enemies, enemy_spoiler_section,
+    randomize_true_forms, true_form_spoiler_section,
+)
+# boss_randomizer import intentionally omitted — boss shuffle shelved pending
+# enmevent.evt fight-trigger investigation.  Re-add when ready:
+#   from randomizers.boss_randomizer import (
+#       disable_boss_arenas, randomize_bosses_as_enemies, boss_spoiler_section,
+#   )
+from randomizers.ambient_randomizer import randomize_ambients, ambient_spoiler_section
+from randomizers.entrance_randomizer import (
+    UNIFIED_TRANSITIONS, apply_unified_shuffle, shuffle_unified, unified_spoiler_section,
+)
+from randomizers.music_randomizer import shuffle_music
+from randomizers.sfx_randomizer import shuffle_sfx, sfx_spoiler_section
+from randomizers.sky_randomizer import shuffle_sky, sky_spoiler_section
 from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
+from setup_gad_records import inject_record, _find_existing
+from rsc_utils import inject_rsc_record, build_rsc_record
+from patchers.levels_txt_patcher import patch_levels_txt, strip_levels_txt
+from patchers.loc_english_patcher import patch_loc_english_for_tracker
+from kpf_handler import (
+    find_kpf_files, build_kpf_index, extract_game_files, which_kpf_has_levels,
+    find_file_in_kpf, extract_file_from_kpf, build_and_install_mod,
+    find_mods_dir, remove_mod_kpf,
+)
 
 if getattr(sys, 'frozen', False):
     # If the app is running as a bundle (exe)
@@ -128,34 +161,16 @@ LORE_TYPES       = {"RSC_X_BOOK_OF_SHADOWS", "RSC_X_PROPHECY", "RSC_X_JACKS_SCHE
 PROGRESSION_TYPES = {
     "RSC_X_ENGINEERS_KEY", "RSC_X_RETRACT", "RSC_X_RETRACT1", "RSC_X_RETRACT2",
     "RSC_X_POIGNE", "RSC_X_PATHSOFSHADOW",
-    "RSC_X_ECLIPSER_PART1", "RSC_X_ECLIPSER_PART2", "RSC_X_ECLIPSER_PART3",
     "RSC_X_PRISON_KEY_CARD", "RSC_X_BATON", "RSC_X_FLAMBEAU", "RSC_X_MARTEAU",
     "RSC_X_CALABASH", "RSC_X_ACCUMULATOR", "RSC_X_FLASHLIGHT",
+}
+ECLIPSER_TYPES = {
+    "RSC_X_ECLIPSER_PART1", "RSC_X_ECLIPSER_PART2", "RSC_X_ECLIPSER_PART3",
 }
 
 ABILITY_TYPES = {
     "RSC_X_GAD_PICKUP"
 }
-
-# ── Level registry ────────────────────────────────────────────────────────────
-
-LEVEL_NAMES = {
-    "swampday": "Louisiana Swampland",      "tenement": "New York Tenement",
-    "prison":   "Texas Prison",             "uground":  "London Underground",
-    "florida":  "Florida Summer Camp",      "salvage":  "Mojave Desert Salvage Yard",
-    "swampnit": "Louisiana Swampland (Night)", "ntenemnt": "New York Tenement (Night)",
-    "nprison":  "Texas Prison (Night)",     "nuground": "London Underground (Night)",
-    "nflorida": "Florida Summer Camp (Night)", "nsalvage": "Mojave Desert Salvage Yard (Night)",
-    "deadside": "Deadside Marrow Gates",    "wastland": "Deadside Wasteland",
-    "asylum":   "Asylum Gateway",           "as2exper": "Experimentation Rooms",
-    "as3schis": "Schism Chambers",          "as4dkeng": "Dark Engine",
-    "t1tchgad": "Touch Gad Temple",         "t2wlkgad": "Walk Gad Temple",
-    "t3swmgad": "Swim Gad Temple",          "t4ndgad":  "Unknown Area",
-    "ah1cagew": "Cageways",                 "ah2playr": "Playrooms",
-    "ah3lavad": "Lavaducts",                "ah4fogom": "Fogometers",
-    "asyiggy":  "Asylum (Iggy)",
-}
-
 
 # ── Data structures ───────────────────────────────────────────────────────────
 
@@ -182,6 +197,7 @@ class QuestRecord:
         if self.name in CADEAUX_TYPES:      return "cadeaux"
         if self.name in BARREL_TYPES:       return "cadeaux" if self.has_drop else "barrel"
         if self.name in ABILITY_TYPES:      return "ability"
+        if self.name in ECLIPSER_TYPES:     return "eclipser"
         if self.name in PROGRESSION_TYPES:  return "progression"
         if self.name in WEAPON_TYPES:       return "weapon"
         if self.name in LORE_TYPES:         return "lore"
@@ -237,7 +253,6 @@ def parse_rsc_file(filepath: str, folder: str = "") -> list:
     use_scanning = len(fixed_records) == 0 or body_rsc_count < n_fixed * 0.3
 
     if use_scanning:
-        import re
         seen = set()
         for m in re.finditer(b'RSC_', data):
             name_pos = m.start()
@@ -337,15 +352,17 @@ _GAD_PLATFORM_XZ: dict[str, tuple[float, float]] = {
 _GAD_TRIGGER_RADIUS = 10_000   # game units; known gad triggers are ≤~500 from platform;
                                 # nearest coffin gate is ~6800+ away
 
-GAD_CUTSCENE_EVT_LEVELS = frozenset({"t1tchgad", "t2wlkgad", "t3swmgad"})
 EVT_HEADER_SIZE = 16
 EVT_RECORD_SIZE = 58
 EVT_AABB_OFF = 0x20
 EVT_AABB_SIZE = 24
 
-# Signature at bytes[4:6] that uniquely identifies gad cutscene trigger records.
-# Confirmed across t1tchgad, t2wlkgad, t3swmgad — one record per file.
+# Signature at bytes[4:6] that identifies the gad pickup cutscene record.
+# t2wlkgad and t3swmgad are EXCLUDED: their exit cutscene records share this
+# signature, so zeroing it breaks level exit. The links.e2o proximity-guard
+# zeroing alone is sufficient to suppress the gad pickup event for t2 and t3.
 _GAD_EVT_SIGNATURE = bytes([0xFF, 0xA6])
+GAD_CUTSCENE_EVT_LEVELS = frozenset({"t1tchgad"})
 
 def _zero_gad_cutscene_evt(levels_path: Path, folder: str) -> bool:
     """
@@ -531,7 +548,6 @@ def patch_gate_arc_decos(
     levels_path: Path,
     gate_remap: dict[str, int],
 ) -> int:
-    import re
     if not gate_remap:
         return 0
 
@@ -651,7 +667,6 @@ def apply_msh_overrides(randomizer_dir, work_path, kpf_index=None) -> dict:
     for kpf_path, scale in MSH_OVERRIDES:
         data = None
         if kpf_index:
-            from kpf_handler import find_file_in_kpf, extract_file_from_kpf
             matches = find_file_in_kpf(kpf_index, kpf_path)
             if matches:
                 tmp = Path(work_path) / "msh_overrides" / Path(kpf_path).name
@@ -711,8 +726,7 @@ def verify_patch(filepath: str, patches: dict) -> None:
 
 # ── Assumed fill ──────────────────────────────────────────────────────────────
 
-def run_assumed_fill(rng: random.Random, config: dict,
-                     gate_remap: dict[str, int] | None = None) -> tuple[dict, dict[str, int]]:
+def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None):
     shuffle_prog = config.get("shuffle_progression", True)
     gate_preset  = config.get("gate_preset")
 
@@ -734,14 +748,13 @@ def run_assumed_fill(rng: random.Random, config: dict,
             "no_soul_gates": False,
             "lock_gates": frozenset(),
             "max_sl":       None,
-            "open_gates_n": config.get("open_gates_n", 0),
+            "open_gates_n": config.get("open_gates_n") or 0,
             "safe": True,
         }
 
     if not shuffle_prog:
         if gate_kwargs["shuffle_gates"]:
             try:
-                from fill import _shuffle_gates
                 gate_remap = _shuffle_gates(
                     rng,
                     locked=gate_kwargs["lock_gates"],
@@ -760,16 +773,11 @@ def run_assumed_fill(rng: random.Random, config: dict,
             gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
         return {}, gate_remap
 
-    try:
-        from fill import assumed_fill
-    except ImportError:
-        print("  WARNING: fill.py not found - progression items will not be shuffled")
-        return {}, {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
-
     placement, gate_remap = assumed_fill(
         rng,
         progression_balancing=config.get("progression_balancing", 50),
         shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+        entrance_shuffle=entrance_shuffle,
         insanity=int(config.get("insanity", 0)),
         shuffle_weapons=config.get("shuffle_weapons", True),
         shuffle_lore=config.get("shuffle_lore", True),
@@ -777,6 +785,36 @@ def run_assumed_fill(rng: random.Random, config: dict,
         starting_item=config.get("starting_item"),
         **gate_kwargs,
     )
+
+    MAX_RETRIES = 5
+    for attempt in range(MAX_RETRIES):
+        retry_seed = rng.randint(0, 99_999_999) ^ attempt
+        retry_rng = random.Random(retry_seed)
+        if attempt > 0:
+            print(f"  ⚠️  Seed failed validation — retry {attempt}/{MAX_RETRIES - 1}...")
+            placement, gate_remap = assumed_fill(
+                retry_rng,
+                progression_balancing=config.get("progression_balancing", 50),
+                shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+                entrance_shuffle=entrance_shuffle,
+                insanity=int(config.get("insanity", 0)),
+                shuffle_weapons=config.get("shuffle_weapons", True),
+                shuffle_lore=config.get("shuffle_lore", True),
+                shuffle_bonus=config.get("shuffle_bonus", False),
+                starting_item=config.get("starting_item"),
+                **gate_kwargs,
+            )
+        ok, report = validate_fill(
+            placement,
+            gate_remap=gate_remap,
+            shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+            starting_item=config.get("starting_item"),
+            entrance_shuffle=entrance_shuffle,
+        )
+        if ok:
+            break
+    else:
+        raise RuntimeError(f"Seed failed logic validation after {MAX_RETRIES} attempts:\n{report}")
 
     changed = sum(1 for g, sl in gate_remap.items()
                   if sl != GATE_VANILLA_SL.get(g))
@@ -824,18 +862,27 @@ def write_placement_patches(
             print(f"      {lk}")
 
     def make_patch(rec, new_name, instance_id):
-        new_tall     = new_name in DARK_SOUL_TYPES
-        old_tall     = rec.name in DARK_SOUL_TYPES
-        old_soul_slot = rec.name in DARK_SOUL_TYPES or rec.name in CADEAUX_TYPES
-        new_is_key   = (new_name not in DARK_SOUL_TYPES
-                        and new_name not in CADEAUX_TYPES
-                        and new_name not in BARREL_TYPES)
-        if new_tall and not old_tall:
-            y_adj = GOVI_HEIGHT_BOOST          # govi into non-govi slot → raise
-        elif new_is_key and old_soul_slot:
-            y_adj = PROGRESSION_IN_SOUL_LIFT   # key/weapon/lore into soul or cadeaux slot → raise
-        elif not new_tall and old_tall:
-            y_adj = CADEAU_HEIGHT_DROP         # small soul item replacing a govi → drop
+        new_tall          = new_name in DARK_SOUL_TYPES
+        old_dark_soul_slot = rec.name == "RSC_X_DARK_SOUL"
+        old_govi_slot      = rec.name == "RSC_X_GOVI"
+        old_any_soul_slot  = old_dark_soul_slot or old_govi_slot
+        old_cadeaux_slot   = rec.name in CADEAUX_TYPES
+        old_barrel_slot    = rec.name in BARREL_TYPES
+        new_is_key = (new_name not in DARK_SOUL_TYPES
+                      and new_name not in CADEAUX_TYPES
+                      and new_name not in BARREL_TYPES)
+        if new_tall and not old_any_soul_slot:
+            y_adj = GOVI_HEIGHT_BOOST
+        elif new_is_key and old_dark_soul_slot:
+            y_adj = DARK_SOUL_SLOT_ITEM_DROP
+        elif new_is_key and old_govi_slot:
+            y_adj = PROGRESSION_IN_GOVI_LIFT
+        elif new_is_key and old_cadeaux_slot:
+            y_adj = PROGRESSION_IN_CADEAUX_LIFT
+        elif new_is_key and old_barrel_slot:
+            y_adj = PROGRESSION_IN_BARREL_LIFT
+        elif not new_tall and old_any_soul_slot:
+            y_adj = CADEAU_HEIGHT_DROP
         else:
             y_adj = 0.0
         y_adj += ITEM_Y_ADJUST.get(new_name, 0.0)
@@ -868,13 +915,23 @@ def write_placement_patches(
         if rsc_name == "RSC_X_VIOLATOR":
             rsc_name = "RSC_Q_VIOLATOR"
 
+        # Substitute barrel RSC names whose assets have been replaced with
+        # custom visuals — prevents the marker crate appearing at filler spots.
+        rsc_name = BARREL_RSC_SUBSTITUTIONS.get(rsc_name, rsc_name)
+
         instance_id = source_loc.instance_id
         old_soul_slot = rec.name in DARK_SOUL_TYPES or rec.name in CADEAUX_TYPES
-        new_is_key    = (rsc_name not in DARK_SOUL_TYPES
-                         and rsc_name not in CADEAUX_TYPES
-                         and rsc_name not in BARREL_TYPES)
+        old_barrel_slot = rec.name in BARREL_TYPES
+        new_is_key = (rsc_name not in DARK_SOUL_TYPES
+                      and rsc_name not in CADEAUX_TYPES
+                      and rsc_name not in BARREL_TYPES)
         if new_is_key and old_soul_slot:
-            marker_sites.append((rec.folder, rec.source_file, rec.x, rec.y + SOUL_SLOT_MARKER_FX_Y, rec.z, rec.zone))
+            altar_y_off = DARK_SOUL_SLOT_MARKER_FX_Y if rec.name == "RSC_X_DARK_SOUL" else SOUL_SLOT_MARKER_FX_Y
+            marker_sites.append((rec.folder, rec.source_file, rec.x, rec.y + altar_y_off, rec.z, rec.zone,
+                                 SOUL_SLOT_MARKER_FX))
+        elif new_is_key and old_barrel_slot:
+            marker_sites.append((rec.folder, rec.source_file, rec.x, rec.y + BARREL_SLOT_MARKER_FX_Y, rec.z, rec.zone,
+                                 BARREL_SLOT_MARKER_FX))
         k = (rec.folder, rec.source_file)
         patches_by_folder.setdefault(k, {})[rec.offset] = \
             make_patch(rec, rsc_name, instance_id if instance_id is not None else rec.instance_id)
@@ -898,7 +955,15 @@ def write_placement_patches(
 # ── Special item FX injection ───────────────────────────────────────────────────
 
 def _inject_one_fx_record(rsc_path: Path, rsc_name: str, x: float, y: float, z: float, zone: int) -> bool:
-    from rsc_utils import inject_rsc_record, build_rsc_record, HEADER_SIZE, RECORD_SIZE, NAME_OFF
+    # Only inject directly into quest.rsc — other RSC types (instance.rsc etc.) use
+    # byte 9 as a flags/type field, not a live-window count, so inject_rsc_record's
+    # headroom logic corrupts that byte and crashes the level.
+    if rsc_path.name != "quest.rsc":
+        quest_path = rsc_path.parent / "quest.rsc"
+        if quest_path.exists():
+            return _inject_one_fx_record(quest_path, rsc_name, x, y, z, zone)
+        print(f"  WARNING: marker skipped — no quest.rsc in {rsc_path.parent.name}")
+        return False
 
     raw = rsc_path.read_bytes()
     n_full = (len(raw) - HEADER_SIZE) // RECORD_SIZE
@@ -906,16 +971,9 @@ def _inject_one_fx_record(rsc_path: Path, rsc_name: str, x: float, y: float, z: 
     data = bytearray(raw[:HEADER_SIZE + n_full * RECORD_SIZE])
 
     record = build_rsc_record(rsc_name, x, y, z, zone)
-    allow_expand = rsc_path.name == "quest.rsc"
-
-    slot = inject_rsc_record(data, record, allow_expand=allow_expand)
+    slot = inject_rsc_record(data, record, allow_expand=True)
 
     if slot is None:
-        if rsc_path.name != "quest.rsc":
-            quest_path = rsc_path.parent / "quest.rsc"
-            if quest_path.exists():
-                print(f"  {rsc_path.parent.name}/{rsc_path.name} no space — falling back to quest.rsc")
-                return _inject_one_fx_record(quest_path, rsc_name, x, y, z, zone)
         print(f"  WARNING: no space in {rsc_path.parent.name}/{rsc_path.name} — marker skipped")
         return False
 
@@ -926,25 +984,26 @@ def _inject_one_fx_record(rsc_path: Path, rsc_name: str, x: float, y: float, z: 
 
 def inject_special_item_fx(marker_sites: list, levels_path) -> int:
     total = 0
-    for folder, source_file, x, y, z, zone in marker_sites:
+    for folder, source_file, x, y, z, zone, fx_name in marker_sites:
         rsc_path = Path(levels_path) / folder / source_file
         if not rsc_path.exists():
             print(f"  WARNING: marker skipped — {folder}/{source_file} not found")
             continue
-        if _inject_one_fx_record(rsc_path, SOUL_SLOT_MARKER_FX, x, y, z, zone):
+        if _inject_one_fx_record(rsc_path, fx_name, x, y, z, zone):
             total += 1
         mirror = DAY_NIGHT_MIRRORS.get(folder)
         if mirror:
             mirror_path = Path(levels_path) / mirror / source_file
             if mirror_path.exists():
-                if _inject_one_fx_record(mirror_path, SOUL_SLOT_MARKER_FX, x, y, z, zone):
+                if _inject_one_fx_record(mirror_path, fx_name, x, y, z, zone):
                     total += 1
     return total
 
 # ── Spoiler log ───────────────────────────────────────────────────────────────
 
 def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
-                      records_by_folder, config, spheres=None) -> None:
+                      records_by_folder, config, spheres=None,
+                      entrance_shuffle=None) -> None:
     starting_rsc = config.get('starting_item', None)
     starting_friendly = _RSC_TO_FRIENDLY.get(starting_rsc, starting_rsc) if starting_rsc else 'none'
 
@@ -971,16 +1030,23 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"Shuffle enemies: {config.get('shuffle_enemies', False)}",
         f"Enemy mode: {config.get('enemy_mode', 'difficulty')}",
         f"Shuffle true forms: {config.get('shuffle_true_forms', False)}",
+        f"Shuffle ambients: {config.get('shuffle_ambients', False)}",
+        f"Ambient mode: {config.get('ambient_mode', 'global')}",
         f"Shuffle music: {config.get('shuffle_music', False)}",
         f"Shuffle voices: {config.get('shuffle_voices', False)}",
         f"Shuffle weapon SFX: {config.get('shuffle_weapons_sfx', False)}",
         f"Patch tracker: {config.get('patch_tracker', False)}",
+        f"Entrance mode: {config.get('entrance_mode', 'off')} (deadside + soul gates)",
         "",
     ]
 
     lines += _spoiler_gate_section(gate_remap)
 
+    if entrance_shuffle is not None:
+        lines += ["", unified_spoiler_section(entrance_shuffle)]
+
     if spheres:
+        lines.append("")
         lines.append("── PLAYTHROUGH ─────────────────────────────────────────────────────")
         lines.append("")
         for s in spheres:
@@ -1047,13 +1113,6 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
 
 def repack_after_patch(game_dir, patches_by_folder, gate_remap, config,
                        spoiler_path, work_dir, extra_mod_files=None):
-    try:
-        from kpf_handler import (find_kpf_files, build_kpf_index,
-                                  find_file_in_kpf, build_and_install_mod)
-    except ImportError:
-        print("\nkpf_handler.py not found - skipping mod KPF creation")
-        return
-
     kpf_files = find_kpf_files(game_dir)
     if not kpf_files:
         print("\nNo KPF files found - cannot determine internal paths")
@@ -1178,9 +1237,6 @@ def validate_final_seed(work_dir: str, progression_placement: dict = None, patch
         print(f"  ❌ {error_count} validation error(s) — seed may not be beatable. Check output above.")
 
 def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=True):
-    from kpf_handler import (find_kpf_files, build_kpf_index,
-                              extract_game_files, which_kpf_has_levels)
-
     rng       = random.Random(seed)
     game_path = Path(game_dir)
 
@@ -1211,7 +1267,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         print(f"Seed: {seed}  |  Marking Deadside directly  |  {game_dir}")
 
     # ── Pre-step: always inject gad records so they appear in parsed data ─────
-    from setup_gad_records import inject_record, _find_existing
     if config.get("shuffle_gad_temples", False):
         print("\nPreparing the Gad shrines for their new guardians...")
     for folder, filename, x, y, z, zone in GAD_INJECTION_SITES:
@@ -1232,7 +1287,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Pre-step: inject GAD platform blocker into instance.rsc ─────────────────
     if config.get("shuffle_gad_temples", False):
-        from rsc_utils import build_rsc_record, inject_rsc_record
         _blocker_tag = GAD_BLOCKER_RSC.encode("ascii")
         for _folder, _bx, _by, _bz, _bzone in GAD_BLOCKER_SITES:
             _blocker_path = levels_path / _folder / "instance.rsc"
@@ -1314,9 +1368,20 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         starting_item_rsc = rng.choice(list(STARTING_ITEM_POOL.values()))
         config["starting_item"] = starting_item_rsc
 
+    # ── Step 1b: Build entrance shuffle (needed by fill for correct logic) ────
+    entrance_shuffle = None
+    entrance_mode = config.get("entrance_mode", "off")
+    if entrance_mode and entrance_mode != "off":
+        entrance_rng = random.Random(seed ^ 0xE117)
+        entrance_shuffle = shuffle_unified(
+            entrance_rng,
+            mode=entrance_mode,
+            shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+        )
+
     # ── Step 2: Run assumed fill (includes gate shuffle) ─────────────────────
     print("\nLegion's chaos reshapes the world — scattering the relics...")
-    progression_placement, gate_remap = run_assumed_fill(rng, config)
+    progression_placement, gate_remap = run_assumed_fill(rng, config, entrance_shuffle=entrance_shuffle)
 
     # Compute true form remap now (needs gate_remap) so simulate_playthrough
     # uses correct fixed soul positions for sphere log
@@ -1325,22 +1390,11 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     if config.get("shuffle_true_forms", False):
         tf_patches_early, true_form_loc_remap = randomize_true_forms(rng, gate_remap)
 
-    from fill import (simulate_playthrough, CHECKABLE_LOCS, FIXED_SOUL_LOCS,
-                      build_gate_rules, apply_true_form_remap, STARTING_ITEMS)
-    if config.get("starting_item"):
-        STARTING_ITEMS.add(config["starting_item"])
     active_fixed_soul_locs = apply_true_form_remap(true_form_loc_remap)
-    level_rules = build_gate_rules(gate_remap)
-    _, _, spheres = simulate_playthrough(
-        progression_placement,
-        CHECKABLE_LOCS + active_fixed_soul_locs,
-        level_rules,
-        collect_spheres=True,
-        shuffle_gad_temples=config.get("shuffle_gad_temples", False),
-    )
-
-    if config.get("starting_item"):
-        STARTING_ITEMS.discard(config["starting_item"])
+    # Sphere simulation deferred to after Step 4e so entrance_shuffle is known;
+    # using vanilla level_rules here would let Wasteland open at SL1 even when
+    # the entrance shuffle has placed the Wasteland spoke behind the salvage gate.
+    spheres = None
 
     # ── Step 3: Write gate SL values to links.e2o ────────────────────────────
     gates_changed = any(
@@ -1353,7 +1407,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
         if not (levels_path / "deadside" / "events.rsc").exists() and using_kpf:
             try:
-                from kpf_handler import find_file_in_kpf, extract_file_from_kpf
                 matches = find_file_in_kpf(kpf_index, "levels/deadside/events.rsc")
                 if matches:
                     (levels_path / "deadside").mkdir(parents=True, exist_ok=True)
@@ -1372,7 +1425,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         # Ensure cutscene.evt is extracted for each temple level
         if using_kpf:
             try:
-                from kpf_handler import find_file_in_kpf, extract_file_from_kpf
                 for folder in GAD_TEMPLE_LEVELS:
                     evt_path = levels_path / folder / "cutscene.evt"
                     if not evt_path.exists():
@@ -1450,7 +1502,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     if not _levels_txt_src.exists():
         _levels_txt_src = work_path / "levels" / "levels.txt"
     if _levels_txt_src.exists():
-        from patchers.levels_txt_patcher import patch_levels_txt, strip_levels_txt
         _scripts_dir = work_path / "scripts"
         _scripts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1464,12 +1515,11 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                          _levels_hints, true_form_loc_remap=true_form_loc_remap)
 
         # Copy selected variant to the active file for KPF packing
-        import shutil as _shutil
         if config.get("patch_tracker", False):
-            _shutil.copy2(_levels_hints, _levels_active)
+            shutil.copy2(_levels_hints, _levels_active)
             print("  Oracle mode: hints revealed (levels_hints.txt)")
         else:
-            _shutil.copy2(_levels_stripped, _levels_active)
+            shutil.copy2(_levels_stripped, _levels_active)
             print("  Oracle mode: secrets kept (levels_stripped.txt)")
         print("  To switch hint mode: copy levels_hints.txt or levels_stripped.txt "
               "over levels.txt and reinstall the KPF")
@@ -1491,7 +1541,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     # Extract vanilla from KPF if not yet saved
     if not _leng_vanilla.exists() and using_kpf:
         try:
-            from kpf_handler import find_file_in_kpf, extract_file_from_kpf
             _leng_matches = find_file_in_kpf(kpf_index, "localization/loc_english.txt")
             if _leng_matches:
                 extract_file_from_kpf(
@@ -1508,7 +1557,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     _leng_base = _leng_vanilla  # alias for clarity below
     if _leng_base and _leng_base.exists():
-        from patchers.loc_english_patcher import patch_loc_english_for_tracker
         _leng_hints  = _loc_dir / "loc_english_hints.txt"
         _leng_active = _loc_dir / "loc_english.txt"
 
@@ -1519,10 +1567,88 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         )
 
         # Copy to active file for KPF packing
-        import shutil as _shutil
         if config.get("patch_tracker", False):
-            _shutil.copy2(_leng_hints, _leng_active)
+            shutil.copy2(_leng_hints, _leng_active)
             print("  Relic names updated for the tracker (loc_english_hints.txt)")
+
+    # ── Step 4e: Unified entrance + soul-gate shuffle ─────────────────────────
+    entrance_cut_files = {}
+    if entrance_shuffle is not None:
+        CUT_PREFIX = "cutscene/scripts"
+        scripts_dir = work_path / CUT_PREFIX
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        print(f"\nThe portals between worlds tremble -- entrances reshuffled ({entrance_mode})...")
+
+        if using_kpf:
+            cut_paths_needed = (
+                    [f"{CUT_PREFIX}/{t.portal_folder}/{t.portal_file}"
+                     for t in UNIFIED_TRANSITIONS if t.portal_file is not None]
+                    + [f"{CUT_PREFIX}/{t.spoke_folder}/{t.spoke_exit_file}"
+                       for t in UNIFIED_TRANSITIONS]
+            )
+            for kpf_rel in cut_paths_needed:
+                local = work_path / kpf_rel
+                if local.exists():
+                    local.unlink()
+                matches = find_file_in_kpf(kpf_index, kpf_rel)
+                if matches:
+                    local.parent.mkdir(parents=True, exist_ok=True)
+                    extract_file_from_kpf(
+                        str(Path(kpf_index.kpf_dir) / matches[0][1]),
+                        matches[0][0],
+                        str(local),
+                    )
+                else:
+                    print(f"  WARNING: {kpf_rel} not found in KPF -- entrance patch may be incomplete")
+
+            _rsc_kpf_rel = "levels/as3schis/events.rsc"
+            _rsc_local = levels_path / "as3schis" / "events.rsc"
+            if _rsc_local.exists():
+                _rsc_local.unlink()
+            _rsc_matches = find_file_in_kpf(kpf_index, _rsc_kpf_rel)
+            if _rsc_matches:
+                _rsc_local.parent.mkdir(parents=True, exist_ok=True)
+                extract_file_from_kpf(
+                    str(Path(kpf_index.kpf_dir) / _rsc_matches[0][1]),
+                    _rsc_matches[0][0],
+                    str(_rsc_local),
+                )
+            else:
+                print(f"  WARNING: {_rsc_kpf_rel} not found in KPF -- schism byte patch will fail")
+
+        # Shuffle already built in Step 1b — just apply it to disk
+        apply_unified_shuffle(entrance_shuffle, scripts_dir, verbose=True)
+
+        for _t in UNIFIED_TRANSITIONS:
+            _rels = [f"{CUT_PREFIX}/{_t.spoke_folder}/{_t.spoke_exit_file}"]
+            if _t.portal_file is not None:
+                _rels.append(f"{CUT_PREFIX}/{_t.portal_folder}/{_t.portal_file}")
+            for _rel in _rels:
+                _local = work_path / _rel
+                if _local.exists():
+                    entrance_cut_files[_rel] = str(_local)
+
+        _rsc_local = levels_path / "as3schis" / "events.rsc"
+        if _rsc_local.exists():
+            entrance_cut_files["levels/as3schis/events.rsc"] = str(_rsc_local)
+
+    # ── Step 4f: Sphere simulation (needs entrance_shuffle for correct rules) ──
+    # Build level_rules using entrance-shuffle-aware rules when applicable so
+    # the spoiler-log spheres reflect the actual reachability logic (e.g.
+    # Wasteland locked behind the salvage gate, not vanilla GATE_DEADSIDE_WASTELAND).
+    _sphere_level_rules = _regions.build_level_rules(gate_remap, entrance_shuffle)
+
+    if config.get("starting_item"):
+        STARTING_ITEMS.add(config["starting_item"])
+    _, _, spheres = simulate_playthrough(
+        progression_placement,
+        CHECKABLE_LOCS + active_fixed_soul_locs,
+        _sphere_level_rules,
+        collect_spheres=True,
+        shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+    )
+    if config.get("starting_item"):
+        STARTING_ITEMS.discard(config["starting_item"])
 
     # ── Step 5: Spoiler log ───────────────────────────────────────────────────
     spoiler_path = out_path / f"spoiler_seed_{seed}.txt"
@@ -1530,6 +1656,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         str(spoiler_path), seed, patches_by_folder,
         gate_remap, records_by_folder, config,
         spheres=spheres,
+        entrance_shuffle=entrance_shuffle,
     )
 
     if dry_run:
@@ -1601,20 +1728,58 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     else:
         enemy_patches = {}
 
+    # ── Step 6b.5: Boss shuffle — SHELVED ────────────────────────────────────
+    # Boss shuffle is disabled pending investigation of the enmevent.evt
+    # fight-trigger format across all 5 boss levels.  Code lives in
+    # randomizers/boss_randomizer.py; re-wire here when ready.
+    boss_placement: dict = {}
+
+    # ── Step 6b.6: Ambient creature shuffle ──────────────────────────────────
+    # Shuffles friendly/ambient creatures (rats, egrets, flies, butterflies,
+    # friendly fish) across their slots.  Remove or set shuffle_ambients=False
+    # to disable without touching any other code.
+    ambient_patches: dict = {}
+    if config.get("shuffle_ambients", False):
+        print("\nThe spirits of the wild slip between their haunts...")
+        ambient_patches = randomize_ambients(rng, levels_path, config)
+        for (folder, source_file), patches in sorted(ambient_patches.items()):
+            if not patches:
+                continue
+            rsc_file = levels_path / folder / source_file
+            if not rsc_file.exists():
+                print(f"  WARNING: {folder}/{source_file} not found — ambient patch skipped")
+                continue
+            patch_rsc_file(str(rsc_file), patches, record_templates=record_templates)
+            print(f"  [{source_file.upper().replace('.RSC', '')}] "
+                  f"{folder}/{source_file} ({len(patches)} changes)")
+        patches_by_folder.update(ambient_patches)
+
     # ── Step 6b.5: Inject special item FX for insanity placements ────────────
     if marker_sites:
         # print("\nSKIPPING Injecting special item FX markers for key items in soul/cadeaux slots...")
         print("\nMarking the sacred hiding places with voodoo sigils...")
         n_markers = inject_special_item_fx(marker_sites, levels_path)
-        print(f"  {n_markers} {SOUL_SLOT_MARKER_FX} sigil(s) bound")
+        print(f"  {n_markers} insanity sigil(s) bound")
 
-    # ── Step 6c: Append enemy/true form sections to spoiler log ──────────────
-    if enemy_patches or true_form_loc_remap:
+    # ── Step 6c: Append enemy/true form/boss sections to spoiler log ─────────
+    if enemy_patches or true_form_loc_remap or boss_placement or ambient_patches:
         with open(str(spoiler_path), "a", encoding="utf-8") as f:
             if enemy_patches:
-                f.write("\n" + "\n".join(enemy_spoiler_section(enemy_patches)))
+                header = (
+                    "── ENEMY SHUFFLE ───────────────────────────────────────"
+                    if config.get("shuffle_enemies")
+                    else "── TRUE FORM PATCHES ───────────────────────────────────"
+                )
+                f.write("\n" + "\n".join(enemy_spoiler_section(enemy_patches, header=header)))
             if true_form_loc_remap:
                 f.write("\n" + "\n".join(true_form_spoiler_section(true_form_loc_remap)))
+            if boss_placement:
+                f.write("\n" + "\n".join(boss_spoiler_section(boss_placement)))
+            if ambient_patches:
+                f.write("\n" + "\n".join(ambient_spoiler_section(ambient_patches)))
+
+    # (entrance shuffle section now written inline in write_spoiler_log,
+    #  right after the soul gate block)
 
     # ── Step 7: EXE patches ───────────────────────────────────────────────────────
     exe_src = list(game_path.glob("thoth_x64.exe"))
@@ -1656,7 +1821,6 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     # ── Step 9: ARC deco patch + KPF repack ──────────────────────────────────
     if gates_changed and using_kpf:
         try:
-            from kpf_handler import find_file_in_kpf, extract_file_from_kpf
             for folder in ("deadside", "t1tchgad", "t2wlkgad", "t3swmgad", "wastland"):
                 events_path = levels_path / folder / "events.rsc"
                 if not events_path.exists():
@@ -1679,26 +1843,35 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     # ── Step 9.5: SFX + music shuffle ────────────────────────────────────────
     music_files = {}
     sfx_files = {}
+    sfx_swap_log = {}
+    sky_files = {}
 
     if config.get("shuffle_music", False) and using_kpf:
-        from randomizers.music_randomizer import shuffle_music
         music_files = shuffle_music(rng, kpf_files, str(work_path), dry_run=dry_run)
 
-    if (config.get("shuffle_voices", False) or config.get("shuffle_weapons_sfx", False)) \
-            and using_kpf:
-        from randomizers.sfx_randomizer import shuffle_sfx
-        sfx_files = shuffle_sfx(
+    if (config.get("shuffle_voices", False) or config.get("shuffle_weapons_sfx", False)
+            or config.get("shuffle_enemies_sfx", False)) and using_kpf:
+        sfx_files, sfx_swap_log = shuffle_sfx(
             rng, kpf_files, str(work_path),
             shuffle_voices=config.get("shuffle_voices", False),
             shuffle_weapons=config.get("shuffle_weapons_sfx", False),
+            shuffle_enemies=config.get("shuffle_enemies_sfx", False),
             dry_run=dry_run,
         )
 
     if sfx_files:
-        from randomizers.sfx_randomizer import sfx_spoiler_section
-        sfx_lines = sfx_spoiler_section(sfx_files, str(work_path))
+        sfx_lines = sfx_spoiler_section(sfx_swap_log)
         with open(str(spoiler_path), "a", encoding="utf-8") as f:
             f.write("\n" + "\n".join(sfx_lines))
+
+    sky_files: dict[str, str] = {}
+    if config.get("shuffle_sky", False) and using_kpf:
+        sky_files = shuffle_sky(rng, kpf_files, str(work_path), dry_run=dry_run)
+
+    if sky_files:
+        sky_lines = sky_spoiler_section(sky_files)
+        with open(str(spoiler_path), "a", encoding="utf-8") as f:
+            f.write("\n" + "\n".join(sky_lines))
 
     # ── Step 9.7: Build asset override mod files ──────────────────────────────
     randomizer_dir = Path(__file__).resolve().parent
@@ -1708,10 +1881,19 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         if not src.exists():
             print(f"  WARNING: asset override missing — {src_rel}")
             continue
-        # dst_rel is the in-KPF path — normalize to forward slashes
         internal = dst_rel.replace("\\", "/")
         asset_mod_files[internal] = str(src)
         print(f"  [asset] {src_rel} → {internal}")
+
+    if config.get("shuffle_gad_temples", False):
+        for src_rel, dst_rel in GAD_ASSET_OVERRIDES:
+            src = randomizer_dir / src_rel
+            if not src.exists():
+                print(f"  WARNING: gad asset override missing — {src_rel}")
+                continue
+            internal = dst_rel.replace("\\", "/")
+            asset_mod_files[internal] = str(src)
+            print(f"  [asset/gad] {src_rel} → {internal}")
 
     msh_mod_files = apply_msh_overrides(randomizer_dir, work_path, kpf_index=kpf_index)
 
@@ -1720,7 +1902,10 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         repack_after_patch(
             str(game_path), patches_by_folder, gate_remap,
             config, str(spoiler_path), str(work_path),
-            extra_mod_files={**music_files, **sfx_files, **asset_mod_files, **msh_mod_files},
+            extra_mod_files={
+                **music_files, **sfx_files, **sky_files, **asset_mod_files,
+                **msh_mod_files, **entrance_cut_files,
+            },
         )
 
     validate_final_seed(str(work_path), progression_placement, patches_by_folder)
@@ -1770,31 +1955,55 @@ if __name__ == "__main__":
                         help="difficulty: depth-weighted placement by enemy tier (default). "
                              "full: purely random within movement type. "
                              "contextual: shuffle within context_group pools.")
+    parser.add_argument("--enemy-mix-movement", action="store_true",
+                        help="Allow enemies to swap across movement type pools "
+                             "(ground/flying/etc) during enemy shuffle")
     parser.add_argument("--shuffle-true-forms", action="store_true",
                         help="Shuffle true form enemy positions with regular enemies")
+    parser.add_argument("--shuffle-ambients", action="store_true",
+                        help="Shuffle friendly/ambient creatures (rats, egrets, flies, butterflies, fish) "
+                             "across their spawn slots")
+    parser.add_argument("--ambient-mode",
+                        choices=["global", "full", "contextual"],
+                        default="global",
+                        help="global: one pool, no bucketing (default). "
+                             "full: shuffle within movement_type. "
+                             "contextual: shuffle within context_group + movement_type.")
     parser.add_argument("--shuffle-music", action="store_true",
                         help="Shuffle music tracks globally across all levels")
     parser.add_argument("--shuffle-voices", action="store_true",
                         help="Shuffle Shadow Man generic voice lines")
     parser.add_argument("--shuffle-weapons-sfx", action="store_true",
                         help="Shuffle weapon fire/reload sounds within each category")
+    parser.add_argument("--shuffle-enemies-sfx", action="store_true",
+                        help="Shuffle enemy SFX within each sound-type pool "
+                             "(pain sets swap with pain sets, startle with startle, attack with attack)")
+    parser.add_argument("--shuffle-sky", action="store_true",
+                        help="Shuffle sky textures across levels (per-filename pool — "
+                             "000sky.tga swaps with other 000sky.tga files, etc.)")
     parser.add_argument("--open-gates", type=int, default=None, metavar="N",
                         help="Force the first N gates (by vanilla SL order) to SL0, overriding the preset default")
     parser.add_argument("--patch-tracker", action="store_true",
                         help="Rewrite levels.txt map badges to reflect randomized item locations "
                              "(default: strip all item badges to avoid incorrect vanilla hints)")
+    parser.add_argument("--entrance-mode",
+                        choices=["off", "deadside_only", "cross_hub"],
+                        default="off",
+                        help="Shuffle hub <-> spoke entrances. "
+                             "deadside_only: shuffle the 9 Deadside portals among themselves; "
+                             "Dark Engine soul gates remain vanilla. "
+                             "cross_hub: all 14 portals (Deadside + Dark Engine) shuffled "
+                             "together; a Deadside portal may lead to a Dark Engine spoke. "
+                             "off (default): vanilla entrances.")
+    # --soul-gate-mode removed: soul gates are now included in --entrance-mode pool
     args = parser.parse_args()
 
     if args.restore:
-        try:
-            from kpf_handler import find_mods_dir, remove_mod_kpf
-            mods_dir = find_mods_dir(args.game_dir)
-            if remove_mod_kpf(mods_dir):
-                print("The Mark has faded. Liveside restored to its natural state.")
-            else:
-                print("No trace of the ritual found — the world is already untouched.")
-        except ImportError:
-            print("kpf_handler.py not found")
+        mods_dir = find_mods_dir(args.game_dir)
+        if remove_mod_kpf(mods_dir):
+            print("The Mark has faded. Liveside restored to its natural state.")
+        else:
+            print("No trace of the ritual found — the world is already untouched.")
         sys.exit(0)
 
     config = {
@@ -1811,12 +2020,18 @@ if __name__ == "__main__":
         "insanity":              args.insanity or 0,
         "shuffle_enemies":       args.shuffle_enemies,
         "enemy_mode":            args.enemy_mode,
+        "enemy_mix_movement":    args.enemy_mix_movement,
         "shuffle_true_forms":    args.shuffle_true_forms,
+        "shuffle_ambients":      args.shuffle_ambients,
+        "ambient_mode":          args.ambient_mode,
         "shuffle_music":         args.shuffle_music,
         "shuffle_voices":        args.shuffle_voices,
         "shuffle_weapons_sfx":   args.shuffle_weapons_sfx,
+        "shuffle_enemies_sfx":   args.shuffle_enemies_sfx,
+        "shuffle_sky":           args.shuffle_sky,
         "patch_tracker":         args.patch_tracker,
         "open_gates_n":          args.open_gates,
+        "entrance_mode":         args.entrance_mode,
     }
     if args.config and Path(args.config).exists():
         yaml_data = yaml.safe_load(Path(args.config).read_text())
