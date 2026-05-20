@@ -75,15 +75,26 @@ STARTING_ITEM_POOL: dict[str, str] = {
 # (source relative to randomizer root, dest relative to game dir)
 # Applied unconditionally on every randomizer run.
 ASSET_OVERRIDES: list[tuple[str, str]] = [
-    # (r"data\000pot.dds", r"hdtextures\meshes\items\pot\000pot.dds"),
-    (r"data\019crate.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
-    (r"data\020crate.dds", r"hdtextures\levels\uground\objects\tga\020crate.dds"),
+    (r"assets\smrr_title_logo.png", r"gfx\ShadowMan_logo.png"),
+    # (r"data\pot.dds", r"hdtextures\meshes\items\pot\000pot.dds"),
+    (r"assets\yellow_crate_1.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
+    (r"assets\yellow_crate_2.dds", r"hdtextures\levels\uground\objects\tga\020crate.dds"),
+    # (r"assets\shadow_man_shirt.dds", r"hdtextures\anims\mike\textures\005shirt.dds"),
+]
+
+# Applied only when shuffle_gad_temples is enabled — replaces the Book of
+# Prophecy inventory icon with a Gad-themed one so the item doesn't mislead.
+GAD_ASSET_OVERRIDES: list[tuple[str, str]] = [
+    (r"assets\book_of_gad.png", r"invitems\PROPHECY.PNG"),
+    (r"assets\hd_book_of_gad.png", r"hdtextures\invitems\PROPHECY.PNG"),
+    (r"assets\hd_book_of_gad.tga", r"hdtextures\newitems\tga\085.tga"),
+    (r"assets\book_of_gad.tga", r"newitems\tga\085.tga"),
 ]
 
 # ── MSH overrides ────────────────────────────────────────────────────────────
 # (source msh relative to randomizer root, dest internal KPF path, scale factor)
 MSH_OVERRIDES: list[tuple[str, float]] = [
-    (r"levels/uground/objects/crate.msh", 1.1),
+    (r"levels/uground/objects/crate.msh", 1.0),
 ]
 
 # ── Gate constants ────────────────────────────────────────────────────────────
@@ -389,8 +400,8 @@ DIRECTIVE_INVENTORY_KEY: dict[str, str] = {
     "bookofshadows": "i_book_of_shadows",
     "prophecy":      "i_prophecy",
     "journal":       "i_jacks_journal",
-    # Weapons
     "flashlight":    "i_flashlight",
+    # Weapons
     "mac10":         "i_smg",
     "mp909":         "i_mp909",
     "sawedshotgun":  "i_shotgun2",
@@ -411,9 +422,9 @@ DIRECTIVE_HINT_TIER: dict[str, str] = {
     "engineerskey":  "progression",
     "keycard":       "progression",
     # L'Eclipser pieces
-    "lalune":        "progression",
-    "lesoleil":      "progression",
-    "lalame":        "progression",
+    "lalune":        "eclipser",
+    "lesoleil":      "eclipser",
+    "lalame":        "eclipser",
     # Gad powers
     "touchgad":      "progression",
     "walkgad":       "progression",
@@ -439,7 +450,7 @@ DIRECTIVE_HINT_TIER: dict[str, str] = {
     "mp909":         "weapon",
     "shotgun":       "weapon",
     "sawedshotgun":  "weapon",
-    "flashlight":    "weapon",
+    "flashlight":    "lore",
 }
 
 # ── Item spawn height adjustments ─────────────────────────────────────────────
@@ -448,12 +459,26 @@ TALL_TYPES: set[str] = {"RSC_X_GOVI", "RSC_X_DARK_SOUL"}  # same as DARK_SOUL_TY
 
 GOVI_HEIGHT_BOOST        =  120.0  # lift tall soul objects so they don't clip into the floor
 CADEAU_HEIGHT_DROP       = -120.0  # drop short objects so they don't float replacing a tall one
-PROGRESSION_IN_SOUL_LIFT =  20.0  # raise key/weapon/lore items placed in soul or cadeaux slots
+
+PROGRESSION_IN_GOVI_LIFT    =  30.0  # raise key items placed in RSC_X_GOVI slots
+DARK_SOUL_SLOT_ITEM_DROP    = -120.0  # lower key items placed in RSC_X_DARK_SOUL slots (dark souls float)
+PROGRESSION_IN_CADEAUX_LIFT =  60.0  # raise key items placed in cadeaux slots
+PROGRESSION_IN_BARREL_LIFT  =  60.0  # raise key items placed in barrel/crate slots
 
 # RSC name spawned next to key items placed into soul/cadeaux slots (insanity mode).
 # No level prefix → globally registered asset, renders across all level types.
-SOUL_SLOT_MARKER_FX   = "RSC_X_WEAPON_ALTAR"
-SOUL_SLOT_MARKER_FX_Y = -120.0   # Y offset from slot's native position
+SOUL_SLOT_MARKER_FX        = "RSC_X_WEAPON_ALTAR"
+SOUL_SLOT_MARKER_FX_Y      = -120.0   # Y offset for RSC_X_GOVI and cadeaux slots
+DARK_SOUL_SLOT_MARKER_FX_Y = -240.0   # Y offset for RSC_X_DARK_SOUL slots (120 lower — brings altar to ground)
+BARREL_SLOT_MARKER_FX   = "RSC_UN_CRATES"
+BARREL_SLOT_MARKER_FX_Y = 0.0
+
+# RSC names to substitute during filler patching — used when an asset has been
+# replaced with a custom visual (e.g. marker crate) and the vanilla name should
+# not appear at filler locations as a result.
+BARREL_RSC_SUBSTITUTIONS: dict[str, str] = {
+    "RSC_UN_CRATES": "RSC_X_BARREL_D",   # altered asset → plain barrel
+}
 
 # Day/night mirror pairs — same physical space, different level folders.
 # When a marker is injected for one side, it must also be injected into the other
@@ -641,4 +666,249 @@ WEAPON_SOUND_SETS: dict[str, list[list[str]]] = {
     "fire":  WEAPON_FIRE_SETS,
     "empty": WEAPON_EMPTY_SETS,
     "wet":   WEAPON_WET_SETS,
+}
+
+
+# ── Enemy SFX pools ──────────────────────────────────────────────────────────
+#
+# Each inner list = one enemy's sounds for that sound type, shuffled as a unit.
+# Sets tile to fill larger slots when sizes differ (same as weapon pools).
+# Excluded: death-by-weapon sounds (dethsgun/dethvdoo/dethbull — weapon
+#   feedback), ambient creatures (canary, dfly, egret, flies, rat), mechanical
+#   enemies (grinder, helicop, mgsentry), speech/voice lines, movement sounds.
+
+_B = "audio/sfx/baddys"
+
+ENEMY_PAIN_SETS: list[list[str]] = [
+    # amarx (5)
+    [f"{_B}/amarx/pain1.wav", f"{_B}/amarx/pain2.wav", f"{_B}/amarx/pain3.wav",
+     f"{_B}/amarx/pain4.wav", f"{_B}/amarx/pain5.wav"],
+    # batty (4)
+    [f"{_B}/batty/pain1.wav", f"{_B}/batty/pain2.wav",
+     f"{_B}/batty/pain3.wav", f"{_B}/batty/pain4.wav"],
+    # biceph (3) — bipain prefix
+    [f"{_B}/biceph/bipain1.wav", f"{_B}/biceph/bipain2.wav", f"{_B}/biceph/bipain3.wav"],
+    # deadfem (3)
+    [f"{_B}/deadfem/pain1.wav", f"{_B}/deadfem/pain2.wav", f"{_B}/deadfem/pain3.wav"],
+    # deadmale (3) — dspain prefix
+    [f"{_B}/deadmale/dspain1.wav", f"{_B}/deadmale/dspain2.wav", f"{_B}/deadmale/dspain3.wav"],
+    # deadwing (4)
+    [f"{_B}/deadwing/pain1.wav", f"{_B}/deadwing/pain2.wav",
+     f"{_B}/deadwing/pain3.wav", f"{_B}/deadwing/pain4.wav"],
+    # duppie (4)
+    [f"{_B}/duppie/pain1.wav", f"{_B}/duppie/pain2.wav",
+     f"{_B}/duppie/pain3.wav", f"{_B}/duppie/pain4.wav"],
+    # gimpdog (4)
+    [f"{_B}/gimpdog/pain1.wav", f"{_B}/gimpdog/pain2.wav",
+     f"{_B}/gimpdog/pain3.wav", f"{_B}/gimpdog/pain4.wav"],
+    # jack (4)
+    [f"{_B}/jack/pain1.wav", f"{_B}/jack/pain2.wav",
+     f"{_B}/jack/pain3.wav", f"{_B}/jack/pain4.wav"],
+    # legion (3)
+    [f"{_B}/legion/pain1.wav", f"{_B}/legion/pain2.wav", f"{_B}/legion/pain3.wav"],
+    # marco (5)
+    [f"{_B}/marco/pain1.wav", f"{_B}/marco/pain2.wav", f"{_B}/marco/pain3.wav",
+     f"{_B}/marco/pain4.wav", f"{_B}/marco/pain5.wav"],
+    # matriach (3)
+    [f"{_B}/matriach/pain1.wav", f"{_B}/matriach/pain2.wav", f"{_B}/matriach/pain3.wav"],
+    # seraph (12)
+    [f"{_B}/seraph/pain000.wav", f"{_B}/seraph/pain001.wav", f"{_B}/seraph/pain002.wav",
+     f"{_B}/seraph/pain003.wav", f"{_B}/seraph/pain004.wav", f"{_B}/seraph/pain005.wav",
+     f"{_B}/seraph/pain006.wav", f"{_B}/seraph/pain007.wav", f"{_B}/seraph/pain008.wav",
+     f"{_B}/seraph/pain009.wav", f"{_B}/seraph/pain010.wav", f"{_B}/seraph/pain011.wav"],
+    # surgeon (6)
+    [f"{_B}/surgeon/pain1.wav", f"{_B}/surgeon/pain2.wav", f"{_B}/surgeon/pain3.wav",
+     f"{_B}/surgeon/pain4.wav", f"{_B}/surgeon/pain5.wav", f"{_B}/surgeon/pain6.wav"],
+    # tflegion (2)
+    [f"{_B}/tflegion/pain1.wav", f"{_B}/tflegion/pain2.wav"],
+    # trueform (4)
+    [f"{_B}/trueform/pain1.wav", f"{_B}/trueform/pain2.wav",
+     f"{_B}/trueform/pain3.wav", f"{_B}/trueform/pain4.wav"],
+    # yort (8)
+    [f"{_B}/yort/pain000.wav", f"{_B}/yort/pain001.wav", f"{_B}/yort/pain002.wav",
+     f"{_B}/yort/pain003.wav", f"{_B}/yort/pain004.wav", f"{_B}/yort/pain005.wav",
+     f"{_B}/yort/pain006.wav", f"{_B}/yort/pain007.wav"],
+]
+
+# Startle / alert sounds — enemy reacts to spotting the player.
+# Most are a single file; inmate has two. Sets tile as usual.
+ENEMY_STARTLE_SETS: list[list[str]] = [
+    [f"{_B}/batty/stikhit000.wav", f"{_B}/batty/stikhit001.wav",
+     f"{_B}/batty/stikhit002.wav", f"{_B}/batty/stikhit003.wav",
+     f"{_B}/batty/stikhit004.wav", f"{_B}/batty/stikhit005.wav"],
+    [f"{_B}/biceph/startle.wav"],
+    [f"{_B}/brutal/startle.wav"],
+    [f"{_B}/deadwing/startle.wav"],
+    [f"{_B}/deadworm/startle.wav"],
+    [f"{_B}/dog/startle.wav"],
+    [f"{_B}/dupdog/startle.wav"],
+    [f"{_B}/duppie/startle.wav"],
+    [f"{_B}/gimpdog/startle.wav"],
+    [f"{_B}/inmate/startle.wav", f"{_B}/inmate/startle2.wav"],
+    [f"{_B}/seraph/startle000.wav"],
+    [f"{_B}/surgeon/startle.wav"],
+    [f"{_B}/tenementzombie/startle.wav"],
+]
+
+# Attack sounds — enemies with generic attack1/attack2/… naming.
+# Unique-mechanic attacks (hook swing, leg swipe, crocbite, etc.) are left
+# in place since they're tied to specific enemy movement systems.
+ENEMY_ATTACK_SETS: list[list[str]] = [
+    # batty (3)
+    [f"{_B}/batty/attack1.wav", f"{_B}/batty/attack2.wav", f"{_B}/batty/attack3.wav"],
+    # deadfem (2)
+    [f"{_B}/deadfem/attack1.wav", f"{_B}/deadfem/attack2.wav"],
+    # duppie (4)
+    [f"{_B}/duppie/attack1.wav", f"{_B}/duppie/attack2.wav",
+     f"{_B}/duppie/attack3.wav", f"{_B}/duppie/attack4.wav"],
+    # hookman (3)
+    [f"{_B}/hookman/attack1.wav", f"{_B}/hookman/attack2.wav", f"{_B}/hookman/attack3.wav"],
+    # seraph (5)
+    [f"{_B}/seraph/attack000.wav", f"{_B}/seraph/attack001.wav", f"{_B}/seraph/attack002.wav",
+     f"{_B}/seraph/attack003.wav", f"{_B}/seraph/attack004.wav"],
+    # trueform (2)
+    [f"{_B}/trueform/attack1.wav", f"{_B}/trueform/attack2.wav"],
+    # yort (1)
+    [f"{_B}/yort/attack000.wav"],
+]
+
+# Ambient / stationary sounds — growls, groans, idle loops, breath.
+# All merged into one pool so any stationary sound can end up on any enemy.
+ENEMY_AMBIENT_SETS: list[list[str]] = [
+    # dog — growl + grrs
+    [f"{_B}/dog/growl.wav", f"{_B}/dog/grr1.wav", f"{_B}/dog/grr2.wav"],
+    # dupdog — same sound palette as dog
+    [f"{_B}/dupdog/growl.wav", f"{_B}/dupdog/grr1.wav", f"{_B}/dupdog/grr2.wav"],
+    # gimpdog
+    [f"{_B}/gimpdog/growl.wav", f"{_B}/gimpdog/gruff.wav"],
+    # trueform — growls
+    [f"{_B}/trueform/growl.wav", f"{_B}/trueform/growl2.wav"],
+    # deadmale — idle groans ("grown" spelling in filenames)
+    [f"{_B}/deadmale/dsgrown.wav", f"{_B}/deadmale/dsgrown2.wav"],
+    # tenementzombie — groans
+    [f"{_B}/tenementzombie/groan000.wav", f"{_B}/tenementzombie/groan001.wav",
+     f"{_B}/tenementzombie/groan002.wav", f"{_B}/tenementzombie/groan003.wav"],
+    # tflegion — groans
+    [f"{_B}/tflegion/groan.wav", f"{_B}/tflegion/groan2.wav"],
+    # trueform — agroans (separate set from growls above)
+    [f"{_B}/trueform/agroan.wav", f"{_B}/trueform/agroan2.wav"],
+    # deadworm — idle
+    [f"{_B}/deadworm/idle.wav"],
+    # tenementzombie — idle
+    [f"{_B}/tenementzombie/idle.wav"],
+    # gator — breath
+    [f"{_B}/gator/breath.wav"],
+    # legion — breath
+    [f"{_B}/legion/breath.wav"],
+]
+
+# Speech lines — all bosses and named enemies included together.
+# Scripted numbered lines (Jack/Bat/Marco/marx) are boss encounter VO,
+# seraph's named lines are boss taunts — all in the same pot.
+ENEMY_SPEECH_SETS: list[list[str]] = [
+    # amarx — numbered lines (013–021)
+    [f"{_B}/amarx/marx013.wav", f"{_B}/amarx/marx014.wav", f"{_B}/amarx/marx015.wav",
+     f"{_B}/amarx/marx016.wav", f"{_B}/amarx/marx017.wav", f"{_B}/amarx/marx018.wav",
+     f"{_B}/amarx/marx019.wav", f"{_B}/amarx/marx020.wav", f"{_B}/amarx/marx021.wav"],
+    # batty — numbered lines (037–041)
+    [f"{_B}/batty/Bat037.wav", f"{_B}/batty/Bat038.wav", f"{_B}/batty/Bat039.wav",
+     f"{_B}/batty/Bat040.wav", f"{_B}/batty/Bat041.wav"],
+    # duppie (6 non-sequential)
+    [f"{_B}/duppie/speech2.wav", f"{_B}/duppie/speech3.wav", f"{_B}/duppie/speech4.wav",
+     f"{_B}/duppie/speech6.wav", f"{_B}/duppie/speech7.wav", f"{_B}/duppie/speech9.wav"],
+    # jack — numbered lines (014–026)
+    [f"{_B}/jack/Jack014.wav", f"{_B}/jack/Jack015.wav", f"{_B}/jack/Jack016.wav",
+     f"{_B}/jack/Jack017.wav", f"{_B}/jack/Jack018.wav", f"{_B}/jack/Jack019.wav",
+     f"{_B}/jack/Jack020.wav", f"{_B}/jack/jack021.wav", f"{_B}/jack/Jack022.wav",
+     f"{_B}/jack/Jack023.wav", f"{_B}/jack/Jack024.wav", f"{_B}/jack/Jack025.wav",
+     f"{_B}/jack/Jack026.wav"],
+    # marco — numbered lines (013–020)
+    [f"{_B}/marco/Marco013.wav", f"{_B}/marco/Marco014.wav", f"{_B}/marco/Marco015.wav",
+     f"{_B}/marco/Marco016.wav", f"{_B}/marco/Marco017.wav", f"{_B}/marco/Marco018.wav",
+     f"{_B}/marco/Marco019.wav", f"{_B}/marco/Marco020.wav"],
+    # matriach (3)
+    [f"{_B}/matriach/speech.wav", f"{_B}/matriach/speech2.wav", f"{_B}/matriach/speech3.wav"],
+    # milton (7)
+    [f"{_B}/milton/speech1.wav", f"{_B}/milton/speech2.wav", f"{_B}/milton/speech3.wav",
+     f"{_B}/milton/speech4.wav", f"{_B}/milton/speech5.wav", f"{_B}/milton/speech6.wav",
+     f"{_B}/milton/speech7.wav"],
+    # seraph — named taunts grouped as one set
+    [f"{_B}/seraph/lord_of_fools000.wav",   f"{_B}/seraph/lord_of_fools001.wav",
+     f"{_B}/seraph/lord_of_fools002.wav",   f"{_B}/seraph/lord_of_fools003.wav",
+     f"{_B}/seraph/lord_of_fools004.wav",
+     f"{_B}/seraph/lord_of_nothing000.wav", f"{_B}/seraph/lord_of_nothing001.wav",
+     f"{_B}/seraph/lord_of_nothing002.wav", f"{_B}/seraph/lord_of_nothing003.wav",
+     f"{_B}/seraph/lord_of_nothing004.wav",
+     f"{_B}/seraph/seeker_of_death000.wav", f"{_B}/seraph/seeker_of_death001.wav",
+     f"{_B}/seraph/seeker_of_death002.wav", f"{_B}/seraph/seeker_of_death003.wav",
+     f"{_B}/seraph/seeker_of_death004.wav",
+     f"{_B}/seraph/shadow_born000.wav",     f"{_B}/seraph/shadow_born001.wav",
+     f"{_B}/seraph/shadow_born002.wav",     f"{_B}/seraph/shadow_born003.wav",
+     f"{_B}/seraph/shadowman000.wav",       f"{_B}/seraph/shadowman001.wav",
+     f"{_B}/seraph/shadowman002.wav",       f"{_B}/seraph/shadowman003.wav",
+     f"{_B}/seraph/shadowman004.wav",       f"{_B}/seraph/shadowman005.wav",
+     f"{_B}/seraph/shadowman006.wav",
+     f"{_B}/seraph/you_will_die000.wav",    f"{_B}/seraph/you_will_die001.wav",
+     f"{_B}/seraph/you_will_die002.wav",    f"{_B}/seraph/you_will_die003.wav",
+     f"{_B}/seraph/you_will_die004.wav",
+     f"{_B}/seraph/embrace_death000.wav",   f"{_B}/seraph/embrace_death001.wav",
+     f"{_B}/seraph/embrace_death002.wav",   f"{_B}/seraph/embrace_death003.wav",
+     f"{_B}/seraph/empty_vessel000.wav",    f"{_B}/seraph/empty_vessel001.wav",
+     f"{_B}/seraph/empty_vessel002.wav",    f"{_B}/seraph/empty_vessel003.wav",
+     f"{_B}/seraph/empty_vessel004.wav"],
+    # surgeon (9)
+    [f"{_B}/surgeon/speech0.wav", f"{_B}/surgeon/speech1.wav", f"{_B}/surgeon/speech2.wav",
+     f"{_B}/surgeon/speech3.wav", f"{_B}/surgeon/speech4.wav", f"{_B}/surgeon/speech5.wav",
+     f"{_B}/surgeon/speech6.wav", f"{_B}/surgeon/speech7.wav", f"{_B}/surgeon/speech8.wav"],
+    # yort (1)
+    [f"{_B}/yort/speech000.wav"],
+]
+
+# All enemy pools — iterated by shuffle_sfx
+ENEMY_SOUND_SETS: dict[str, list[list[str]]] = {
+    "pain":    ENEMY_PAIN_SETS,
+    "startle": ENEMY_STARTLE_SETS,
+    "attack":  ENEMY_ATTACK_SETS,
+    "ambient": ENEMY_AMBIENT_SETS,
+    "speech":  ENEMY_SPEECH_SETS,
+}
+
+del _B  # cleanup module namespace
+
+# ── Level folder → human-readable name ───────────────────────────────────────
+
+LEVEL_NAMES: dict[str, str] = {
+    # Liveside (day)
+    "swampday":  "Louisiana Swampland",
+    "tenement":  "New York Tenement",
+    "prison":    "Texas Prison",
+    "uground":   "London Underground",
+    "florida":   "Florida Summer Camp",
+    "salvage":   "Mojave Desert Salvage Yard",
+    # Liveside (night)
+    "swampnit":  "Louisiana Swampland (Night)",
+    "ntenemnt":  "New York Tenement (Night)",
+    "nprison":   "Texas Prison (Night)",
+    "nuground":  "London Underground (Night)",
+    "nflorida":  "Florida Summer Camp (Night)",
+    "nsalvage":  "Mojave Desert Salvage Yard (Night)",
+    # Deadside hub & spokes
+    "deadside":  "Deadside Marrow Gates",
+    "wastland":  "Deadside Wasteland",
+    "asylum":    "Asylum Gateway",
+    # Asylum interior
+    "as2exper":  "Experimentation Rooms",
+    "as3schis":  "Schism Chambers",
+    "as4dkeng":  "Dark Engine",
+    "asyiggy":   "Asylum (Iggy)",
+    # Asylum hubs
+    "ah1cagew":  "Cageways",
+    "ah2playr":  "Playrooms",
+    "ah3lavad":  "Lavaducts",
+    "ah4fogom":  "Fogometers",
+    # Gad Temples
+    "t1tchgad":  "Touch Gad Temple",
+    "t2wlkgad":  "Walk Gad Temple",
+    "t3swmgad":  "Swim Gad Temple",
+    "t4ndgad":   "Unknown Area",
 }
