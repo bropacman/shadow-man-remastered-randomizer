@@ -20,6 +20,7 @@ a = Analysis(
         ('setup_gad_records.py', '.'),
         ('randomizers', 'randomizers'),
         ('patchers', 'patchers'),
+        ('assets', 'assets'),
     ],
     hiddenimports=[
         'webview.platforms.winforms',
