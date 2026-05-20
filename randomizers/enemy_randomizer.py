@@ -47,6 +47,10 @@ import random
 from pathlib import Path
 from collections import defaultdict
 
+# Movement types to keep isolated even when enemy_mix_movement is enabled.
+# To re-isolate swimming enemies, add "swimming" to this set.
+_MIXED_MOVEMENT_EXCLUDE: frozenset[str] = frozenset()
+
 
 
 def randomize_enemies(
@@ -65,7 +69,8 @@ def randomize_enemies(
         SLOTS_BY_CONTEXT, SLOTS_BY_MOVEMENT,
         AMBIENT_BY_CONTEXT, AMBIENT_BY_MOVEMENT,
     )
-    mode = config.get("enemy_mode", "difficulty")
+    mode         = config.get("enemy_mode", "difficulty")
+    mix_movement = config.get("enemy_mix_movement", False)
     patches_by_folder: dict[tuple[str, str], dict[int, dict]] = {}
     total_shuffled = 0
     total_skipped  = 0
@@ -102,14 +107,27 @@ def randomize_enemies(
             total_shuffled += 1
 
     if mode in ("full", "difficulty"):
-        for movement, slots in sorted(SLOTS_BY_MOVEMENT.items()):
+        if mix_movement:
+            # Combine all slots into one pool, keeping _MIXED_MOVEMENT_EXCLUDE types isolated.
+            all_slots  = [s for mv_slots in SLOTS_BY_MOVEMENT.values() for s in mv_slots]
+            to_mix     = [s for s in all_slots if s.movement_type not in _MIXED_MOVEMENT_EXCLUDE]
+            to_isolate: dict[str, list] = defaultdict(list)
+            for s in all_slots:
+                if s.movement_type in _MIXED_MOVEMENT_EXCLUDE:
+                    to_isolate[s.movement_type].append(s)
+            # Mixed group uses "_any_" as the movement key; isolated groups use their own type.
+            slot_groups = [("_any_", to_mix)] + [(mt, sl) for mt, sl in sorted(to_isolate.items())]
+        else:
+            slot_groups = list(sorted(SLOTS_BY_MOVEMENT.items()))
+
+        for movement, slots in slot_groups:
             if mode == "full":
                 names = [r.object for r in slots]
                 rng.shuffle(names)
                 _apply(slots, names)
             else:
-                # Build (movement, tier) name pools
-                diff_buckets = _build_difficulty_buckets(slots, gate_remap)
+                # Build (movement_key, tier) name pools — movement_key is "_any_" when mixing.
+                diff_buckets = _build_difficulty_buckets(slots, gate_remap, movement_key=movement)
                 # Shuffle each pool so draws are random within tier
                 for pool in diff_buckets.values():
                     rng.shuffle(pool)
@@ -153,10 +171,28 @@ def randomize_enemies(
 
                 _apply(slots, names)
     else:  # contextual
-        for (group, movement), slots in sorted(SLOTS_BY_CONTEXT.items()):
-            names = [r.object for r in slots]
-            rng.shuffle(names)
-            _apply(slots, names)
+        if mix_movement:
+            # Group by context_group only; movement types not in _MIXED_MOVEMENT_EXCLUDE pool freely.
+            by_group: dict[str, list] = defaultdict(list)
+            isolated_ctx: dict[tuple[str, str], list] = {}
+            for (group, movement), slots in SLOTS_BY_CONTEXT.items():
+                if movement in _MIXED_MOVEMENT_EXCLUDE:
+                    isolated_ctx[(group, movement)] = slots
+                else:
+                    by_group[group].extend(slots)
+            for group, slots in sorted(by_group.items()):
+                names = [r.object for r in slots]
+                rng.shuffle(names)
+                _apply(slots, names)
+            for (group, movement), slots in sorted(isolated_ctx.items()):
+                names = [r.object for r in slots]
+                rng.shuffle(names)
+                _apply(slots, names)
+        else:
+            for (group, movement), slots in sorted(SLOTS_BY_CONTEXT.items()):
+                names = [r.object for r in slots]
+                rng.shuffle(names)
+                _apply(slots, names)
 
 
     _print_summary(patches_by_folder, total_shuffled, total_skipped, mode)
@@ -165,6 +201,7 @@ def randomize_enemies(
 
 def enemy_spoiler_section(
     patches_by_folder: dict[tuple[str, str], dict[int, dict]],
+    header: str = "── ENEMY SHUFFLE ───────────────────────────────────────",
 ) -> list[str]:
     from extracted_enemy_locations import ENEMY_TABLE
 
@@ -289,15 +326,19 @@ _TIER_WEIGHTS: dict[int, list[int]] = {
 def _build_difficulty_buckets(
     slots: list,
     gate_remap: dict[str, int] | None,
+    movement_key: str | None = None,
 ) -> dict[tuple[str, int], list[str]]:
     """
-    Returns {(movement_type, tier): [rsc_name, ...]} pool to draw from.
+    Returns {(movement_key, tier): [rsc_name, ...]} pool to draw from.
+    movement_key overrides rec.movement_type — pass "_any_" when mixing movement types
+    so that the bucket key matches what the caller looks up.
     """
     from constants import ENEMY_DIFFICULTY, ENEMY_DIFFICULTY_DEFAULT
     buckets: dict[tuple[str, int], list[str]] = defaultdict(list)
     for rec in slots:
+        mt   = movement_key if movement_key is not None else rec.movement_type
         tier = ENEMY_DIFFICULTY.get(rec.object, ENEMY_DIFFICULTY_DEFAULT)
-        key  = (rec.movement_type, tier)
+        key  = (mt, tier)
         buckets[key].append(rec.object)
     return buckets
 
@@ -352,6 +393,22 @@ def randomize_true_forms(
                 rng.shuffle(shuffled)
                 attempts += 1
 
+            # Ensure no true form is a fixed point (maps back to its own slot).
+            # A random permutation of a large bucket gives each TF a ~1/n chance
+            # of staying in place; resolve those with targeted swaps.
+            tf_idx_set = {i for i, rec in enumerate(bucket)
+                          if rec.loc_key in true_form_keys}
+            for tf_idx in sorted(tf_idx_set):
+                if shuffled[tf_idx] == tf_idx:
+                    # Prefer a swap target whose current destination isn't tf_idx
+                    # (avoids creating a new fixed point at the swap partner).
+                    candidates = [j for j in range(len(bucket))
+                                  if j != tf_idx and shuffled[j] != tf_idx]
+                    if not candidates:          # degenerate: fall back to any other position
+                        candidates = [j for j in range(len(bucket)) if j != tf_idx]
+                    swap_with = rng.choice(candidates)
+                    shuffled[tf_idx], shuffled[swap_with] = shuffled[swap_with], shuffled[tf_idx]
+
         for src_idx, dst_idx in enumerate(shuffled):
             src = bucket[src_idx]
             dst = bucket[dst_idx]
@@ -361,17 +418,18 @@ def randomize_true_forms(
                     loc_key_remap[src.loc_key] = dst.loc_key
                 continue
 
+            # ← ADD THIS: skip swaps that don't involve a true form at all
+            if src.loc_key not in true_form_keys and dst.loc_key not in true_form_keys:
+                continue
+
             key = (dst.level_id, dst.source_file)
-            # For true forms: carry the source soul ID into the destination slot
-            # so the game tracks the correct dark soul (36, 38, etc.).
-            # For regular enemies: preserve the destination's instance_id.
             reward = src.instance_id if src.loc_key in true_form_keys and src.instance_id else \
-                     (dst.instance_id if dst.instance_id else 0)
+                (dst.instance_id if dst.instance_id else 0)
             patches_by_folder.setdefault(key, {})[dst.offset] = {
-                "name":        src.object,
-                "reward":      reward,
-                "logic":       int(dst.zone) if dst.zone else 0,
-                "y_adjust":    0.0,
+                "name": src.object,
+                "reward": reward,
+                "logic": int(dst.zone) if dst.zone else 0,
+                "y_adjust": 0.0,
                 "source_file": dst.source_file,
             }
 
