@@ -127,70 +127,15 @@ def _night(state: CollectionState, player: int) -> bool:
         and state.has(_ECLIPSER_3, player)
     )
 
+def _gate_sl_only(gate_id: str, state, player: int) -> bool:
+    """Check only the soul threshold for a gate — no dependency chain.
+    Used by entrance shuffle logic where portals bypass physical Deadside traversal."""
+    sl = _current_gate_sl.get(gate_id, GATE_VANILLA_SL.get(gate_id, 0))
+    return _soul_level(state, player, sl)
 
 # ── Rule namespace ────────────────────────────────────────────────────────────
 
 class _Rules:
-
-    # -- Region Access ---------------------------------------------------------
-
-    def region_access(self, state, player, region_name: str) -> bool:
-        """
-        The master router for region reachability.
-        Used by fill.py to bridge the gap between the map and the rules.
-        """
-        # 1. Handle starting zones
-        if region_name in ["Menu", "Louisiana Swampland", "Deadside Marrow Gates"]:
-            return True
-
-        # 2. Handle the "Engine Block" Portals
-        if "Engine Block" in region_name:
-            return self.engine_section_logic(state, player, region_name)
-
-        # 3. Handle Liveside Level Entry (Retractor check)
-        liveside_levels = [
-            "Down Street Station, London", "Gardelle County Jail, Texas",
-            "Salvage Yard, Mojave Desert", "Mordant Street, Queens, NY",
-            "Summer Camp, Florida"
-        ]
-        if region_name in liveside_levels:
-            return self.can_reach_liveside(state, player, region_name)
-
-        # 4. Handle standard Deadside Coffin Gates
-        # We assume REGION_GATES is imported or accessible here
-        from .fill import REGION_GATES
-        gate_id = REGION_GATES.get(region_name)
-        if gate_id:
-            return self.gate(gate_id, state, player)
-
-        return True
-
-    def engine_section_logic(self, state, player, region_name: str) -> bool:
-        """
-        Logic for transitioning from a Liveside level into its isolated Engine Section.
-        """
-        if not self.night(state, player):
-            return False
-
-        if "London" in region_name:
-            return state.can_reach("Down Street Station, London", "Region", player)
-
-        if "Florida" in region_name:
-            return state.can_reach("Summer Camp, Florida", "Region", player)
-
-        if "Prison" in region_name:
-            return self.prison_key_card(state, player) and \
-                state.can_reach("Gardelle County Jail, Texas", "Region", player)
-
-        if "Queens" in region_name:
-            return self.poigne(state, player) and \
-                state.can_reach("Mordant Street, Queens, NY", "Region", player)
-
-        if "Salvage" in region_name:
-            return self.gad3_swim(state, player) and \
-                state.can_reach("Salvage Yard, Mojave Desert", "Region", player)
-
-        return False
 
     # ── Gate access ───────────────────────────────────────────────────────────
 
@@ -254,10 +199,12 @@ class _Rules:
         return state.count(_GAD_PICKUP, player) >= 1
 
     def gad2_walk(self, state, player) -> bool:
-        return state.count(_GAD_PICKUP, player) >= 2
+        # GAD2 requires GAD1 first (powers acquired in order)
+        return self.gad1_hand(state, player) and state.count(_GAD_PICKUP, player) >= 2
 
     def gad3_swim(self, state, player) -> bool:
-        return state.count(_GAD_PICKUP, player) >= 3
+        # GAD3 requires GAD1 + GAD2 first (powers acquired in order)
+        return self.gad2_walk(state, player) and state.count(_GAD_PICKUP, player) >= 3
 
     # ── Key items ─────────────────────────────────────────────────────────────
 
@@ -283,50 +230,36 @@ class _Rules:
 
     # ── Liveside level entry ────────────────────────────────────────────
 
-
-
     def can_reach_liveside(self, state, player, current_region) -> bool:
-
-        liveside_regions = [
-            "Down Street Station, London",
-            "Gardelle County Jail, Texas",
-            "Salvage Yard, Mojave Desert",
-            "Mordant Street, Queens, NY",
-            "Summer Camp, Florida"
-        ]
-
-        others_reached = sum(
-            1 for r in liveside_regions
-            if r != current_region and state.can_reach(r, "Region", player))
-        return state.count("_retractors", player) > others_reached
+        return state.count("_retractors", player) >= 5
 
     # ── Liveside level completions ────────────────────────────────────────────
 
     def florida(self, state: CollectionState, player: int) -> bool:
-        return _night(state, player) and state.count("_retractors", player) >= 1
+        return _night(state, player) and state.count("_retractors", player) >= 5
 
     def london(self, state: CollectionState, player: int) -> bool:
-        return _night(state, player) and state.count("_retractors", player) >= 1
+        return _night(state, player) and state.count("_retractors", player) >= 5
 
     def queens(self, state: CollectionState, player: int) -> bool:
         return (
-            _night(state, player)
-            and state.has(_POIGNE, player)
-            and state.count("_retractors", player) >= 1
+                _night(state, player)
+                and state.has(_POIGNE, player)
+                and state.count("_retractors", player) >= 5
         )
 
     def prison(self, state: CollectionState, player: int) -> bool:
         return (
-            _night(state, player)
-            and state.has(_PRISON_KEY_CARD, player)
-            and state.count("_retractors", player) >= 1
+                _night(state, player)
+                and state.has(_PRISON_KEY_CARD, player)
+                and state.count("_retractors", player) >= 5
         )
 
     def salvage(self, state: CollectionState, player: int) -> bool:
         return (
-            _night(state, player)
-            and self.gad3_swim(state, player)
-            and state.count("_retractors", player) >= 1
+                _night(state, player)
+                and self.gad3_swim(state, player)
+                and state.count("_retractors", player) >= 5
         )
 
     def pistons(self, state, player) -> bool:
@@ -380,3 +313,56 @@ class _Rules:
 
 # ── Singleton ─────────────────────────────────────────────────────────────────
 R = _Rules()
+
+
+# ── Entrance randomization support ───────────────────────────────────────────
+# Defined after R so completion-rule lambdas can close over it.
+
+# Which coffin gate in the Marrow Gates hub physically guards each portal?
+# Fixed game geography — does not change with entrance randomization.
+DEADSIDE_PORTAL_GATE: dict[str, str | list] = {
+    "LE_Wast.cut": "GATE_DEADSIDE_MARROW",
+    "LE_Asy1.cut": "GATE_DEADSIDE_WASTELAND",
+    "LE_Gad1.cut": "GATE_DEADSIDE_PATH_3",
+    "LE_Cage.cut": "GATE_DEADSIDE_PATH_3",
+    "LE_Play.cut": "GATE_DEADSIDE_CAGEWAYS",
+    "LE_Lava.cut": _LOWER_DEADSIDE_ROUTES,
+    "LE_Fog.cut":  _LOWER_DEADSIDE_ROUTES,
+    "LE_Gad2.cut": _LOWER_DEADSIDE_ROUTES,
+    "LE_Gad3.cut": _LOWER_DEADSIDE_ROUTES,
+}
+
+# Spoke folder → the primary region connected directly from Deadside Marrow Gates.
+# Sub-regions (Cathedral, Engine Block, etc.) cascade from here via
+# their own internal connections and are handled in regions.build_level_rules.
+SPOKE_FOLDER_TO_PRIMARY_REGION: dict[str, str] = {
+    "wastland":  "Deadside - Wasteland",
+    "asylum":    "Asylum: Gateways",
+    "ah1cagew":  "Asylum: Cageways",
+    "ah2playr":  "Asylum: Playrooms",
+    "ah3lavad":  "Asylum: Lavaducts",
+    "ah4fogom":  "Asylum: The Fogometers",
+    "t1tchgad":  "Temple of Fire (Toucher)",
+    "t2wlkgad":  "Temple of Prophecy (Marcher)",
+    "t3swmgad":  "Temple of Blood (Nager)",
+}
+
+# DKE spoke_arrival tag → Engine Block sub-region name.
+DKE_ARRIVAL_TO_REGION: dict[str, str] = {
+    "ASYS4_ARIVE_TMENT": "Asylum: Engine Block - Queens",
+    "ASYS4_ARIVE_PRISN": "Asylum: Engine Block - Prison",
+    "ASYS4_ARIVE_UGRND": "Asylum: Engine Block - London",
+    "ASYS4_ARIVE_FLORI": "Asylum: Engine Block - Florida",
+    "ASYS4_ARIVE_MOJAV": "Asylum: Engine Block - Salvage",
+}
+
+# Can the player complete a liveside level and use its soul gate?
+# Becomes the access rule for a Deadside spoke when a soul gate leads there
+# in cross_hub mode. Uses R.{level}() which already encodes Night + items.
+LIVESIDE_COMPLETION_RULES: dict[str, callable] = {
+    "tenement": lambda state, player: R.queens(state, player),
+    "prison":   lambda state, player: R.prison(state, player),
+    "uground":  lambda state, player: R.london(state, player),
+    "florida":  lambda state, player: R.florida(state, player),
+    "salvage":  lambda state, player: R.salvage(state, player),
+}

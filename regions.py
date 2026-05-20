@@ -11,11 +11,11 @@ Structure:
      └─→ GATE_DEADSIDE_ASYLUM       Asylum: Gateways
      └─→ GATE_DEADSIDE_ASYLUM       Asylum: Cathedral of Pain
      └─→ GATE_DEADSIDE_ASYLUM       Asylum: Experimentation Rooms
-     └─→ SL2+R                      Down Street Station, London
-     └─→ SL2+R                      Gardelle County Jail, Texas
-     └─→ SL2+R                      Salvage Yard, Mojave Desert
-     └─→ SL2+R                      Mordant Street, Queens, NY
-     └─→ SL2+R                      Summer Camp, Florida
+     └─→ 5x Retractor               Down Street Station, London
+     └─→ 5x Retractor               Gardelle County Jail, Texas
+     └─→ 5x Retractor               Salvage Yard, Mojave Desert
+     └─→ 5x Retractor               Mordant Street, Queens, NY
+     └─→ 5x Retractor               Summer Camp, Florida
      └─→ GATE_DEADSIDE_PATH_3       Temple of Fire (Toucher)
      └─→ GATE_DEADSIDE_CAGEWAYS     Asylum: Cageways
      └─→ GATE_DEADSIDE_CAGEWAYS     Asylum: Engine Block
@@ -25,9 +25,8 @@ Structure:
      └─→ GATE_DEADSIDE_BLOOD        Temple of Blood (Nager)
      └─→ GATE_FOGOMETERS_INTERIOR   Asylum: The Fogometers
 
-Liveside levels (London, Prison, Salvage, Queens, Florida) are gated by SL2
-and Retractor. Their SL2 requirement is EXE-hardcoded and is NOT affected by
-gate shuffling — it uses vanilla R.sl2() directly.
+# Liveside levels require all 5 retractors — the game gates entry on having
+# collected one retractor per level already visited.
 
 All deadside/temple region gates resolve through R.gate(gate_id, ...) which
 looks up the current shuffled SL requirement from access_rules._current_gate_sl.
@@ -36,13 +35,13 @@ looks up the current shuffled SL requirement from access_rules._current_gate_sl.
 from __future__ import annotations
 
 from BaseClasses import Region, MultiWorld, LocationProgressType
-from access_rules import R
 from extracted_locations import (
     RAW_LOCATIONS,
     FREE_LOCATIONS,
     GATED_LOCATIONS,
     GATES_BY_REGION,
 )
+from access_rules import R, set_gate_remap, R as _R, _gate_sl_only
 from locations import ShadowManLocation   # AP Location subclass — defined in locations.py
 
 
@@ -259,11 +258,167 @@ def create_regions(multiworld: MultiWorld, player: int) -> None:
             rule=completion_rule
         )
 
-
-
-
-
     # ── 4. Populate locations ────────────────────────────────────────────────
     level_names = [n for n in ALL_REGIONS if n != MENU]
     for name in level_names:
         _build_sub_regions(regions[name], name, multiworld, player)
+
+
+# ── Standalone level rules ────────────────────────────────────────────────────
+
+def build_level_rules(
+    gate_remap: dict[str, int] | None = None,
+    entrance_shuffle=None,  # UnifiedShuffle | None
+) -> dict[str, callable]:
+    """
+    Build a {region_name: callable(state) -> bool} dict for the standalone
+    simulator in fill.py.
+
+    Vanilla (entrance_shuffle=None):
+        Mirrors the connections in create_regions exactly — same gates, same
+        parent-AND-entrance composition.
+
+    Entrance shuffle:
+        Spoke-level connections are replaced by the shuffle mapping.
+        All internal sub-region logic (Cathedral, liveside, engine block)
+        is identical to vanilla and composed the same way.
+    """
+    set_gate_remap(gate_remap or {})
+
+    rules: dict[str, callable] = {}
+
+    # Always reachable
+    rules[MENU]                  = lambda state: True
+    rules[LOUISIANA_SWAMPLAND]   = lambda state: True
+    rules[DEADSIDE_MARROW_GATES] = lambda state: True
+
+    if entrance_shuffle is None:
+        # ── Vanilla spoke connections — mirrors create_regions connections list
+        _spoke_connections: list[tuple[str, callable]] = [
+            (DEADSIDE_WASTELAND, lambda state: _R.gate("GATE_DEADSIDE_WASTELAND", state, 1)),
+            (ASYLUM_GATEWAYS,    lambda state: _R.gate("GATE_DEADSIDE_ASYLUM",    state, 1)),
+            (TEMPLE_FIRE,        lambda state: _R.gate("GATE_DEADSIDE_PATH_3",    state, 1)),
+            (ASYLUM_CAGEWAYS,    lambda state: _R.gate("GATE_DEADSIDE_CAGEWAYS",  state, 1)),
+            (ASYLUM_PLAYROOMS,   lambda state: _R.gate("GATE_DEADSIDE_PLAYROOMS", state, 1)),
+            (ASYLUM_LAVADUCTS,   lambda state: _R.gate("GATE_DEADSIDE_LAVADUCTS", state, 1)),
+            (TEMPLE_BLOOD,       lambda state: _R.gate("GATE_DEADSIDE_BLOOD",     state, 1)),
+            (ASYLUM_FOGOMETERS,  lambda state: _R.gate("GATE_DEADSIDE_FOGOMETERS",state, 1)),
+            (TEMPLE_PROPHECY,    lambda state: (
+                _R.gate("GATE_DEADSIDE_PATH_7", state, 1) or (
+                    _R.gate("GATE_DEADSIDE_CAGEWAYS",  state, 1) and
+                    _R.gate("GATE_DEADSIDE_PLAYROOMS", state, 1) and
+                    _R.gate("GATE_DEADSIDE_PATH_6",    state, 1)
+                )
+            )),
+        ]
+        for region, rule in _spoke_connections:
+            rules[region] = rule
+
+    else:
+        # ── Entrance-shuffled spoke connections
+        from access_rules import (
+            DEADSIDE_PORTAL_GATE, SPOKE_FOLDER_TO_PRIMARY_REGION,
+            DKE_ARRIVAL_TO_REGION, LIVESIDE_COMPLETION_RULES,
+            _LOWER_DEADSIDE_ROUTES,
+        )
+        from randomizers.entrance_randomizer import _TRANSITION_BY_PORTAL_ID
+
+        def _make_routes_rule(routes: list) -> callable:
+            def rule(state) -> bool:
+                def _token(t: str) -> bool:
+                    if t.startswith("GATE_"): return _gate_sl_only(t, state, 1)
+                    if t == "BATON":          return _R.baton(state, 1)
+                    if t == "GAD2_WALK":      return _R.gad2_walk(state, 1)
+                    return False
+                return any(all(_token(t) for t in route) for route in routes)
+            return rule
+
+        for portal_id, dest_id in entrance_shuffle.outbound.items():
+            portal_folder, portal_file = portal_id
+            dest = _TRANSITION_BY_PORTAL_ID[dest_id]
+
+            # Portal-side rule
+            if portal_folder == "deadside":
+                gate = DEADSIDE_PORTAL_GATE[portal_file]
+                if isinstance(gate, str):
+                    gid = gate
+                    portal_rule = lambda state, g=gid: _gate_sl_only(g, state, 1)
+                else:
+                    portal_rule = _make_routes_rule(gate)
+            else:
+                completion = LIVESIDE_COMPLETION_RULES[portal_folder]
+                portal_rule = lambda state, c=completion: c(state, 1)
+
+            # Destination region
+            if dest.spoke_folder == "as4dkeng":
+                region = DKE_ARRIVAL_TO_REGION.get(dest.spoke_arrival)
+                if region is None:
+                    raise ValueError(
+                        f"build_level_rules: no region for DKE arrival "
+                        f"{dest.spoke_arrival!r} — add to DKE_ARRIVAL_TO_REGION"
+                    )
+            else:
+                region = SPOKE_FOLDER_TO_PRIMARY_REGION.get(dest.spoke_folder)
+                if region is None:
+                    raise ValueError(
+                        f"build_level_rules: no region for spoke folder "
+                        f"{dest.spoke_folder!r} — add to SPOKE_FOLDER_TO_PRIMARY_REGION"
+                    )
+
+            rules[region] = portal_rule
+
+        # Assertion: every expected spoke region got a rule
+        expected = (
+            set(SPOKE_FOLDER_TO_PRIMARY_REGION.values()) |
+            set(DKE_ARRIVAL_TO_REGION.values())
+        )
+        missing = expected - set(rules.keys())
+        assert not missing, f"build_level_rules: regions with no rule assigned: {missing}"
+
+    # ── Internal sub-regions — identical for both paths ───────────────────────
+
+    # Asylum: Cathedral + Experimentation require Gateways + Eng Key
+    if ASYLUM_GATEWAYS in rules:
+        gw = rules[ASYLUM_GATEWAYS]
+        rules[ASYLUM_CATHEDRAL]     = lambda state, p=gw: p(state) and _R.eng_key(state, 1)
+        rules[ASYLUM_EXPERIMENTATION] = lambda state, p=gw: p(state) and _R.eng_key(state, 1)
+
+    # Asylum: Engine Block — free once Cageways reached
+    if ASYLUM_CAGEWAYS in rules:
+        rules[ASYLUM_ENGINE_BLOCK] = rules[ASYLUM_CAGEWAYS]
+
+    # Liveside levels — Cathedral + retractors
+    # If Cathedral is unreachable (e.g. Asylum assigned to a soul gate and
+    # that soul gate is itself unreachable), liveside stays False.
+    _liveside_list = [
+        LIVESIDE_LONDON, LIVESIDE_PRISON, LIVESIDE_SALVAGE,
+        LIVESIDE_QUEENS, LIVESIDE_FLORIDA,
+    ]
+    if ASYLUM_CATHEDRAL in rules:
+        cat = rules[ASYLUM_CATHEDRAL]
+        for lr in _liveside_list:
+            rules[lr] = lambda state, p=cat, r=lr: p(state) and _R.can_reach_liveside(state, 1, r)
+    else:
+        for lr in _liveside_list:
+            rules[lr] = lambda state: False
+
+    # Engine Block sections — only set if entrance shuffle didn't claim them
+    _engine_configs: list[tuple[str, str, callable]] = [
+        (LIVESIDE_LONDON,  ASYLUM_ENGINE_BLOCK_LONDON,
+         lambda state: _R.night(state, 1)),
+        (LIVESIDE_PRISON,  ASYLUM_ENGINE_BLOCK_PRISON,
+         lambda state: _R.night(state, 1) and _R.prison_key_card(state, 1)),
+        (LIVESIDE_SALVAGE, ASYLUM_ENGINE_BLOCK_SALVAGE,
+         lambda state: _R.night(state, 1) and _R.gad3_swim(state, 1)),
+        (LIVESIDE_QUEENS,  ASYLUM_ENGINE_BLOCK_QUEENS,
+         lambda state: _R.night(state, 1) and _R.poigne(state, 1)),
+        (LIVESIDE_FLORIDA, ASYLUM_ENGINE_BLOCK_FLORIDA,
+         lambda state: _R.night(state, 1)),
+    ]
+    for liveside, engine, completion in _engine_configs:
+        if engine not in rules:
+            lv = rules.get(liveside)
+            if lv is not None:
+                rules[engine] = lambda state, p=lv, cr=completion: p(state) and cr(state)
+
+    return rules

@@ -29,7 +29,7 @@ This is the single source of truth for placement restrictions.
   lore slots                 → accept lore items only
   bonus slots                → accept bonus items only
   progression/retractor/
-  accumulator/gad slots      → accept progression, retractor, accumulator, gad
+  accumulator/gad/eclipser   → accept progression, retractor, accumulator, gad, eclipser
 
 GATE SHUFFLE
 ────────────
@@ -62,6 +62,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
 from access_rules import R, GATE_VANILLA_SL
 from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER
+import regions as _regions
 
 # ── Player constant ────────────────────────────────────────────────────────────
 
@@ -161,13 +162,14 @@ SLOT_ACCEPTS: dict[str, frozenset[str]] = {
     "cadeaux":     frozenset({"soul"}),
     "barrel":      frozenset({"soul"}),
     # Named + progression slots — all share the same pool
-    "weapon":      frozenset({"progression", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
-    "lore":        frozenset({"progression", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
-    "bonus":       frozenset({"progression", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
-    "progression": frozenset({"progression", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
-    "retractor":   frozenset({"progression", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
-    "accumulator": frozenset({"progression", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
-    "gad":         frozenset({"progression", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "weapon":      frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "lore":        frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "bonus":       frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "progression": frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "retractor":   frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "accumulator": frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "gad":         frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
+    "eclipser":    frozenset({"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}),
 }
 
 # Derived sets used for pool building and fallback logic
@@ -230,6 +232,19 @@ REGION_GATES: dict[str, object] = {
     "Asylum: Lavaducts"            : "GATE_DEADSIDE_LAVADUCTS",
     "Temple of Blood (Nager)"      : "GATE_DEADSIDE_BLOOD",
     "Asylum: The Fogometers"       : "GATE_DEADSIDE_FOGOMETERS",
+    # Liveside levels — only reachable through Asylum Cathedral of Pain.
+    # Base depth = Asylum gate SL so nudges (+3 liveside, +4 night, +N gad)
+    # stack on a real floor instead of zero.
+    "Down Street Station, London":    "GATE_DEADSIDE_ASYLUM",
+    "Gardelle County Jail, Texas":    "GATE_DEADSIDE_ASYLUM",
+    "Salvage Yard, Mojave Desert":    "GATE_DEADSIDE_ASYLUM",
+    "Mordant Street, Queens, NY":     "GATE_DEADSIDE_ASYLUM",
+    "Summer Camp, Florida":           "GATE_DEADSIDE_ASYLUM",
+    "Asylum: Engine Block - London":  "GATE_DEADSIDE_ASYLUM",
+    "Asylum: Engine Block - Prison":  "GATE_DEADSIDE_ASYLUM",
+    "Asylum: Engine Block - Florida": "GATE_DEADSIDE_ASYLUM",
+    "Asylum: Engine Block - Salvage": "GATE_DEADSIDE_ASYLUM",
+    "Asylum: Engine Block - Queens":  "GATE_DEADSIDE_ASYLUM",
 }
 
 VANILLA_GAD_REGIONS: list[str] = [
@@ -308,11 +323,12 @@ def _shuffle_gates(
     constraints = []
 
     # 1. SL9 cap for all protected gates
-    for g in sl9_cap_gates:
+    # sorted() ensures deterministic constraint order regardless of PYTHONHASHSEED.
+    for g in sorted(sl9_cap_gates):
         constraints.append((g, 9, sl9_cap_gates | starting_gates))
 
     # 2. Starting gates: SL3
-    for g in starting_gates:
+    for g in sorted(starting_gates):
         constraints.append((g, 3, starting_gates))
 
     # 3. WASTELAND: tighter SL2
@@ -342,49 +358,56 @@ def _shuffle_gates(
     gate_remap.update(temp_map)
     return gate_remap
 
-def build_gate_rules(gate_remap: dict[str, int] | None = None) -> dict:
-    from access_rules import set_gate_remap
-    import regions as regions_module
+# ── Region depth probing ───────────────────────────────────────────────────────
 
-    set_gate_remap(gate_remap or {})
-
-    class MockWorld:
-        def __init__(self):
-            self.regions = []
-            self.player = PLAYER
-
-    world = MockWorld()
-    parent_map = {}
-    original_connect = regions_module._connect
-
-    def recording_connect(source, target, rule=None):
-        parent_map[target.name] = (source.name, rule or (lambda state: True))
-        original_connect(source, target, rule)
-
-    regions_module._connect = recording_connect
-    regions_module.create_regions(world, PLAYER)
-    regions_module._connect = original_connect
-
-    rules = {}
-
-    def get_rule(name):
-        if name in rules:
-            return rules[name]
-        if name not in parent_map:
-            rules[name] = lambda state: True
-            return rules[name]
-        parent_name, entrance_rule = parent_map[name]
-        parent_rule = get_rule(parent_name)
-        rules[name] = lambda state, e=entrance_rule, p=parent_rule: p(state) and e(state)
-        return rules[name]
-
-    for region in world.regions:
-        get_rule(region.name)
-
-    return rules
+# Items given to the probe FakeState so that the only thing limiting
+# region access during depth-probing is soul count, not missing key items.
+_PROBE_ITEMS: dict[str, int] = {
+    "RSC_X_ENGINEERS_KEY":   1,
+    "RSC_X_PRISON_KEY_CARD": 1,
+    "RSC_X_CALABASH":        1,
+    "RSC_X_BATON":           1,
+    "RSC_X_FLAMBEAU":        1,
+    "RSC_X_MARTEAU":         1,
+    "RSC_X_POIGNE":          1,
+    "RSC_X_ECLIPSER_PART1":  1,
+    "RSC_X_ECLIPSER_PART2":  1,
+    "RSC_X_ECLIPSER_PART3":  1,
+    "RSC_X_ACCUMULATOR":     3,
+    "RSC_X_GAD_PICKUP":      3,
+}
 
 
-_LEVEL_RULES: dict = build_gate_rules(gate_remap=None)
+def _build_region_depth_map(level_rules: dict) -> dict[str, int]:
+    """
+    Probe each entry in level_rules to find the minimum SL at which that
+    region becomes reachable by a maximally-equipped player.
+
+    Returns region_name -> SL int (0–10). Used by _weight() so that
+    progression-balancing depth scores are correct in entrance-shuffle mode,
+    where REGION_GATES no longer reflects actual access order.
+    """
+    all_regions = set(level_rules.keys())
+    depth_map: dict[str, int] = {}
+    for region, rule in level_rules.items():
+        for sl in range(11):
+            probe = FakeState(
+                inv=_PROBE_ITEMS,
+                soul_count=_SOUL_THRESHOLDS[sl],
+                retractor_count=10,
+                cadeaux_count=666,
+                reached_regions=all_regions,
+            )
+            try:
+                if rule(probe):
+                    depth_map[region] = sl
+                    break
+            except Exception:
+                depth_map[region] = 0
+                break
+        else:
+            depth_map[region] = 10  # unreachable even at SL10 — treat as deepest
+    return depth_map
 
 # ── State ──────────────────────────────────────────────────────────────────────
 
@@ -423,7 +446,12 @@ class FakeState:
 
 def _reachable(loc, state: FakeState, level_rules: dict) -> bool:
     region_rule = level_rules.get(loc.level_region)
-    if region_rule and not region_rule(state):
+    # BUG-FIX: the old guard was `if region_rule and not region_rule(state)`.
+    # When region_rule is None (key missing from level_rules) the truthiness
+    # check short-circuits to False, skipping the region gate entirely and
+    # letting the location pass on gate_expr alone.  A missing key means the
+    # region was never registered — treat it as unreachable, not as free.
+    if region_rule is None or not region_rule(state):
         return False
     if not loc.gate_expr:
         return True
@@ -506,7 +534,7 @@ def build_item_pool(
     (souls, progression, retractors, accumulators, gad). Includes weapons/lore/bonus
     based on their respective shuffle flags.
     """
-    include_cats = {"soul", "progression", "retractor", "accumulator", "gad"}
+    include_cats = {"soul", "progression", "eclipser", "retractor", "accumulator", "gad"}
     if shuffle_weapons: include_cats.add("weapon")
     if shuffle_lore:    include_cats.add("lore")
     if shuffle_bonus:   include_cats.add("bonus")
@@ -629,7 +657,7 @@ def simulate_playthrough(
             if debug or collect_spheres:
                 if category == "cadeaux" or "cadeaux" in placed_object.lower():
                     sphere_cadeaux_count += 1
-                elif category in ("progression", "retractor", "accumulator", "gad",
+                elif category in ("progression", "eclipser", "retractor", "accumulator", "gad",
                                   "weapon", "lore", "bonus"):
                     placed_loc = loc_by_key.get(loc.loc_key)
                     slot_name = (placed_loc.friendly_name or placed_object) if placed_loc else placed_object
@@ -682,6 +710,7 @@ def assumed_fill(
     shuffle_gad_temples: bool = False,
     starting_item: str | None = None,
     true_form_loc_remap: dict[str, str] | None = None,
+    entrance_shuffle=None,   # UnifiedShuffle | None
 ) -> tuple[dict[str, str], dict[str, int]]:
 
     # ── Step 1: Gates ─────────────────────────────────────────────────────────
@@ -691,25 +720,24 @@ def assumed_fill(
 
     if shuffle_gates:
         gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe)
-    if gate_remap:
-        level_rules = build_gate_rules(gate_remap)
-    else:
+    if not gate_remap:
         gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
-        level_rules = _LEVEL_RULES
 
     if no_soul_gates:
         for g in gate_remap:
             gate_remap[g] = 0
-        level_rules = build_gate_rules(gate_remap)
 
-    if open_gates_n > 0:
+    if open_gates_n is not None and open_gates_n > 0:
         remainder = [g for g in GATE_VANILLA_SL if g not in COFFIN_GATE_ORDER]
         rng.shuffle(remainder)
         ordered = list(COFFIN_GATE_ORDER) + remainder
         for g in ordered[:open_gates_n]:
             if g in gate_remap:
                 gate_remap[g] = 0
-        level_rules = build_gate_rules(gate_remap)
+
+    level_rules = _regions.build_level_rules(gate_remap, entrance_shuffle)
+
+    region_depth_map = _build_region_depth_map(level_rules)
 
     if verbose:
         print("\n── GATE THRESHOLDS ──────────────────────────────────")
@@ -763,16 +791,27 @@ def assumed_fill(
     rng.shuffle(item_pool)
 
     # ── Item placement order ───────────────────────────────────────────────────
-    # Progression items placed before souls, WLB last.
-    # This ensures key items claim their slots while the candidate pool is
-    # widest, before souls consume reachable locations.
+    # Items are sorted by a random draw within their priority band (lower = placed first):
+    #   progression, retractor, gad  ->  0.0 – 1.0   (key items first, widest pool)
+    #   soul                          ->  0.2 – 1.0   (after prog, before weapons)
+    #   weapon                        ->  0.5 – 2.0
+    #   accumulator, bonus            ->  0.8 – 2.5
+    #   lore                          ->  2.0 – 3.0   (last, filler)
+    # Souls share the lower half of the band with progression so they claim
+    # reachable slots before weapons crowd them out, reducing soulswap fallbacks.
     def _placement_priority(item) -> float:
-        if item.category in {"progression", "retractor", "gad"}:
-            return rng.uniform(0.0, 1.0)
-        if item.category in {"weapon", "soul"}:
-            return rng.uniform(0.0, 2.0)
-        # lore, accumulator, bonus
-        return rng.uniform(0.5, 3.0)
+        if item.category in {"soul"}:
+            return rng.uniform(0.0, 1.5)
+        if item.category in {"progression", "gad"}:
+            return rng.uniform(0.1, 1.0)
+        if item.category in {"eclipser", "retractor"}:
+            return rng.uniform(0.2, 1.0)
+        if item.category in {"weapon"}:
+            return rng.uniform(0.4, 2.0)
+        if item.category in {"accumulator", "bonus"}:
+            return rng.uniform(0.4, 2.5)
+        # lore
+        return rng.uniform(2, 3.0)
 
     item_pool.sort(key=_placement_priority)
 
@@ -806,6 +845,18 @@ def assumed_fill(
     # ── Step 5: Weighted slot choice ──────────────────────────────────────────
     exponent = progression_balancing / 50.0
 
+    def _level_soul_count(level_id: str) -> int:
+        return sum(
+            1 for k, v in placement.items()
+            if k.split(":")[0] == level_id and hasattr(v, "category") and v.category == "soul"
+        )
+
+    def _level_key_count(level_id: str) -> int:
+        return sum(
+            1 for k, v in placement.items()
+            if k.split(":")[0] == level_id and hasattr(v, "category") and v.category in {"progression", "eclipser", "retractor", "accumulator", "gad","weapon","lore","bonus"}
+        )
+
     def _weighted_choice(candidates: list):
         if not candidates:
             return None
@@ -813,59 +864,73 @@ def assumed_fill(
             return rng.choice(candidates)
 
         def _weight(loc) -> float:
-            # if item.category == "soul":
-            #     return 1.0
-
             # depth_score proxies how hard this slot is to reach.
-            # For region-gated slots it mirrors the gate's SL value.
-            # For locally-gated slots we floor it at a depth equivalent
-            # so late-game conditions rank appropriately without stacking
-            # on top of already-deep regions.
-            gate = REGION_GATES.get(loc.level_region)
-            if gate is None:
+            #
+            # Region depth is bracketed into a small tier (0–4) so that item
+            # gate requirements dominate the score — a shallow slot behind Night
+            # should outweigh a deep slot with no gate (metroidvania feel).
+            #
+            # Tiers: SL 0 → 0, SL 1–4 → 1, SL 5–7 → 2, SL 8–9 → 3, SL 10 → 4
+            sl = region_depth_map.get(loc.level_region, 0)
+            if sl == 0:
                 depth = 0
-            elif isinstance(gate, str):
-                depth = gate_remap.get(gate, GATE_VANILLA_SL.get(gate, 0))
+            elif sl <= 5:
+                depth = 1
+            elif sl <= 7:
+                depth = 2
+            elif sl <= 9:
+                depth = 3
             else:
-                depth = min(
-                    max(gate_remap.get(g, GATE_VANILLA_SL.get(g, 0)) for g in route)
-                    for route in gate
-                )
+                depth = 4
 
             if loc.gate_expr:
                 expr_l = loc.gate_expr.lower()
 
-                # ── Hard floors — override base SL entirely ────────────────────────
-                if "r.night(" in expr_l:
-                    depth += 15 # all 3 eclipsers + eng_key + retractors
-                elif loc.level_region in LIVESIDE_REGIONS:
-                    depth += 5 # retractors + SL2 entry
-
-                # ── Mid floors — only kick in when base SL is lower ────────────────
-                if "r.calabash(" in expr_l:
-                    depth += 7 # gates Queens engine block access
-                if "r.marteau(" in expr_l:
-                    depth += 6  # mid-late tool
-                if "r.baton(" in expr_l:
-                    depth += 6  # mid-late tool, asylum shortcut
-                if "r.flambeau(" in expr_l:
-                    depth += 5  # mid tool, gates Temple of Fire upper
-                if "r.poigne(" in expr_l:
-                    depth += 4  # late progression, gates Queens engine
-
-                # ── Additive nudges — stack on top of base ─────────────────────────
+                # ── Hard floor ─────────────────────────────────────────────────
                 if "r.x3_accumulator(" in expr_l:
-                    depth += 2  # Violator reward slot, mid-late sub-gate
+                    depth = max(depth, 10)  # Violator reward slot
+
+                # ── Additive nudges ────────────────────────────────────────────
+                if "r.calabash(" in expr_l:
+                    depth += 4  # gates Queens engine block access
+                if "r.marteau(" in expr_l:
+                    depth += 3  # mid-late tool
+                if "r.baton(" in expr_l:
+                    depth += 3  # mid-late tool, asylum shortcut
+                if "r.flambeau(" in expr_l:
+                    depth += 2  # mid tool, gates Temple of Fire upper
+                if "r.poigne(" in expr_l:
+                    depth += 2   # late progression, gates Queens engine
+
+                if "r.night(" in expr_l:
+                    depth += 3   # all 3 eclipsers + eng_key + retractors
                 if "r.prison_key_card(" in expr_l:
-                    depth += 1  # late progression, gates Prison engine
+                    depth += 0.5   # late progression, gates Prison engine
                 if "r.eng_key(" in expr_l:
-                    depth += 1  # mid-game sub-gate
-                if "r.gad3_swim(" in expr_l:
-                    depth += 5  # all three temples required
-                elif "r.gad2_walk(" in expr_l:
-                    depth += 3  # two temples required
-                elif "r.gad1_hand(" in expr_l:
-                    depth += 1  # one temple required
+                    depth += 0.5   # mid-game sub-gate
+
+                # Gad nudges only apply outside the temples themselves —
+                # gad requirements in other levels are the interesting placements.
+                if loc.level_region not in {
+                    "Temple of Fire (Toucher)",
+                    "Temple of Prophecy (Marcher)",
+                    "Temple of Blood (Nager)",
+                }:
+                    if "r.gad3_swim(" in expr_l:
+                        depth += 1.5   # all three temples required
+                    elif "r.gad2_walk(" in expr_l:
+                        depth += 1   # two temples required
+                    elif "r.gad1_hand(" in expr_l:
+                        depth += 0.5   # one temple required
+
+            if item.category == "soul":
+                already = _level_soul_count(loc.level_id)
+                effective_depth = max(depth, 0.5)
+                depth = effective_depth / (1 + already * 0.8)
+            elif item.category in {"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}:
+                already = _level_key_count(loc.level_id)
+                effective_depth = max(depth, 0.5)
+                depth = effective_depth / (1 + already * 0.5)
 
             return ((depth + 1) ** 2) ** exponent
 
@@ -989,7 +1054,7 @@ def assumed_fill(
     # candidate_pool) to ensure complete coverage of all levels including
     # liveside, which phase 1 may have excluded from its candidate set.
 
-    include_cats = {"soul", "progression", "retractor", "accumulator", "gad"}
+    include_cats = {"soul", "progression", "eclipser", "retractor", "accumulator", "gad"}
     if shuffle_weapons: include_cats.add("weapon")
     if shuffle_lore:    include_cats.add("lore")
     if shuffle_bonus:   include_cats.add("bonus")
@@ -1003,10 +1068,15 @@ def assumed_fill(
     rng.shuffle(filler_items)
 
     # Slots to fill — unfilled soul slots + unfilled barrel/cadeaux slots
-    # (key item slots left empty by insanity get filled too)
+    # (key item slots left empty by insanity get filled too).
+    # Gad slots are excluded when shuffle_gad_temples is off: they're not in
+    # candidate_pool and not filler-eligible, so including them causes
+    # i % len(filler_items) to wrap and duplicate cadeaux RSCs in placement,
+    # inflating the levels.txt $cadeaux count by one per gad slot (3 total).
     remaining_locs = [
         loc.loc_key for loc in CHECKABLE_LOCS
         if loc.loc_key not in placement
+        and (shuffle_gad_temples or loc.category != "gad")
     ]
     rng.shuffle(remaining_locs)
 
@@ -1031,6 +1101,7 @@ def validate_fill(
     shuffle_gad_temples: bool = False,
     starting_item: str | None = None,
     true_form_loc_remap: dict[str, str] | None = None,
+    entrance_shuffle=None,
 ) -> tuple[bool, str]:
 
     if starting_item:
@@ -1046,7 +1117,7 @@ def validate_fill(
     reached_keys, final_state, _ = simulate_playthrough(
         placement,
         CHECKABLE_LOCS + active_fixed_soul_locs,
-        level_rules=build_gate_rules(gate_remap),
+        level_rules=_regions.build_level_rules(gate_remap, entrance_shuffle),
         debug=verbose,
         shuffle_gad_temples=False,
     )
@@ -1124,6 +1195,11 @@ if __name__ == "__main__":
                         help="Shuffle gad powers as physical pickups")
     parser.add_argument("--starting-item", default=None,
                         help="RSC name of item to place at swamp church start location")
+    parser.add_argument("--insanity", nargs="?", const=3, type=int, default=0,
+                        help="Insanity tier 1-3. Bare --insanity = tier 3.")
+    parser.add_argument("--entrance-mode", default=None,
+                        choices=["deadside_only", "cross_hub"],
+                        help="Enable entrance randomization mode")
     args = parser.parse_args()
     seeds = [args.seed] if args.seed is not None else [
         random.randint(0, 99_999_999) for _ in range(args.seeds)
@@ -1136,6 +1212,8 @@ if __name__ == "__main__":
     print(f"Item pool    : {len(temp_pool)}  |  Source: extracted_locations.py")
     if args.gate_preset:
         print(f"Gate preset  : {args.gate_preset}")
+    if args.entrance_mode:
+        print(f"Entrance mode: {args.entrance_mode}")
     print()
 
     passed = failed = chaos_failed = 0
@@ -1144,6 +1222,14 @@ if __name__ == "__main__":
 
     for seed in seeds:
         rng = random.Random(seed)
+        entrance_shuffle = None
+        if args.entrance_mode:
+            from randomizers.entrance_randomizer import shuffle_unified, unified_spoiler_section
+            entrance_shuffle = shuffle_unified(random.Random(seed ^ 0xE117), mode=args.entrance_mode, shuffle_gad_temples=args.shuffle_gad_temples)
+            if args.verbose or len(seeds) == 1:
+                print()
+                print(unified_spoiler_section(entrance_shuffle))
+                print()
         placement, gate_remap = assumed_fill(
             rng,
             verbose=(args.verbose and len(seeds) == 1),
@@ -1154,13 +1240,16 @@ if __name__ == "__main__":
             safe=p.get("safe", True),
             shuffle_gad_temples=args.shuffle_gad_temples,
             starting_item=args.starting_item,
+            insanity=args.insanity or 0,
+            entrance_shuffle=entrance_shuffle,
         )
         ok, report = validate_fill(
             placement,
             verbose=args.verbose,
             gate_remap=gate_remap,
             shuffle_gad_temples=args.shuffle_gad_temples,
-            starting_item=args.starting_item,  # ← add
+            starting_item=args.starting_item,
+            entrance_shuffle=entrance_shuffle,
         )
 
         if ok:
@@ -1170,6 +1259,24 @@ if __name__ == "__main__":
                            if sl != GATE_VANILLA_SL.get(g)}
                 suffix = f" [gates: {changed}]" if changed else ""
                 print(f"Seed {seed}{suffix}: {report}")
+
+            if args.verbose or len(seeds) == 1:
+                from collections import defaultdict
+
+                soul_dist = defaultdict(int)
+                key_dist = defaultdict(int)
+                for loc_key, item in placement.items():
+                    level = loc_key.split(":")[0]
+                    cat = item.category if hasattr(item, "category") else "filler"
+                    if cat == "soul":
+                        soul_dist[level] += 1
+                    elif cat in {"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}:
+                        key_dist[level] += 1
+                print("\n── SOUL / KEY DISTRIBUTION BY LEVEL ───────────────────")
+                all_levels = sorted(soul_dist.keys() | key_dist.keys())
+                for level in all_levels:
+                    print(f"  {level:<20}  souls: {soul_dist[level]:>3}  keys: {key_dist[level]:>3}")
+                print()
         elif args.gate_preset == "chaos":
             chaos_failed += 1
             print(f"Seed {seed}: FAIL (chaos — unbeatable seed expected occasionally)")
@@ -1184,4 +1291,3 @@ if __name__ == "__main__":
               f"({elapsed:.1f}s, {elapsed / len(seeds) * 1000:.0f}ms/seed)")
         if chaos_failed:
             print(f"  Chaos failures: {chaos_failed}/{total} (expected)")
-        print("✅ All seeds beatable" if failed == 0 else f"❌ WARNING: {failed} unbeatable seed(s)")
