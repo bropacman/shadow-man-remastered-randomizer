@@ -147,6 +147,7 @@ _HTML = r"""<!DOCTYPE html>
   /* Enemy mode */
   .enemy-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .enemy-row .lbl { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .enemy-row select { flex: 1; min-width: 0; }
 
   /* Slider */
   input[type=range] {
@@ -181,6 +182,8 @@ _HTML = r"""<!DOCTYPE html>
     width: 230px; z-index: 999; pointer-events: none;
     opacity: 0; transition: opacity .15s;
     white-space: normal; text-align: left;
+    /* Reset inherited typography from .card-title (bold, uppercase, tracking) */
+    font-weight: normal; text-transform: none; letter-spacing: normal; font-style: normal;
   }
   .tip:hover .tip-box { opacity: 1; }
 
@@ -313,6 +316,21 @@ _HTML = r"""<!DOCTYPE html>
       </select>
       <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Places a bonus item at the church in Louisiana Swampland at game start. The selected item is removed from the shuffle pool.</span></span>
     </div>
+    <hr class="divider">
+    <div class="card-title" style="margin-bottom:8px">
+      Entrance Randomizer
+      <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>deadside only:</b> shuffles the 9 Deadside hub levels among themselves — which level you enter is randomized but Dark Engine soul gates stay vanilla.<br><b>cross hub:</b> all 14 levels (Deadside + Dark Engine) shuffled together; a Deadside level may lead to a Dark Engine spoke and vice versa.</span></span>
+    </div>
+    <div class="row">
+      <select id="entranceMode" onchange="onEntranceModeChange()">
+        <option value="off">Off — vanilla entrances</option>
+        <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
+        <option value="cross_hub">Cross Hub — all 14 levels shuffled</option>
+      </select>
+    </div>
+    <div id="entranceHint" class="hint" style="margin-top:6px;display:none">
+      &#x26A0;&#xFE0F; Works best with open coffin gates (easy/open preset) and Insanity Tier &ge;1.
+    </div>
   </div>
 
   <!-- Right column: Coffin Gates + Progression stacked -->
@@ -388,7 +406,7 @@ _HTML = r"""<!DOCTYPE html>
           <option value="2">Tier 2 &mdash; + Cadeaux slots (untested)</option>
           <option value="3">Full &mdash; All slots (untested)</option>
         </select>
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed.<br><b>Tier 1:</b> Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also Cadeaux slots.<br><b>Full:</b> Any slot in the game. Wildly random.</span></span>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed. By default, key items shuffle among key item slots and dark souls shuffle anywhere.<br><b>Tier 1:</b> Also allows key items in Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also allows Cadeaux slots (untested).<br><b>Full:</b> Any slot in the game — wildly random.</span></span>
       </div>
       <div class="row">
         <span style="color:var(--muted);font-size:11px;white-space:nowrap">Balancing:</span>
@@ -418,15 +436,20 @@ _HTML = r"""<!DOCTYPE html>
         Shuffle Trueforms
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles true-form enemy positions into the same pool as regular enemies. Only meaningful when Shuffle Enemies is also enabled.</span></span>
       </label>
+      <label class="check-label">
+        <input type="checkbox" id="enemyMixMovement" disabled>
+        Mix Movement Types
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Allows ground, flying, and swimming enemies to swap with each other. Off by default — mixing types can place flying enemies in water areas or vice versa.</span></span>
+      </label>
     </div>
     <div class="enemy-row">
       <span class="lbl">Enemy Mode:</span>
       <select id="enemyMode" disabled>
         <option value="difficulty">difficulty &mdash; tier-weighted</option>
         <option value="contextual">contextual &mdash; area pools</option>
-        <option value="full">full &mdash; random by movement type</option>
+        <option value="full">full &mdash; completely random</option>
       </select>
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><b>difficulty:</b> enemies replaced by others of a similar tier, weighted by area depth.<br><b>contextual:</b> shuffled within context groups (deadside/liveside/prison stay separated).<br><b>full:</b> fully random within the same movement type (ground/flying/etc).</span></span>
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><b>difficulty:</b> enemies replaced by others of similar difficulty — same tier, weighted by area depth.<br><b>contextual:</b> shuffled within context groups (deadside/liveside/prison stay separated).<br><b>full:</b> completely random across the whole enemy pool (use Mix Movement Types to also cross ground/flying/etc).</span></span>
     </div>
     <span class="hint" id="enemyHint" style="margin-left:4px">enable Shuffle Enemies to unlock</span>
   </div>
@@ -448,6 +471,21 @@ _HTML = r"""<!DOCTYPE html>
         <input type="checkbox" id="shuffleWeaponsSfx">
         Shuffle Weapon SFX
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapon fire and reload sounds within each weapon category. Purely cosmetic.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleEnemiesSfx">
+        Shuffle Enemy SFX
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles enemy sound effects within type pools — pain sounds trade with other enemies' pain sounds, startle sounds with startle sounds, attack sounds with attack sounds. Ambient creatures and death-by-weapon sounds are left untouched. Purely cosmetic.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleAmbients">
+        Shuffle Ambients
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles ambient creatures (rats, egrets, flies, butterflies, friendly fish) across their spawn slots. Any ambient can become any other. Purely cosmetic — they don&rsquo;t drop items or block progress.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleSky">
+        Shuffle Sky Textures
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Swaps sky textures across levels — each sky layer (horizon, clouds, hills, sun) is shuffled within its own pool so only matching layers trade places. Purely cosmetic.</span></span>
       </label>
     </div>
     <div style="border-top:1px solid #333;margin-top:8px;padding-top:8px">
@@ -499,12 +537,18 @@ function updateGateDesc() {
     maxSlEl.disabled = false;
     maxSlEl.value = '';
     openGatesEl.disabled = false;
-    openGatesEl.value = '';
+    // Don't reset openGatesEl.value here — preserve the user's selection
+    // when switching between non-"open" presets (e.g. easy → medium).
   }
+}
+function onEntranceModeChange() {
+  const mode = document.getElementById('entranceMode').value;
+  document.getElementById('entranceHint').style.display = (mode !== 'off') ? 'block' : 'none';
 }
 function onEnemiesChange() {
   const on = document.getElementById('shuffleEnemies').checked;
   document.getElementById('enemyMode').disabled = !on;
+  document.getElementById('enemyMixMovement').disabled = !on;
   document.getElementById('enemyHint').textContent = on ? '' : 'enable Shuffle Enemies to unlock';
 }
 function randomizeSeed() {
@@ -528,6 +572,8 @@ function getConfig() {
     shuffleMusic:     document.getElementById('shuffleMusic').checked,
     shuffleVoices:    document.getElementById('shuffleVoices').checked,
     shuffleWeaponsSfx:document.getElementById('shuffleWeaponsSfx').checked,
+    shuffleEnemiesSfx:document.getElementById('shuffleEnemiesSfx').checked,
+    shuffleSky:       document.getElementById('shuffleSky').checked,
     patchTracker:        document.getElementById('patchTracker').checked,
     openGatesN:          document.getElementById('openGatesN').value,
     insanity:         parseInt(document.getElementById('insanity').value),
@@ -536,7 +582,10 @@ function getConfig() {
     shuffleWeapons:   document.getElementById('shuffleWeapons').checked,
     shuffleLore:      document.getElementById('shuffleLore').checked,
     enemyMode:        document.getElementById('enemyMode').value.split('—')[0].trim(),
+    enemyMixMovement: document.getElementById('enemyMixMovement').checked,
+    shuffleAmbients:  document.getElementById('shuffleAmbients').checked,
     progBalance:      document.getElementById('progBalance').value,
+    entranceMode:     document.getElementById('entranceMode').value,
   };
 }
 function setBusy(busy) {
@@ -696,6 +745,8 @@ class _Api:
             ("shuffleMusic",      "--shuffle-music"),
             ("shuffleVoices",     "--shuffle-voices"),
             ("shuffleWeaponsSfx", "--shuffle-weapons-sfx"),
+            ("shuffleEnemiesSfx", "--shuffle-enemies-sfx"),
+            ("shuffleSky",        "--shuffle-sky"),
             ("shuffleLightSoul",  "--shuffle-light-soul"),
             ("patchTracker",      "--patch-tracker"),
         ]
@@ -715,6 +766,11 @@ class _Api:
 
         if config.get("shuffleEnemies"):
             cmd += ["--enemy-mode", config.get("enemyMode", "difficulty")]
+            if config.get("enemyMixMovement"):
+                cmd.append("--enemy-mix-movement")
+
+        if config.get("shuffleAmbients"):
+            cmd.append("--shuffle-ambients")
 
         max_sl = config.get("maxSl", "").strip()
         if max_sl:
@@ -734,7 +790,9 @@ class _Api:
             cmd.append("--no-shuffle-weapons")
         if not config.get("shuffleLore", True):
             cmd.append("--no-shuffle-lore")
-
+        entrance_mode = config.get("entranceMode", "off")
+        if entrance_mode and entrance_mode != "off":
+            cmd += ["--entrance-mode", entrance_mode]
         return cmd
 
     def _launch(self, config: dict, *, restore: bool) -> None:
@@ -798,7 +856,7 @@ if __name__ == "__main__":
         html=_HTML,
         js_api=api,
         width=840,
-        height=900,
+        height=960,
     )
     api._set_window(window)
     webview.start()
