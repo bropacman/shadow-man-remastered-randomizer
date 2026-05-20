@@ -20,6 +20,14 @@ import re
 from pathlib import Path
 from constants import GATE_VANILLA_SL, GATE_E2O_POSITIONS, E2O_MATCH_RADIUS, PRESERVED_SOUL_IDS
 
+# RSC names that count as a cadeaux collectible when placed in any slot.
+# Mirrors patcher.py CADEAUX_TYPES — kept local to avoid a circular import.
+_CADEAUX_RSC: frozenset[str] = frozenset({
+    "RSC_CADEAUX",
+    "RSC_X_CADEAUX",
+    "RSC_PICKUP_CADEAUX",
+})
+
 # ── Level ID → levels.txt block number ───────────────────────────────────────
 
 LEVEL_TO_NUM: dict[str, int] = {
@@ -579,8 +587,16 @@ def patch_levels_txt(
 
     cg_updated = _patch_coffingate_lines(blocks, gate_remap)
 
+    # ── Cadeaux counts — STUBBED ──────────────────────────────────────────────
+    # $cadeaux N lines are left at their vanilla values for now.
+    # The accounting logic (mapped_vanilla / placed_cadeaux) was producing
+    # incorrect totals; stubbing keeps the vanilla counts intact so the game
+    # doesn't crash on launch.  Re-implement when the root cause is resolved.
+    cadeaux_updated = 0
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(_serialize(blocks), encoding="utf-8")
     print(f"  [levels_txt] Patched → {output_path.name}  "
           f"({len(directive_entries)} directive(s) updated, "
-          f"{cg_updated} coffingate SL(s) updated)")
+          f"{cg_updated} coffingate SL(s) updated, "
+          f"cadeaux counts: vanilla/stubbed)")

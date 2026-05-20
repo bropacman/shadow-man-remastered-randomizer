@@ -166,6 +166,10 @@ def patch_loc_english_for_tracker(
     if shuffle_gad_temples:
         for key in GAD_KEYS:
             overrides[key] = GAD_LABEL
+        # Rename Book of Prophecy since the prophecy pickup is replaced by
+        # a Gad power when gad temples are shuffled.
+        overrides["m_obj_prophecy"] = "Book of Gad"
+        overrides["i_prophecy"] = "Book of Gad"
 
     # 2. Obscure hints -- DEACTIVATED
     #    Obscuring items without vanilla m_obj_* keys requires overriding i_*
@@ -188,7 +192,7 @@ def patch_loc_english_for_tracker(
 
     mode = []
     if shuffle_gad_temples:
-        mode.append("GAD collapse")
+        mode.append("GAD collapse + Book of Gad rename")
 
     parts = [f"{replaced} replaced"]
     if injected:
