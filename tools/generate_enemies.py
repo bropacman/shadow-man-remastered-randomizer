@@ -35,7 +35,7 @@ REQUIRED_COLUMNS = {
 }
 
 VALID_CATEGORIES     = {"enemy", "enemy_locked", "ambient", "ambient_locked", "boss", "boss_locked"}
-VALID_SOURCE_FILES   = {"enemies.rsc", "enemys.rsc", "objects.rsc", "resource.rsc", "events.rsc", "instance.rsc", "day.rsc", "night.rsc"}
+VALID_SOURCE_FILES   = {"enemies.rsc", "enemys.rsc", "objects.rsc", "resource.rsc", "events.rsc", "instance.rsc", "day.rsc", "night.rsc", "fx.rsc"}
 VALID_CONTEXT_GROUPS = {"deadside", "deadside_interior", "liveside","liveside_day","liveside_night","liveside_night_interior", "asylum", "any", ""}
 VALID_MOVEMENT_TYPES = {"ground", "flying", "swimming", ""}
 
@@ -320,3 +320,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    main()    main()

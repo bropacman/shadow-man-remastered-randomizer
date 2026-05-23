@@ -369,7 +369,12 @@ PRESERVED_SOUL_IDS: frozenset[int] = BOSS_SOUL_IDS
 #   a cryptic phrase so item locations are hinted by category, not by name.
 # DIRECTIVE_HINT_TIER: maps levels.txt directive names to a HINT_TIERS key.
 
-GAD_LABEL: str = "Find Gad Power"
+GAD_LABEL: str = "Find Gad Power (won't clear)"
+
+# Label for the Violator that unlocks via the accumulator mechanism (VIO_PLINTH).
+# That mechanism is never triggered in a randomised run, so the tracker badge
+# will not clear after the player collects the item.
+VIOLATOR_PLINTH_LABEL: str = "Violator (won't clear)"
 
 HINT_TIERS: dict[str, str] = {
     "progression": "Path of the Lord of Deadside",
@@ -503,7 +508,7 @@ DAY_NIGHT_MIRRORS: dict[str, str] = {
 # Per-item Y adjustments — keyed by (new_name, old_name) or (new_name, None) for any slot
 # None as old_name means "applies regardless of what was there before"
 ITEM_Y_ADJUST: dict[tuple[str, str | None], float] = {
-    ("RSC_X_CALABASH",   None): 120.0,
+    ("RSC_X_CALABASH",   None): 0.0,
 }
 
 # Enemy difficulty tiers: 1 (easiest) → 5 (hardest)
@@ -661,11 +666,80 @@ WEAPON_WET_SETS: list[list[str]] = [
      "audio/sfx/weapons/violator/wetfire002.wav"],
 ]
 
+# Reload sounds — weapons that have a distinct reload animation sound.
+# baton/blast.wav and marteau/launch.wav look fire-adjacent but appear to be
+# alternate/charged-mode sounds; left out pending confirmation.
+WEAPON_RELOAD_SETS: list[list[str]] = [
+    ["audio/sfx/weapons/mac10/reload.wav"],
+    ["audio/sfx/weapons/mp5/reload.wav"],
+    ["audio/sfx/weapons/shotgun/sgreload.wav"],
+    ["audio/sfx/weapons/sshotgun/sshotgun_reload.wav"],
+]
+
+# Bullet surface-impact sounds — one set per material type.
+# Sets shuffle as groups so, e.g., concrete sounds can end up where
+# flesh sounds were. File counts vary by surface; tiling applies as usual.
+_WBI = "audio/sfx/weapons/bullet"
+WEAPON_BULLET_IMPACT_SETS: list[list[str]] = [
+    # Bone (5)
+    [f"{_WBI}/Bone_{i:03d}.wav" for i in range(5)],
+    # Concrete (6)
+    [f"{_WBI}/Concrete_{i:03d}.wav" for i in range(6)],
+    # dirt (6)
+    [f"{_WBI}/dirt_{i:03d}.wav" for i in range(6)],
+    # flesh (8)
+    [f"{_WBI}/flesh_{i:03d}.wav" for i in range(8)],
+    # foliage (7)
+    [f"{_WBI}/foliage_{i:03d}.wav" for i in range(7)],
+    # glass (5)
+    [f"{_WBI}/glass_{i:03d}.wav" for i in range(5)],
+    # grass (5)
+    [f"{_WBI}/grass_{i:03d}.wav" for i in range(5)],
+    # mesh (3)
+    [f"{_WBI}/mesh_{i:03d}.wav" for i in range(3)],
+    # metal (7)
+    [f"{_WBI}/metal_{i:03d}.wav" for i in range(7)],
+    # mud (4)
+    [f"{_WBI}/mud_{i:03d}.wav" for i in range(4)],
+    # water (6)
+    [f"{_WBI}/water_{i:03d}.wav" for i in range(6)],
+    # wood (10)
+    [f"{_WBI}/wood_{i:03d}.wav" for i in range(10)],
+]
+
+# Ricochet sounds — two stylistically distinct sets that swap with each other.
+_WRI = "audio/sfx/weapons/ricochet"
+WEAPON_RICOCHET_SETS: list[list[str]] = [
+    # classic ricochets (6)
+    [f"{_WRI}/rico{i}.wav" for i in range(1, 7)],
+    # bullet-impact-metal variants (3) — tiles to fill rico slot count
+    [f"{_WRI}/bulimpm2.wav", f"{_WRI}/bulimpm3.wav", f"{_WRI}/bulimpmt.wav"],
+]
+
+# Projectile-impact sounds — what plays when a non-hitscan projectile hits
+# something. flambeau (fire bolt), marteau (magical bolt), tetedemort (skull).
+WEAPON_PROJ_IMPACT_SETS: list[list[str]] = [
+    ["audio/sfx/weapons/flambeau/hit000.wav",
+     "audio/sfx/weapons/flambeau/hit001.wav",
+     "audio/sfx/weapons/flambeau/hit002.wav",
+     "audio/sfx/weapons/flambeau/hit003.wav"],
+    ["audio/sfx/weapons/marteau/hit000.wav",
+     "audio/sfx/weapons/marteau/hit001.wav",
+     "audio/sfx/weapons/marteau/hit002.wav"],
+    ["audio/sfx/weapons/tetedemort/impact000.wav",
+     "audio/sfx/weapons/tetedemort/impact001.wav",
+     "audio/sfx/weapons/tetedemort/impact002.wav"],
+]
+
 # All pools — iterated by shuffle_sfx
 WEAPON_SOUND_SETS: dict[str, list[list[str]]] = {
-    "fire":  WEAPON_FIRE_SETS,
-    "empty": WEAPON_EMPTY_SETS,
-    "wet":   WEAPON_WET_SETS,
+    "fire":          WEAPON_FIRE_SETS,
+    "empty":         WEAPON_EMPTY_SETS,
+    "wet":           WEAPON_WET_SETS,
+    "reload":        WEAPON_RELOAD_SETS,
+    "bullet_impact": WEAPON_BULLET_IMPACT_SETS,
+    "ricochet":      WEAPON_RICOCHET_SETS,
+    "proj_impact":   WEAPON_PROJ_IMPACT_SETS,
 }
 
 
@@ -873,7 +947,7 @@ ENEMY_SOUND_SETS: dict[str, list[list[str]]] = {
     "speech":  ENEMY_SPEECH_SETS,
 }
 
-del _B  # cleanup module namespace
+del _B, _WBI, _WRI  # cleanup module namespace
 
 # ── Level folder → human-readable name ───────────────────────────────────────
 
