@@ -77,17 +77,50 @@ STARTING_ITEMS: set[str] = {
 # ── Permanently excluded locations ────────────────────────────────────────────
 
 EXCLUDED_LOCS: frozenset[str] = frozenset({
-    "t4ndgad:quest.rsc:0x0072",   # cut content, no entrance
     # "deadside:quest.rsc:0x0102",  # SL10 + POIGNE - Book of Shadows
     # "ah4fogom:quest.rsc:0x2742",  # SL10 + CADEAUX_666 — Light Soul
     # "ah4fogom:quest.rsc:0x26B2",  # SL10 + CADEAUX_666 — Barrel
     # "ah4fogom:quest.rsc:0x26FA",  # SL10 + CADEAUX_666 — Barrel
 })
 
+# Level IDs that are cut/inaccessible and must be excluded entirely from the
+# randomizer pool, regardless of how many entries are in the CSV for them.
+EXCLUDED_LEVELS: frozenset[str] = frozenset({
+    "t4ndgad",   # cut sub-zone of Mojave Salvage Yard — no entrance in game
+})
+
 FIXED_SOUL_LOCS: list = [
     loc for loc in RAW_LOCATIONS
     if loc.category in ("boss", "true_form")
 ]
+
+# Barrel and crate RSC names used when the cadeaux pool is exhausted and
+# remaining slots need a plain (no-reward) container.  Weighted by vanilla
+# frequency so the visual distribution stays roughly natural.
+_PLAIN_BARREL_POOL: list[tuple[str, int]] = [
+    ("RSC_X_BARREL_A",  1112),
+    ("RSC_X_BARREL_D",   804),
+    ("RSC_X_BARREL_L",   432),
+    ("RSC_X_BARREL",     111),
+    ("RSC_TE_PACKBOX1",  121),
+    ("RSC_FL_CRATE",      62),
+    ("RSC_UN_CRATES",     25),
+    ("RSC_TE_PACKBOX2",   14),
+]
+_PLAIN_BARREL_NAMES:    list[str] = [name   for name, _   in _PLAIN_BARREL_POOL]
+_PLAIN_BARREL_WEIGHTS:  list[int] = [weight for _,    weight in _PLAIN_BARREL_POOL]
+
+
+def _plain_barrel(rng: random.Random):
+    """Return a minimal source-loc sentinel for a plain barrel slot."""
+    from types import SimpleNamespace
+    name = rng.choices(_PLAIN_BARREL_NAMES, weights=_PLAIN_BARREL_WEIGHTS, k=1)[0]
+    return SimpleNamespace(
+        object=name,
+        save_idx=0,
+        friendly_name=name,
+    )
+
 
 @dataclass(frozen=True)
 class _SynthLoc:
@@ -480,10 +513,7 @@ GATE_GROUP: dict[str, frozenset] = {
 
 GATE_COUNT: dict[str, tuple[str, int]] = {
     "r.x3_accumulator(": ("RSC_X_ACCUMULATOR", 3),
-    "r.cadeaux_666(":    ("cadeaux", 553),
-    # can update to 666 upon full mapping of cadeaux
-    # currently at 553/666 cadeaux
-    # "r.cadeaux_666(":    ("cadeaux", 666),
+    "r.cadeaux_666(":    ("cadeaux", 666),
     "r.gad1_hand(":      ("RSC_X_GAD_PICKUP", 1),
     "r.gad2_walk(":      ("RSC_X_GAD_PICKUP", 2),
     "r.gad3_swim(":      ("RSC_X_GAD_PICKUP", 3),
@@ -550,10 +580,10 @@ def build_item_pool(
         if count == 0:
             print(f"Warning: '{item}' not found in pool.")
 
-    soul_ids = [loc.instance_id for loc in pool if loc.category == "soul"]
+    soul_ids = [loc.save_idx for loc in pool if loc.category == "soul"]
     duped = [sid for sid, n in Counter(soul_ids).items() if n > 1]
     if duped:
-        raise ValueError(f"DATA BUG: Duplicate soul instance_ids: {duped}")
+        raise ValueError(f"DATA BUG: Duplicate soul save_idx values: {duped}")
 
     return pool
 
@@ -761,12 +791,15 @@ def assumed_fill(
         candidate_pool = [
             l for l in CHECKABLE_LOCS
             if l.loc_key not in EXCLUDED_LOCS
+            and l.level_id not in EXCLUDED_LEVELS
             and l.category not in {"enemy", "boss", "true_form", "scripted"}
+            and not l.can_softlock
         ]
     else:
         candidate_pool = [
             l for l in CHECKABLE_LOCS
             if l.category in active_slot_cats
+            and l.level_id not in EXCLUDED_LEVELS
             and (shuffle_gad_temples or l.category != "gad")
         ]
     if verbose:
@@ -961,6 +994,8 @@ def assumed_fill(
         )
 
         def _slot_ok(loc) -> bool:
+            if loc.can_softlock:
+                return False
             if insanity >= 3:
                 return True
             if insanity >= 2 and loc.category in {"soul", "cadeaux"}:
@@ -1059,11 +1094,15 @@ def assumed_fill(
     if shuffle_lore:    include_cats.add("lore")
     if shuffle_bonus:   include_cats.add("bonus")
 
-    # Items to place — always just unfilled barrel/cadeaux (junk/filler)
+    # Items to place — all cadeaux + any barrels whose slot is still unfilled.
+    # Cadeaux are always included regardless of whether their slot was claimed
+    # in phase 1 (e.g. by a soul): a displaced cadeaux item still needs to be
+    # placed somewhere so the total $cadeaux count stays at 666.  Displaced
+    # cadeaux spill into barrel slots that would otherwise receive plain barrels.
     filler_items = [
         loc for loc in CHECKABLE_LOCS
-        if loc.loc_key not in placement
-           and loc.category in FILLER_SLOT_CATS
+        if loc.category == "cadeaux"                                    # always keep every cadeaux item
+        or (loc.category in FILLER_SLOT_CATS and loc.loc_key not in placement)  # barrels only if unfilled
     ]
     rng.shuffle(filler_items)
 
@@ -1076,15 +1115,29 @@ def assumed_fill(
     remaining_locs = [
         loc.loc_key for loc in CHECKABLE_LOCS
         if loc.loc_key not in placement
+        and loc.level_id not in EXCLUDED_LEVELS
         and (shuffle_gad_temples or loc.category != "gad")
     ]
     rng.shuffle(remaining_locs)
 
-    if filler_items:
-        for i, loc_key in enumerate(remaining_locs):
-            placement[loc_key] = filler_items[i % len(filler_items)]
-    else:
-        print("  WARNING: no filler items available for remaining slots")
+    # Place filler 1-for-1 — no wrap.  Once the cadeaux pool is exhausted,
+    # remaining slots receive a plain barrel (save_idx=0) drawn from the
+    # vanilla barrel RSC pool so we never create more cadeaux than exist in
+    # vanilla and never duplicate instance IDs.
+    for i, loc_key in enumerate(remaining_locs):
+        if i < len(filler_items):
+            item = filler_items[i]
+            if item.category == "cadeaux":
+                from types import SimpleNamespace
+                item = SimpleNamespace(
+                    object="RSC_X_CADEAUX",
+                    save_idx=item.save_idx,
+                    friendly_name="RSC_X_CADEAUX",
+                    category="cadeaux",
+                )
+            placement[loc_key] = item
+        else:
+            placement[loc_key] = _plain_barrel(rng)
 
     # Clean up starting item from STARTING_ITEMS so it doesn't persist between calls
     if starting_item:
@@ -1263,7 +1316,7 @@ if __name__ == "__main__":
             if args.verbose or len(seeds) == 1:
                 from collections import defaultdict
 
-                soul_dist = defaultdict(int)
+                soul_dist = aultdict(int)
                 key_dist = defaultdict(int)
                 for loc_key, item in placement.items():
                     level = loc_key.split(":")[0]

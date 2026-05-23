@@ -28,6 +28,20 @@ _CADEAUX_RSC: frozenset[str] = frozenset({
     "RSC_PICKUP_CADEAUX",
 })
 
+# Barrel/crate RSC names — a barrel is a cadeaux only when save_idx != 0.
+# Mirrors patcher.py BARREL_TYPES + fill.py _PLAIN_BARREL_POOL.
+_BARREL_RSC: frozenset[str] = frozenset({
+    "RSC_X_BARREL",
+    "RSC_X_BARREL_A",
+    "RSC_X_BARREL_D",
+    "RSC_X_BARREL_L",
+    "RSC_EXPLOSIVE_BARREL",
+    "RSC_TE_PACKBOX1",
+    "RSC_TE_PACKBOX2",
+    "RSC_FL_CRATE",
+    "RSC_UN_CRATES",
+})
+
 # ── Level ID → levels.txt block number ───────────────────────────────────────
 
 LEVEL_TO_NUM: dict[str, int] = {
@@ -123,7 +137,7 @@ RSC_TO_DIRECTIVE: dict[str, str | None] = {
     "RSC_X_SHOTGUN":         "shotgun",
     "RSC_X_SHOTGUN2":        "sawedshotgun",
     "RSC_X_LIGHT_SOUL":      "lightsoul",
-    # Dark souls / govi — directive is "darksoul <instance_id>", resolved at patch time
+    # Dark souls / govi — directive is "darksoul <save_idx>", resolved at patch time
     "RSC_X_DARK_SOUL":       "darksoul",
     "RSC_X_GOVI":            "darksoul",
     # Multi-instance items — condition updated but not moved (first placement wins)
@@ -340,6 +354,11 @@ def _patch_coffingate_lines(blocks: list[dict], gate_remap: dict[str, int]) -> i
             new_sl = gate_remap.get(best_gate, GATE_VANILLA_SL.get(best_gate, 0))
             if new_sl == 0:
                 new_condition = _sl_token_re.sub("", condition).strip()
+                # Collapse any double-spaces left after removing the SL token
+                new_condition = re.sub(r'\s{2,}', ' ', new_condition)
+                # Empty condition (SL-only gate) → "NONE" so the game doesn't crash
+                if not new_condition:
+                    new_condition = "NONE"
             else:
                 sl_token = f"SL{new_sl}"
                 if _sl_token_re.search(condition):
@@ -447,12 +466,12 @@ def patch_levels_txt(
             directive = GAD_DIRECTIVE.get(source_loc.level_id)
         elif rsc_name in ("RSC_X_DARK_SOUL", "RSC_X_GOVI"):
             # levels.txt format: $darksoul <soul_id> "<condition>"
-            # The patcher writes source_loc.instance_id into the destination
+            # The patcher writes source_loc.save_idx into the destination
             # slot's record (via the "reward" field → INSTANCE_OFF).  The game
             # therefore tracks this soul by the SOURCE soul's ID, not the
-            # destination slot's ID.  Use source_loc.instance_id here so the
+            # destination slot's ID.  Use source_loc.save_idx here so the
             # tracker entry matches what the game world reports.
-            soul_id = source_loc.instance_id
+            soul_id = source_loc.save_idx
             if not soul_id or soul_id not in existing_soul_ids:
                 continue
             directive = f"darksoul {soul_id}"
@@ -471,7 +490,7 @@ def patch_levels_txt(
         directive_entries.append((directive, level_num, condition))
 
     # True form souls — use loc_key_remap from randomize_true_forms.
-    # src carries the soul ID (instance_id written to dst slot by enemy randomizer);
+    # src carries the soul ID (save_idx written to dst slot by enemy randomizer);
     # dst provides the level and access condition.
     if true_form_loc_remap:
         from extracted_enemy_locations import ENEMY_TABLE
@@ -480,7 +499,7 @@ def patch_levels_txt(
             dst_rec = ENEMY_TABLE.get(dst_key)
             if src_rec is None or dst_rec is None:
                 continue
-            soul_id = src_rec.instance_id
+            soul_id = src_rec.save_idx
             if not soul_id or soul_id not in existing_soul_ids:
                 continue
             level_num = LEVEL_TO_NUM.get(dst_rec.level_id)
@@ -587,12 +606,46 @@ def patch_levels_txt(
 
     cg_updated = _patch_coffingate_lines(blocks, gate_remap)
 
-    # ── Cadeaux counts — STUBBED ──────────────────────────────────────────────
-    # $cadeaux N lines are left at their vanilla values for now.
-    # The accounting logic (mapped_vanilla / placed_cadeaux) was producing
-    # incorrect totals; stubbing keeps the vanilla counts intact so the game
-    # doesn't crash on launch.  Re-implement when the root cause is resolved.
+    # ── Cadeaux counts ────────────────────────────────────────────────────────
+    # Count how many cadeaux end up in each level after placement and update
+    # the $cadeaux N lines accordingly.
+    #
+    # A placed item is a cadeaux if its source RawLocation has category="cadeaux".
+    # This covers:
+    #   • explicit cadeaux RSC types (RSC_CADEAUX, RSC_X_CADEAUX, RSC_PICKUP_CADEAUX)
+    #   • persistent barrel cadeaux — both save_idx != 0 AND save_idx == 0 variants
+    #     (the engine assigns save slots for the latter at runtime; track_type=0x0002
+    #      is the reliable signal, and it is already reflected in the CSV category)
+    # Using category directly avoids duplicating the has_drop logic here and
+    # correctly handles cross-category placement (e.g. a soul in a cadeaux slot
+    # has category="soul" and is NOT counted, which is correct).
+    cadeaux_per_level: dict[int, int] = {}
+    for loc_key, source_loc in progression_placement.items():
+        dest = LOCATION_TABLE.get(loc_key)
+        if dest is None:
+            continue
+        level_num = LEVEL_TO_NUM.get(dest.level_id)
+        if level_num is None:
+            continue
+        if getattr(source_loc, "category", None) == "cadeaux":
+            cadeaux_per_level[level_num] = cadeaux_per_level.get(level_num, 0) + 1
+
+    _cadeaux_line_re = re.compile(r'^\s*\$cadeaux\s+\d+', re.IGNORECASE)
     cadeaux_updated = 0
+    for b in blocks:
+        new_count = cadeaux_per_level.get(b["num"])
+        if new_count is None:
+            continue
+        new_lines = []
+        replaced = False
+        for line in b["lines"]:
+            if _cadeaux_line_re.match(line) and not replaced:
+                new_lines.append(f'    $cadeaux {new_count}')
+                replaced = True
+                cadeaux_updated += 1
+            else:
+                new_lines.append(line)
+        b["lines"] = new_lines
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(_serialize(blocks), encoding="utf-8")

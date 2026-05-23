@@ -10,7 +10,7 @@ Never edit extracted_enemy_locations.py by hand.
 
 CSV columns (must match exactly):
     level_id, source_file, offset, object, category,
-    instance_id, is_tracked, is_verified, zone, x, y, z,
+    save_idx, is_tracked, is_verified, zone, x, y, z,
     notes, context_group, movement_type
 """
 
@@ -30,7 +30,7 @@ OUT_PATH = ROOT / "extracted_enemy_locations.py"
 
 REQUIRED_COLUMNS = {
     "level_id", "source_file", "offset", "object", "category",
-    "instance_id", "is_tracked", "is_verified", "zone", "x", "y", "z",
+    "save_idx", "is_tracked", "is_verified", "zone", "x", "y", "z",
     "notes", "context_group", "movement_type", "level_region", "sub_region",
 }
 
@@ -130,7 +130,7 @@ class EnemyLocation(NamedTuple):
                          Empty for enemy_locked records.
 
     Tracking fields (ignored by shuffle logic):
-        instance_id, is_tracked, is_verified, zone, x, y, z, notes
+        save_idx, is_tracked, is_verified, zone, x, y, z, notes
     """
     level_id:      str
     source_file:   str
@@ -143,7 +143,7 @@ class EnemyLocation(NamedTuple):
     level_region:  Optional[str]
     sub_region:    Optional[str]
     gate_expr:     Optional[str]
-    instance_id:   Optional[int]
+    save_idx:      Optional[int]
     is_tracked:    Optional[bool]
     is_verified:   Optional[bool]
     zone:          Optional[str]
@@ -253,7 +253,7 @@ def generate(rows):
             f"{'None' if not lr else _q(lr)}, "
             f"{'None' if not sr else _q(sr)}, "
             f"{'None' if ge is None else _q(ge)}, "
-            f"{_opt_numeric(row.get('instance_id',''), int)}, "
+            f"{_opt_numeric(row.get('save_idx',''), int)}, "
             f"{_opt_bool(row.get('is_tracked',''))}, "
             f"{_opt_bool(row.get('is_verified',''))}, "
             f"{_opt_str(row.get('zone',''))}, "

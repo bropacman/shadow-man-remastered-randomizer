@@ -107,6 +107,9 @@ _HTML = r"""<!DOCTYPE html>
   .row { display: flex; align-items: center; gap: 8px; }
   .row + .row { margin-top: 8px; }
 
+  input[type=text], input[type=number], textarea {
+    -webkit-user-select: text; user-select: text;
+  }
   input[type=text], input[type=number], select {
     background: #222226; border: 1px solid var(--border);
     border-radius: 5px; color: var(--text);
@@ -129,6 +132,13 @@ _HTML = r"""<!DOCTYPE html>
   button:disabled { opacity: .35; cursor: default; }
   .btn-ghost   { background: #28282c; color: #aaa; border: 1px solid #383840; }
   .btn-dice    { background: #1a2f4a; color: var(--blue); border: 1px solid #243a5e; }
+  .rng-btn {
+    background: transparent; border: 1px solid var(--dim); border-radius: 3px;
+    color: var(--dim); cursor: pointer; font-size: 11px; padding: 1px 5px;
+    line-height: 1.4; flex-shrink: 0;
+  }
+  .rng-btn:hover { border-color: var(--muted); color: var(--muted); }
+  .rng-btn.rng-active { border-color: #a78bfa; color: #a78bfa; background: rgba(167,139,250,0.1); }
   .btn-run     { background: var(--accent2); color: #fff; font-size: 13px; padding: 7px 22px; }
   .btn-restore { background: #3a1a1a; color: #e8a0a0; border: 1px solid #522020; font-size: 13px; padding: 7px 22px; }
 
@@ -145,14 +155,14 @@ _HTML = r"""<!DOCTYPE html>
   .divider { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
 
   /* Enemy mode */
-  .enemy-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .enemy-row { display: flex; align-items: center; gap: 10px; }
   .enemy-row .lbl { color: var(--muted); font-size: 11px; white-space: nowrap; }
   .enemy-row select { flex: 1; min-width: 0; }
 
   /* Slider */
   input[type=range] {
     -webkit-appearance: none; appearance: none;
-    width: 160px; height: 4px; border-radius: 2px;
+    width: 120px; height: 4px; border-radius: 2px;
     background: #333; outline: none; cursor: pointer;
   }
   input[type=range]::-webkit-slider-thumb {
@@ -186,6 +196,10 @@ _HTML = r"""<!DOCTYPE html>
     font-weight: normal; text-transform: none; letter-spacing: normal; font-style: normal;
   }
   .tip:hover .tip-box { opacity: 1; }
+  /* Anchor tooltip to the right edge — use on tips near the right side of the window */
+  .tip.anchor-right .tip-box { left: auto; right: 0; transform: none; }
+  /* Anchor tooltip below the icon — use on tips near the top of the window */
+  .tip.anchor-bottom .tip-box { bottom: auto; top: calc(100% + 7px); }
 
   /* Status / terminal */
   .gate-desc { color: var(--muted); font-size: 11px; font-style: italic; }
@@ -196,6 +210,7 @@ _HTML = r"""<!DOCTYPE html>
     font-size: 11px; height: 140px; overflow-y: auto;
     padding: 10px 13px; white-space: pre-wrap; word-break: break-all;
     color: #a0a0a8; line-height: 1.55; margin-bottom: 8px;
+    -webkit-user-select: text; user-select: text; cursor: text;
   }
   .terminal::-webkit-scrollbar { width: 6px; }
   .terminal::-webkit-scrollbar-track { background: transparent; }
@@ -226,31 +241,52 @@ _HTML = r"""<!DOCTYPE html>
 <body>
 
 <div class="header">
-  <h1>Shadow Man Remastered Randomizer</h1>
+  <h1>Shadow Man Remastered Randomizer <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:6px">v1.1.5</span></h1>
   <p>Generates a guaranteed-beatable seed &mdash; drop the .kpf in your mods folder and play.</p>
 </div>
 
 <!-- Row 1: Game Dir + Seed -->
 <div class="card-row" style="align-items:stretch">
-  <div class="card" style="flex:1;min-width:280px;display:flex;flex-direction:column;justify-content:center">
-    <div class="card-title">Game Directory</div>
+  <div class="card" style="flex:0 0 300px;display:flex;flex-direction:column;justify-content:center;background:#16161a;border-color:#242428">
+    <div class="card-title">
+      Game Directory
+      <span class="tip anchor-bottom" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">Point this to your Shadow Man Remastered install folder — the one containing <b>thoth_x64.exe</b> and the game&rsquo;s .kpf files. Use Browse&hellip; or paste the path directly. The randomizer drops its output .kpf into the <b>mods/</b> folder inside that directory and never modifies your original files.</span></span>
+    </div>
     <div class="row">
       <input type="text" id="gameDir" class="dir-input" placeholder="Path to Shadow Man Remastered&hellip;">
       <button class="btn-ghost" onclick="browseDir()">Browse&hellip;</button>
     </div>
   </div>
-  <div class="card" style="flex:1 ;min-width:280px">
-    <div class="card-title">Seed</div>
-    <div class="row">
-      <input type="number" id="seed" class="seed-input" placeholder="random" min="1" max="2147483647">
-      <button class="btn-dice" onclick="randomizeSeed()">&#127922;&ensp;Randomize</button>
+  <div class="card" style="flex:1;background:#16161a;border-color:#242428;display:grid;grid-template-columns:auto 1fr;gap:0 20px;align-items:start">
+    <div>
+      <div class="card-title">
+        Seed
+        <span class="tip anchor-bottom" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">A number that controls everything random in the run. To reproduce a run exactly, you need the same seed <b>and</b> the same settings — changing any option will produce a different result even with the same seed. Leave blank to get a fresh random seed each time you click Run.</span></span>
+      </div>
+      <div class="row">
+        <input type="number" id="seed" class="seed-input" placeholder="random" min="1" max="2147483647">
+        <button class="btn-dice" onclick="randomizeSeed()">&#127922;&ensp;Randomize</button>
+      </div>
+      <div class="hint" style="margin-top:4px">Leave blank for a new random seed each run.</div>
     </div>
-    <div class="hint" style="margin-top:6px">Leave blank for a new random seed each run.</div>
+    <div>
+      <div class="card-title" style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        Settings String
+        <span class="tip anchor-bottom" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">Encodes all current settings (not the seed or game directory) into a compact string you can save or share. Paste a string and click Import — or press Enter — to restore a saved configuration.</span></span>
+        <span style="flex:1"></span>
+        <button class="btn-ghost" onclick="exportSettings()" style="white-space:nowrap;font-size:11px;padding:2px 8px">&#128203;&ensp;Copy</button>
+        <button class="btn-ghost" onclick="importSettings()" style="white-space:nowrap;font-size:11px;padding:2px 8px">&#8628;&ensp;Import</button>
+        <span id="settingsMsg" style="font-size:11px;min-width:50px"></span>
+      </div>
+      <input type="text" id="settingsString" placeholder="Paste a settings string to restore&hellip;"
+             style="width:100%;font-family:'Cascadia Code','Consolas','Courier New',monospace;font-size:11px"
+             onkeydown="if(event.key==='Enter')importSettings()">
+    </div>
   </div>
 </div>
 
-<!-- Row 2: Gameplay+Starting Item (left) | Coffin Gates+Progression (right) -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
+<!-- Row 2: Gameplay+Starting Item (left) | Coffin Gates+Progression (centre) | Gameplay Tuning (right) -->
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
 
 
   <!-- Left: Gameplay checkboxes + Starting Item -->
@@ -288,7 +324,7 @@ _HTML = r"""<!DOCTYPE html>
     <div class="row">
       <select id="startingItem">
         <option value="">None</option>
-        <option value="random">Random</option>
+        <option value="random">🎲 random</option>
         <option value="RSC_X_ENGINEERS_KEY">⭐ Engineers Key</option>
         <option value="RSC_X_BATON">Baton</option>
         <option value="RSC_X_CALABASH">Calabash</option>
@@ -317,20 +353,12 @@ _HTML = r"""<!DOCTYPE html>
       <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Places a bonus item at the church in Louisiana Swampland at game start. The selected item is removed from the shuffle pool.</span></span>
     </div>
     <hr class="divider">
-    <div class="card-title" style="margin-bottom:8px">
-      Entrance Randomizer
-      <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>deadside only:</b> shuffles the 9 Deadside hub levels among themselves — which level you enter is randomized but Dark Engine soul gates stay vanilla.<br><b>cross hub:</b> all 14 levels (Deadside + Dark Engine) shuffled together; a Deadside level may lead to a Dark Engine spoke and vice versa.</span></span>
-    </div>
-    <div class="row">
-      <select id="entranceMode" onchange="onEntranceModeChange()">
-        <option value="off">Off — vanilla entrances</option>
-        <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
-        <option value="cross_hub">Cross Hub — all 14 levels shuffled</option>
-      </select>
-    </div>
-    <div id="entranceHint" class="hint" style="margin-top:6px;display:none">
-      &#x26A0;&#xFE0F; Works best with open coffin gates (easy/open preset) and Insanity Tier &ge;1.
-    </div>
+    <div class="card-title" style="margin-bottom:8px">Teddy Bear Hints</div>
+    <label class="check-label">
+      <input type="checkbox" id="patchTracker">
+      Patch Tracker
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Rewrites map badge hints to reflect randomized item locations. Off by default (strips all item badges to avoid wrong vanilla hints).</span></span>
+    </label>
   </div>
 
   <!-- Right column: Coffin Gates + Progression stacked -->
@@ -353,6 +381,7 @@ _HTML = r"""<!DOCTYPE html>
           <option value="medium">medium</option>
           <option value="hard">hard</option>
           <option value="chaos">chaos</option>
+          <option value="random">🎲 random</option>
         </select>
         <span class="gate-desc" id="gateDesc">default shuffle</span>
       </div>
@@ -396,36 +425,99 @@ _HTML = r"""<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="card" style="flex:1 ;min-width:280px">
-      <div class="card-title">Progression</div>
-      <div class="row" style="margin-bottom:10px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Insanity Tier</span>
-        <select id="insanity" style="width:172px;flex:none;margin-left:8px">
-          <option value="0">Off</option>
-          <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
-          <option value="2">Tier 2 &mdash; + Cadeaux slots (untested)</option>
-          <option value="3">Full &mdash; All slots (untested)</option>
-        </select>
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed. By default, key items shuffle among key item slots and dark souls shuffle anywhere.<br><b>Tier 1:</b> Also allows key items in Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also allows Cadeaux slots (untested).<br><b>Full:</b> Any slot in the game — wildly random.</span></span>
+    <div class="card" style="flex:1;min-width:280px">
+      <div class="card-title">
+        Entrance Randomizer
+        <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>deadside only:</b> shuffles the 9 Deadside levels among themselves — which level you enter is randomized but the Engine Rooms stay vanilla.<br><b>cross hub:</b> 14 levels (Deadside levels + Engine Rooms) shuffled together; a Deadside portal may lead to an Engine Room and vice versa.</span></span>
       </div>
       <div class="row">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Balancing:</span>
-        <input type="range" id="progBalance" min="0" max="100" value="50"
-               oninput="document.getElementById('progBalVal').textContent=this.value">
-        <span class="slider-val" id="progBalVal">50</span>
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls how deep into the world progression items tend to be placed. Default 50 is balanced. 0 = items placed early, 100 = items pushed deep.</span></span>
+        <select id="entranceMode" onchange="onEntranceModeChange()">
+          <option value="off">Off — vanilla entrances</option>
+          <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
+          <option value="cross_hub">Cross Hub — Deadside levels &amp; Engine Rooms shuffled</option>
+          <option value="random">🎲 random</option>
+        </select>
       </div>
-      <div class="hint" style="margin-top:6px">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</div>
+      <div id="entranceHint" class="hint" style="margin-top:6px;display:none">
+        &#x26A0;&#xFE0F; Works best with Insanity Tier &ge;1.
+      </div>
     </div>
 
   </div>
+
+  <!-- Col 3: Gameplay Tuning -->
+  <div class="card">
+    <div class="card-title">Gameplay Tuning</div>
+
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Health</div>
+    <div class="row" style="margin-bottom:8px">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">Starting:</span>
+      <input type="range" id="startingHealth" min="1" max="10" value="5"
+             oninput="document.getElementById('startingHealthVal').textContent=this.value">
+      <span class="slider-val" id="startingHealthVal">5</span>
+      <button class="rng-btn" id="startingHealthRng" onclick="toggleRng('startingHealth')" title="Randomize per seed">&#127922;</button>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Starting max health on a 1&ndash;10 scale (each step = 1&thinsp;000 units). Vanilla is 5 = 5&thinsp;000. Current health is set to max on spawn.</span></span>
+    </div>
+    <div class="row" style="margin-bottom:6px">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per altar:</span>
+      <input type="range" id="altarHealthGrant" min="1" max="10" value="1"
+             oninput="document.getElementById('altarHealthGrantVal').textContent=this.value">
+      <span class="slider-val" id="altarHealthGrantVal">1</span>
+      <button class="rng-btn" id="altarHealthGrantRng" onclick="toggleRng('altarHealthGrant')" title="Randomize per seed">&#127922;</button>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Health restored per life altar interaction on the same 1&ndash;10 scale (vanilla: 1 = 1&thinsp;000). Starting health + 5 &times; altar grant should not exceed the 10&thinsp;000 cap.</span></span>
+    </div>
+    <div class="hint" style="margin-bottom:6px">start + 5 &times; per-altar &le; 10 (hard cap)</div>
+
+    <hr class="divider">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px">Cadeaux
+      <span class="tip"><span class="tip-icon" style="color:var(--red)">!</span><span class="tip-box">Cadeaux counting is not yet fully working &mdash; some cadeaux may not register correctly in-game. Consider lowering these values from their defaults until this is resolved.</span></span>
+    </div>
+    <div class="row" style="margin-bottom:8px">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Altar cost:</span>
+      <input type="number" id="altarCadeauxRequired" value="100" min="1" max="133" style="width:65px" oninput="syncCadeauxConstraints()">
+      <button class="rng-btn" id="altarCadeauxRequiredRng" onclick="toggleRng('altarCadeauxRequired');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Cadeaux required and spent per life altar interaction. The minimum required and the per-interaction cost are always equal (vanilla: 100, max: 133 = &lfloor;666 &divide; 5&rfloor;).</span></span>
+    </div>
+    <div id="altarCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
+    <div class="row" style="margin-top:8px">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Fog door:</span>
+      <input type="number" id="fogometersCadeauxRequired" value="666" min="5" max="666" style="width:65px" oninput="syncCadeauxConstraints()">
+      <button class="rng-btn" id="fogometersCadeauxRequiredRng" onclick="toggleRng('fogometersCadeauxRequired');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Cadeaux required to open the Fogometers light soul door (vanilla: 666). Must be at least 5 &times; the altar cost and no more than 666.</span></span>
+    </div>
+    <div id="fogometersCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
+
+    <hr class="divider">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Progression</div>
+    <div class="row" style="margin-bottom:8px">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">Insanity Tier</span>
+      <select id="insanity" style="width:180px;flex:none;margin-left:8px">
+        <option value="0">Off</option>
+        <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
+        <option value="2">Tier 2 &mdash; + Cadeaux slots (untested)</option>
+        <option value="3">Full &mdash; All slots (untested)</option>
+        <option value="random">🎲 random tier</option>
+      </select>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed. By default, key items shuffle among key item slots and dark souls shuffle anywhere.<br><b>Tier 1:</b> Also allows key items in Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also allows Cadeaux slots (untested).<br><b>Full:</b> Any slot in the game — wildly random.</span></span>
+    </div>
+    <div class="row">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">Balancing:</span>
+      <input type="range" id="progBalance" min="0" max="100" value="50"
+             oninput="document.getElementById('progBalVal').textContent=this.value">
+      <span class="slider-val" id="progBalVal">50</span>
+      <button class="rng-btn" id="progBalanceRng" onclick="toggleRng('progBalance')" title="Randomize per seed">&#127922;</button>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls how deep into the world progression items tend to be placed. Default 50 is balanced. 0 = items placed early, 100 = items pushed deep.</span></span>
+    </div>
+    <div class="hint" style="margin-top:6px">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</div>
+  </div>
+
 </div>
 
 <!-- Row 3: Enemies + Cosmetics -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
   <div class="card" style="flex:1 ;min-width:280px">
     <div class="card-title">Enemies</div>
-    <div class="check-grid" style="margin-bottom:10px">
+    <div class="check-grid" style="margin-bottom:6px">
       <label class="check-label">
         <input type="checkbox" id="shuffleEnemies" onchange="onEnemiesChange()">
         Shuffle Enemies
@@ -444,14 +536,15 @@ _HTML = r"""<!DOCTYPE html>
     </div>
     <div class="enemy-row">
       <span class="lbl">Enemy Mode:</span>
-      <select id="enemyMode" disabled>
+      <select id="enemyMode" disabled style="width:180px;flex:none">
         <option value="difficulty">difficulty &mdash; tier-weighted</option>
         <option value="contextual">contextual &mdash; area pools</option>
         <option value="full">full &mdash; completely random</option>
+        <option value="random">🎲 random mode</option>
       </select>
       <span class="tip"><span class="tip-icon">?</span><span class="tip-box"><b>difficulty:</b> enemies replaced by others of similar difficulty — same tier, weighted by area depth.<br><b>contextual:</b> shuffled within context groups (deadside/liveside/prison stay separated).<br><b>full:</b> completely random across the whole enemy pool (use Mix Movement Types to also cross ground/flying/etc).</span></span>
+      <span class="hint" id="enemyHint">enable Shuffle Enemies to unlock</span>
     </div>
-    <span class="hint" id="enemyHint" style="margin-left:4px">enable Shuffle Enemies to unlock</span>
   </div>
 
   <div class="card" style="margin-bottom:0; flex: 1">
@@ -465,7 +558,7 @@ _HTML = r"""<!DOCTYPE html>
       <label class="check-label">
         <input type="checkbox" id="shuffleVoices">
         Shuffle Voice Lines
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man&rsquo;s generic ambient voice lines. Purely cosmetic.</span></span>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man&rsquo;s generic ambient voice lines. Purely cosmetic.</span></span>
       </label>
       <label class="check-label">
         <input type="checkbox" id="shuffleWeaponsSfx">
@@ -475,7 +568,7 @@ _HTML = r"""<!DOCTYPE html>
       <label class="check-label">
         <input type="checkbox" id="shuffleEnemiesSfx">
         Shuffle Enemy SFX
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles enemy sound effects within type pools — pain sounds trade with other enemies' pain sounds, startle sounds with startle sounds, attack sounds with attack sounds. Ambient creatures and death-by-weapon sounds are left untouched. Purely cosmetic.</span></span>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles enemy sound effects within type pools — pain sounds trade with other enemies' pain sounds, startle sounds with startle sounds, attack sounds with attack sounds. Ambient creatures and death-by-weapon sounds are left untouched. Purely cosmetic.</span></span>
       </label>
       <label class="check-label">
         <input type="checkbox" id="shuffleAmbients">
@@ -485,18 +578,8 @@ _HTML = r"""<!DOCTYPE html>
       <label class="check-label">
         <input type="checkbox" id="shuffleSky">
         Shuffle Sky Textures
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Swaps sky textures across levels — each sky layer (horizon, clouds, hills, sun) is shuffled within its own pool so only matching layers trade places. Purely cosmetic.</span></span>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Swaps sky textures across levels — each sky layer (horizon, clouds, hills, sun) is shuffled within its own pool so only matching layers trade places. Purely cosmetic.</span></span>
       </label>
-    </div>
-    <div style="border-top:1px solid #333;margin-top:8px;padding-top:8px">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px">Teddy Bear Hints</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px">
-        <label class="check-label">
-          <input type="checkbox" id="patchTracker">
-          Patch Tracker
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Rewrites map badge hints to reflect randomized item locations. Off by default (strips all item badges to avoid wrong vanilla hints).</span></span>
-        </label>
-      </div>
     </div>
   </div>
 </div>
@@ -517,6 +600,7 @@ _HTML = r"""<!DOCTYPE html>
 <script>
 const GATE_DESCS = {
   none:   'default coffin gates',
+  random: '🎲 preset rolled randomly each seed',
   open:   'all gates free — no souls required',
   easy:   'light shuffle, SL7 cap, 6 gates open',
   medium: 'standard shuffle, SL8 cap, 3 gates open',
@@ -533,6 +617,10 @@ function updateGateDesc() {
     maxSlEl.disabled = true;
     openGatesEl.value = '';
     openGatesEl.disabled = true;
+  } else if (preset === 'random') {
+    // Fields stay editable — the resolved preset is unknown until runtime
+    maxSlEl.disabled = false;
+    openGatesEl.disabled = false;
   } else {
     maxSlEl.disabled = false;
     maxSlEl.value = '';
@@ -550,6 +638,82 @@ function onEnemiesChange() {
   document.getElementById('enemyMode').disabled = !on;
   document.getElementById('enemyMixMovement').disabled = !on;
   document.getElementById('enemyHint').textContent = on ? '' : 'enable Shuffle Enemies to unlock';
+}
+// ── Per-field RNG toggle (🎲 buttons) ────────────────────────────────────────
+function isRng(id) {
+  const btn = document.getElementById(id + 'Rng');
+  return btn ? btn.classList.contains('rng-active') : false;
+}
+function toggleRng(id) {
+  const btn = document.getElementById(id + 'Rng');
+  if (!btn) return;
+  const active = btn.classList.toggle('rng-active');
+  const el = document.getElementById(id);
+  if (el) {
+    el.disabled = active;
+    el.style.opacity = active ? '0.35' : '';
+  }
+  const valEl = document.getElementById(id + 'Val');
+  if (valEl) valEl.textContent = active ? '?' : (el ? el.value : '');
+}
+function applyRng(id, val) {
+  // Restore a field's RNG state when importing settings
+  const shouldRng = (val === 'random');
+  const btn = document.getElementById(id + 'Rng');
+  if (btn) btn.classList.toggle('rng-active', shouldRng);
+  const el = document.getElementById(id);
+  if (el) {
+    el.disabled = shouldRng;
+    el.style.opacity = shouldRng ? '0.35' : '';
+  }
+  const valEl = document.getElementById(id + 'Val');
+  if (valEl) valEl.textContent = shouldRng ? '?' : (el ? el.value : '');
+}
+
+function syncCadeauxConstraints() {
+  const ALTAR_MAX = 133; // floor(666 / 5)
+  const FOG_MAX   = 666;
+  const altarEl   = document.getElementById('altarCadeauxRequired');
+  const fogEl     = document.getElementById('fogometersCadeauxRequired');
+  const altarMsg  = document.getElementById('altarCadeauxMsg');
+  const fogMsg    = document.getElementById('fogometersCadeauxMsg');
+
+  // When either field is randomized, skip constraint enforcement
+  if (isRng('altarCadeauxRequired') || isRng('fogometersCadeauxRequired')) {
+    altarMsg.style.display = 'none';
+    fogMsg.style.display = 'none';
+    return;
+  }
+
+  let altarVal = parseInt(altarEl.value) || 1;
+  if (altarVal > ALTAR_MAX) {
+    altarEl.value = ALTAR_MAX;
+    altarVal = ALTAR_MAX;
+    altarMsg.textContent = `Capped at ${ALTAR_MAX} — altar cost can’t exceed ⌊666 ÷ 5⌋`;
+    altarMsg.style.display = 'block';
+  } else if (altarVal < 1) {
+    altarEl.value = 1;
+    altarVal = 1;
+    altarMsg.textContent = 'Minimum value is 1';
+    altarMsg.style.display = 'block';
+  } else {
+    altarMsg.style.display = 'none';
+  }
+
+  const fogMin = altarVal * 5;
+  fogEl.min = fogMin;
+  let fogVal = parseInt(fogEl.value) || fogMin;
+  if (fogVal < fogMin) {
+    fogEl.value = fogMin;
+    fogMsg.textContent = `Raised to ${fogMin} — must be ≥ 5 × altar cost (${altarVal})`;
+    fogMsg.style.display = 'block';
+  } else if (fogVal > FOG_MAX) {
+    fogEl.value = FOG_MAX;
+    fogMsg.textContent = `Capped at ${FOG_MAX}`;
+    fogMsg.style.display = 'block';
+  } else {
+    fogMsg.style.display = 'none';
+  }
 }
 function randomizeSeed() {
   document.getElementById('seed').value = Math.floor(Math.random() * 2147483647) + 1;
@@ -576,7 +740,7 @@ function getConfig() {
     shuffleSky:       document.getElementById('shuffleSky').checked,
     patchTracker:        document.getElementById('patchTracker').checked,
     openGatesN:          document.getElementById('openGatesN').value,
-    insanity:         parseInt(document.getElementById('insanity').value),
+    insanity:         document.getElementById('insanity').value,
     shuffleLightSoul: document.getElementById('shuffleLightSoul').checked,
     shuffleKeyItems:  document.getElementById('shuffleKeyItems').checked,
     shuffleWeapons:   document.getElementById('shuffleWeapons').checked,
@@ -584,10 +748,119 @@ function getConfig() {
     enemyMode:        document.getElementById('enemyMode').value.split('—')[0].trim(),
     enemyMixMovement: document.getElementById('enemyMixMovement').checked,
     shuffleAmbients:  document.getElementById('shuffleAmbients').checked,
-    progBalance:      document.getElementById('progBalance').value,
-    entranceMode:     document.getElementById('entranceMode').value,
+    progBalance:               isRng('progBalance') ? 'random' : document.getElementById('progBalance').value,
+    entranceMode:              document.getElementById('entranceMode').value,
+    altarCadeauxRequired:      isRng('altarCadeauxRequired') ? 'random' : document.getElementById('altarCadeauxRequired').value,
+    fogometersCadeauxRequired: isRng('fogometersCadeauxRequired') ? 'random' : document.getElementById('fogometersCadeauxRequired').value,
+    startingHealth:            isRng('startingHealth') ? 'random' : document.getElementById('startingHealth').value,
+    altarHealthGrant:          isRng('altarHealthGrant') ? 'random' : document.getElementById('altarHealthGrant').value,
   };
 }
+// ── Settings string export / import ──────────────────────────────────────────
+const SETTINGS_OMIT = new Set(['gameDir', 'seed']); // never encoded — machine-specific
+
+function encodeSettings() {
+  const cfg = getConfig();
+  SETTINGS_OMIT.forEach(k => delete cfg[k]);
+  return btoa(JSON.stringify(cfg));
+}
+
+function exportSettings() {
+  const str = encodeSettings();
+  const el = document.getElementById('settingsString');
+  el.value = str;
+  el.select();
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch(e) {}
+  if (!copied) {
+    navigator.clipboard.writeText(str).catch(() => {});
+  }
+  const msg = document.getElementById('settingsMsg');
+  msg.textContent = 'Copied!';
+  msg.style.color = 'var(--green)';
+  setTimeout(() => { msg.textContent = ''; }, 2000);
+}
+
+function importSettings() {
+  const raw = document.getElementById('settingsString').value.trim();
+  const msg = document.getElementById('settingsMsg');
+  if (!raw) return;
+  let cfg;
+  try {
+    cfg = JSON.parse(atob(raw));
+  } catch(e) {
+    msg.textContent = 'Invalid string';
+    msg.style.color = 'var(--red)';
+    setTimeout(() => { msg.textContent = ''; }, 2500);
+    return;
+  }
+  applyConfig(cfg);
+  msg.textContent = 'Imported!';
+  msg.style.color = 'var(--green)';
+  setTimeout(() => { msg.textContent = ''; }, 2000);
+}
+
+function applyConfig(cfg) {
+  function set(id, val) {
+    const el = document.getElementById(id);
+    if (!el || val === undefined) return;
+    if (el.type === 'checkbox') el.checked = !!val;
+    else if (el.type === 'range') { el.value = val; el.dispatchEvent(new Event('input')); }
+    else el.value = val;
+  }
+  set('gatePreset',               cfg.gatePreset);
+  set('maxSl',                    cfg.maxSl);
+  set('shuffleGad',               cfg.shuffleGad);
+  set('startingItem',             cfg.startingItem);
+  set('shuffleEnemies',           cfg.shuffleEnemies);
+  set('shuffleTrueforms',         cfg.shuffleTrueforms);
+  set('shuffleMusic',             cfg.shuffleMusic);
+  set('shuffleVoices',            cfg.shuffleVoices);
+  set('shuffleWeaponsSfx',        cfg.shuffleWeaponsSfx);
+  set('shuffleEnemiesSfx',        cfg.shuffleEnemiesSfx);
+  set('shuffleSky',               cfg.shuffleSky);
+  set('patchTracker',             cfg.patchTracker);
+  set('openGatesN',               cfg.openGatesN);
+  set('insanity',                 cfg.insanity);
+  set('shuffleLightSoul',         cfg.shuffleLightSoul);
+  set('shuffleKeyItems',          cfg.shuffleKeyItems);
+  set('shuffleWeapons',           cfg.shuffleWeapons);
+  set('shuffleLore',              cfg.shuffleLore);
+  set('enemyMixMovement',         cfg.enemyMixMovement);
+  set('shuffleAmbients',          cfg.shuffleAmbients);
+  set('entranceMode',             cfg.entranceMode);
+  // Restore rng-toggle fields (value may be 'random' or a concrete value)
+  if (cfg.progBalance !== undefined) {
+    if (cfg.progBalance === 'random') { applyRng('progBalance', 'random'); }
+    else { applyRng('progBalance', cfg.progBalance); set('progBalance', cfg.progBalance); }
+  }
+  if (cfg.altarCadeauxRequired !== undefined) {
+    if (cfg.altarCadeauxRequired === 'random') { applyRng('altarCadeauxRequired', 'random'); }
+    else { applyRng('altarCadeauxRequired', cfg.altarCadeauxRequired); set('altarCadeauxRequired', cfg.altarCadeauxRequired); }
+  }
+  if (cfg.fogometersCadeauxRequired !== undefined) {
+    if (cfg.fogometersCadeauxRequired === 'random') { applyRng('fogometersCadeauxRequired', 'random'); }
+    else { applyRng('fogometersCadeauxRequired', cfg.fogometersCadeauxRequired); set('fogometersCadeauxRequired', cfg.fogometersCadeauxRequired); }
+  }
+  if (cfg.startingHealth !== undefined) {
+    if (cfg.startingHealth === 'random') { applyRng('startingHealth', 'random'); }
+    else { applyRng('startingHealth', cfg.startingHealth); set('startingHealth', cfg.startingHealth); }
+  }
+  if (cfg.altarHealthGrant !== undefined) {
+    if (cfg.altarHealthGrant === 'random') { applyRng('altarHealthGrant', 'random'); }
+    else { applyRng('altarHealthGrant', cfg.altarHealthGrant); set('altarHealthGrant', cfg.altarHealthGrant); }
+  }
+  // Restore enemy mode — strip the label suffix before setting
+  if (cfg.enemyMode) {
+    const el = document.getElementById('enemyMode');
+    if (el) el.value = cfg.enemyMode.split('—')[0].trim();
+  }
+  // Re-run side-effect handlers so dependent UI stays consistent
+  updateGateDesc();
+  onEntranceModeChange();
+  onEnemiesChange();
+}
+
 function setBusy(busy) {
   document.getElementById('runBtn').disabled     = busy;
   document.getElementById('restoreBtn').disabled = busy;
@@ -610,22 +883,33 @@ async function runPatcher() {
   if (!dir) { appendOutput('\u26a0 Please select your Shadow Man Remastered game directory first.'); return; }
   const valid = await window.pywebview.api.validate_dir(dir);
   if (!valid) { appendOutput('\u26a0 Directory doesn\'t look like a Shadow Man Remastered install (no .kpf files found). Please select the correct folder.'); return; }
-  clearOutput(); setStatus('Running\u2026'); setBusy(true); window.pywebview.api.run_patcher(getConfig());
+  const cfg = getConfig();
+  cfg._settingsStr = encodeSettings();
+  clearOutput(); setStatus('Running\u2026'); setBusy(true); window.pywebview.api.run_patcher(cfg);
 }
 function restoreVanilla() { clearOutput(); setStatus('Restoring vanilla…'); setBusy(true); window.pywebview.api.restore_vanilla(getConfig()); }
 function onDone(rc) {
   setBusy(false);
   if (rc === 0) {
-    const lines = document.getElementById('output').textContent.split('\n');
-    let seed = '', spoiler = '';
+    const outputText = document.getElementById('output').textContent;
+    const lines = outputText.split('\n');
+    let seedLine = '', spoiler = '';
     for (const l of lines) {
       const ll = l.toLowerCase();
-      if (!seed    && ll.includes('seed')    && /\d/.test(l)) seed    = l.trim();
-      if (!spoiler && ll.includes('spoiler'))                  spoiler = l.trim();
+      if (!seedLine && ll.startsWith('seed:') && /\d/.test(l)) seedLine = l.trim();
+      if (!spoiler  && ll.includes('spoiler'))                  spoiler  = l.trim();
     }
+    // Extract the bare seed number and populate the seed field
+    const seedNumMatch = seedLine.match(/Seed:\s*(\d+)/i);
+    if (seedNumMatch) {
+      document.getElementById('seed').value = seedNumMatch[1];
+    }
+    // Refresh the settings string to capture the current (post-run) state
+    document.getElementById('settingsString').value = encodeSettings();
+
     let msg = '✓ Done.';
-    if (seed)    msg += '  ' + seed;
-    if (spoiler) msg += '  |  ' + spoiler;
+    if (seedLine) msg += '  ' + seedLine;
+    if (spoiler)  msg += '  |  ' + spoiler;
     setStatus(msg, 'ok');
     document.getElementById('postRun').className = 'post-run visible';
   } else {
@@ -642,6 +926,7 @@ function onError(msg) {
 window.addEventListener('pywebviewready', async () => {
   const dir = await window.pywebview.api.get_default_dir();
   if (dir) document.getElementById('gameDir').value = dir;
+  syncCadeauxConstraints();
 });
 </script>
 </body>
@@ -760,9 +1045,11 @@ class _Api:
         elif starting_item:
             cmd += ["--starting-item", starting_item]
 
-        insanity_tier = int(config.get("insanity", 0))
-        if insanity_tier > 0:
-            cmd += ["--insanity", str(insanity_tier)]
+        insanity_val = config.get("insanity", 0)
+        if str(insanity_val) == "random":
+            cmd += ["--insanity", "random"]
+        elif int(insanity_val) > 0:
+            cmd += ["--insanity", str(int(insanity_val))]
 
         if config.get("shuffleEnemies"):
             cmd += ["--enemy-mode", config.get("enemyMode", "difficulty")]
@@ -793,6 +1080,27 @@ class _Api:
         entrance_mode = config.get("entranceMode", "off")
         if entrance_mode and entrance_mode != "off":
             cmd += ["--entrance-mode", entrance_mode]
+
+        altar_cadeaux = str(config.get("altarCadeauxRequired", "100")).strip()
+        if altar_cadeaux and altar_cadeaux != "100":
+            cmd += ["--altar-cadeaux-required", altar_cadeaux]
+
+        fog_cadeaux = str(config.get("fogometersCadeauxRequired", "666")).strip()
+        if fog_cadeaux and fog_cadeaux != "666":
+            cmd += ["--fogometers-cadeaux-required", fog_cadeaux]
+
+        starting_health = str(config.get("startingHealth", "5")).strip()
+        if starting_health and starting_health != "5":
+            cmd += ["--starting-health", starting_health]
+
+        altar_health = str(config.get("altarHealthGrant", "1")).strip()
+        if altar_health and altar_health != "1":
+            cmd += ["--altar-health-grant", altar_health]
+
+        settings_str = config.get("_settingsStr", "").strip()
+        if settings_str:
+            cmd += ["--settings-string", settings_str]
+
         return cmd
 
     def _launch(self, config: dict, *, restore: bool) -> None:
@@ -855,7 +1163,7 @@ if __name__ == "__main__":
         "Shadow Man Remastered Randomizer",
         html=_HTML,
         js_api=api,
-        width=840,
+        width=1060,
         height=960,
     )
     api._set_window(window)

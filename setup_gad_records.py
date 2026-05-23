@@ -297,7 +297,7 @@ def run_setup(game_dir: str, dry_run: bool = False, verify: bool = False) -> Non
     }
 
     print("level_id,source_file,offset,friendly_name,object,category,"
-          "level_region,sub_region,instance_id,is_tracked,is_verified,"
+          "level_region,sub_region,save_idx,is_tracked,is_verified,"
           "zone,x,y,z,notes")
 
     for folder, filename, name_off, already in results:

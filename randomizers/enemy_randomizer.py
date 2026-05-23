@@ -48,7 +48,6 @@ from pathlib import Path
 from collections import defaultdict
 
 # Movement types to keep isolated even when enemy_mix_movement is enabled.
-# To re-isolate swimming enemies, add "swimming" to this set.
 _MIXED_MOVEMENT_EXCLUDE: frozenset[str] = frozenset()
 
 
@@ -83,7 +82,7 @@ def randomize_enemies(
     def _make_patch(rec, new_name: str) -> dict:
         return {
             "name":        new_name,
-            "reward":      rec.instance_id if rec.instance_id else 0,
+            "reward":      rec.save_idx if rec.save_idx else 0,
             "logic":       int(rec.zone) if rec.zone else 0,
             "y_adjust":    0.0,
             "source_file": rec.source_file,
@@ -423,8 +422,8 @@ def randomize_true_forms(
                 continue
 
             key = (dst.level_id, dst.source_file)
-            reward = src.instance_id if src.loc_key in true_form_keys and src.instance_id else \
-                (dst.instance_id if dst.instance_id else 0)
+            reward = src.save_idx if src.loc_key in true_form_keys and src.save_idx else \
+                (dst.save_idx if dst.save_idx else 0)
             patches_by_folder.setdefault(key, {})[dst.offset] = {
                 "name": src.object,
                 "reward": reward,

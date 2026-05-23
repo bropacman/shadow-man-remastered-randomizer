@@ -61,7 +61,7 @@ def randomize_ambients(
     def _make_patch(rec, new_name: str) -> dict:
         return {
             "name":        new_name,
-            "reward":      rec.instance_id if rec.instance_id else 0,
+            "reward":      rec.save_idx if rec.save_idx else 0,
             "logic":       int(rec.zone) if rec.zone else 0,
             "y_adjust":    0.0,
             "source_file": rec.source_file,

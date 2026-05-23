@@ -20,9 +20,10 @@ HEADER_SIZE  = 8
 RECORD_SIZE  = 72
 NAME_OFF     = 0x22
 NAME_MAXLEN  = 30
-ZONE_OFF     = 0x11
-INSTANCE_OFF = 0x21
-XYZ_OFF      = 0x04
+ZONE_OFF      = 0x11
+TRACK_TYPE_OFF = 0x1C  # 2-byte big-endian TrackType: 0x0002 = persistent/cadeaux
+SAVE_IDX_OFF  = 0x1E  # 4-byte big-endian save-profile index (bytes 0x1E–0x21)
+XYZ_OFF       = 0x04
 COUNT_BYTE   = 9
 
 EXEX_SIGNATURE = b'EXEX'   # at record offset +4 (the X float field)
@@ -45,13 +46,13 @@ def build_rsc_record(
     rsc_name: str,
     x: float, y: float, z: float,
     zone: int,
-    instance_id: int = 0,
+    save_idx: int = 0,
 ) -> bytes:
     """Build a 72-byte RSC record."""
     record = bytearray(RECORD_SIZE)
     struct.pack_into("<fff", record, XYZ_OFF, x, y, z)
-    record[ZONE_OFF]     = zone & 0xFF
-    record[INSTANCE_OFF] = instance_id & 0xFF
+    record[ZONE_OFF] = zone & 0xFF
+    struct.pack_into(">I", record, SAVE_IDX_OFF, save_idx)
     name_bytes = rsc_name.encode("ascii")[:NAME_MAXLEN - 1]
     record[NAME_OFF : NAME_OFF + len(name_bytes)] = name_bytes
     return bytes(record)

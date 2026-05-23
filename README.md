@@ -31,11 +31,19 @@ seed is beatable.
   across their spawn slots (three modes: global free-for-all, per-movement-type, or
   per-context-group); purely cosmetic
 - **Music** — track-to-track global shuffle (optional)
-- **Entrances** — hub portals reshuffled so deadside and dark engine spokes connect in a new order (two modes: deadside-only or full cross-hub)
+- **Entrances** — hub portals reshuffled so Deadside levels and Engine Rooms connect in a new order (two modes: Deadside-only or full cross-hub mixing both)
 - **SFX** — Shadow Man voice lines, weapon sounds, and enemy SFX (pain, startle, and
   attack sets shuffled within their own pools)
 - **Sky textures** — sky layer TGAs shuffled across levels per-filename (horizon swaps
   with horizon, clouds with clouds, etc.); purely cosmetic
+
+### Gameplay Tuning (EXE patches)
+- **Life altar cadeaux requirement** — cadeaux cost and minimum required per altar interaction (default 100, configurable 1–133)
+- **Fogometers light soul door** — cadeaux required to open the final Fogometers gate (default 666, configurable 5–666)
+- **Starting max health** — player max health at game start on a 1–10 scale (default 5 = 5 000 units)
+- **Life altar health grant** — health restored per altar interaction on the same 1–10 scale (default 1 = 1 000 units)
+
+> **Note:** Cadeaux counting is not yet fully reliable — some cadeaux may not register correctly in-game depending on how they were placed. Consider lowering the altar cost and Fogometers door values from their defaults until this is resolved.
 
 ### Logic Guarantees
 - Assumed-fill algorithm guarantees all seeds are beatable before patching
@@ -44,6 +52,7 @@ seed is beatable.
 - Safe mode enforces per-region SL caps on early gates so the game is always immediately accessible
 - Eclipser lock group prevents circular placement
 - Liveside souls correctly require NIGHT (all three Eclipsers) to collect
+- Locations flagged `can_softlock = TRUE` in the CSV are never chosen for key item placement at any insanity tier (see [Location Data](#location-data))
 - Full sphere-by-sphere playthrough simulation written to spoiler log
 
 ### Delivery
@@ -153,6 +162,12 @@ python patcher.py --game-dir <PATH> --entrance-mode deadside_only
 # Shuffle all 14 portals (deadside + dark engine) together
 python patcher.py --game-dir <PATH> --entrance-mode cross_hub
 
+# Randomize the entrance mode itself per-seed
+python patcher.py --game-dir <PATH> --entrance-mode random
+
+# Randomize altar cadeaux cost and Fogometers door requirement per-seed
+python patcher.py --game-dir <PATH> --altar-cadeaux-required random --fogometers-cadeaux-required random
+
 # Throw everything in the blender
 python patcher.py --game-dir <PATH> \
     --shuffle-enemies --shuffle-true-forms --enemy-mix-movement \
@@ -179,6 +194,7 @@ python patcher.py --restore --game-dir <PATH>
 | `--config FILE` | none | YAML config file to override defaults |
 | `--dry-run` | off | Show what would happen without patching |
 | `--restore` | off | Remove randomizer mod, restore vanilla, and exit |
+| `--settings-string STR` | none | Base64 settings string exported by the GUI — passed automatically when launching from the GUI, and recorded in the spoiler log for full reproducibility |
 
 ### Item shuffle
 
@@ -191,7 +207,7 @@ python patcher.py --restore --game-dir <PATH>
 | `--shuffle-gad-temples` / `--no-shuffle-gad-temples` | on | Gad powers as physical pickups (EXE patch) |
 | `--starting-item RSC_NAME` | none | Place a specific item at the Louisiana Swampland church at run start (e.g. `RSC_X_ENGINEERS_KEY`) |
 | `--random-starting-item` | off | Pick a random starting item using the seed RNG — reproducible for a given seed |
-| `--insanity [1\|2\|3]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. |
+| `--insanity [1\|2\|3\|random]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. Pass `random` to let the seed pick a tier. |
 | `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world |
 
 ### Coffin gates
@@ -201,6 +217,19 @@ python patcher.py --restore --game-dir <PATH>
 | `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = many gates locked, SL7 cap, 6 gates forced open; `medium` = entry gates locked, SL8 cap, 3 gates forced open; `hard` = entry gates locked, no SL cap, 1 gate forced open; `chaos` = no locks, no cap, no safety |
 | `--max-sl N` | none | Override the preset's SL cap — cap the highest SL any shuffled gate can receive (0–10) |
 | `--open-gates N` | preset | Override the preset's open-gates default — force the first N linear coffin gates to SL0 (order: Marrow → Wasteland → Asylum → Temple of Fire → Cageways → Playrooms; beyond 6 chosen randomly) |
+
+### Gameplay tuning
+
+Several of the options below accept `random` in place of a number — when passed, the value is chosen randomly per-seed using the seed RNG and recorded in the spoiler log so the result is always reproducible.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--altar-cadeaux-required N` | `100` | Cadeaux required **and** spent per life altar interaction (1–133, vanilla: 100). Max of 133 = ⌊666 ÷ 5⌋. Accepts `random`. |
+| `--fogometers-cadeaux-required N` | `666` | Cadeaux required to open the Fogometers light soul door (must be ≥ 5 × altar cost, max 666, vanilla: 666). Accepts `random`. |
+| `--starting-health N` | `5` | Starting max health on a scale of 1–10, where each step = 1 000 units (vanilla: 5 = 5 000). Accepts `random`. |
+| `--altar-health-grant N` | `1` | Health granted per life altar interaction, on the same 1–10 scale (vanilla: 1 = 1 000). Note: starting health + 5 × grant should not exceed the 10 000 cap. Accepts `random`. |
+
+> **Cadeaux note:** Cadeaux counting is not yet fully reliable in-game. It is recommended to keep the altar cost and Fogometers door values lower than their defaults until this is resolved.
 
 ### Map tracker (Teddy Bear hints)
 
@@ -212,7 +241,7 @@ python patcher.py --restore --game-dir <PATH>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--entrance-mode MODE` | `off` | `deadside_only` = shuffles the 9 Deadside hub portals among themselves (Dark Engine soul gates stay vanilla); `cross_hub` = all 14 portals (Deadside + Dark Engine) shuffled together, a Deadside portal may lead to a Dark Engine spoke. Works best with open coffin gate settings and Insanity Tier ≥ 1. |
+| `--entrance-mode MODE` | `off` | `deadside_only` = shuffles the 9 Deadside levels among themselves (Engine Rooms stay vanilla); `cross_hub` = 14 levels (Deadside levels + Engine Rooms) shuffled together, a Deadside portal may lead to an Engine Room and vice versa; `random` = mode chosen randomly per-seed. Works best with open coffin gate settings and Insanity Tier ≥ 1. |
 
 ### Enemies, music, SFX, and cosmetics
 
@@ -251,6 +280,9 @@ shadow-man-remastered-randomizer/
 ├── constants.py                  ← File lists, level folders, EXE item type IDs
 ├── kpf_handler.py                ← KPF archive extraction and mod packing
 │
+├── cadeaux_patch.py              ← EXE patch for altar/door cadeaux requirement and cost
+├── health_patch.py               ← EXE patch for starting max health and altar health grant
+│
 ├── patchers/
 │   ├── gad_pickup_patch.py       ← EXE patch for gad pickup type_id dispatch
 │   └── setup_gad_records.py      ← Injects RSC_X_GAD_PICKUP records into temples
@@ -287,7 +319,7 @@ CSVs and are not tracked in git — run the scripts in `tools/` to (re)create th
 6. **Entrance shuffle** — rewrites level exit scripts so hub portals connect to new spokes (if enabled)
 7. **Patch RSC** — writes new item names to all RSC files
 8. **Patch enemies** — shuffles enemy type names in enemies RSC files (if enabled)
-9. **Patch EXE** — writes prison key card position fix (always) + gad pickup dispatch (if enabled)
+9. **Patch EXE** — writes prison key card position fix (always) + gad pickup dispatch (if enabled) + cadeaux altar/door thresholds + starting health and altar health grant
 10. **Update decos** — renames ARC coffin gate decorations to match new SL values
 11. **Repack** — packs all modified files into `shadowman_randomizer.kpf`
 
@@ -299,6 +331,11 @@ All randomizable locations are defined in `data/locations.csv`. Each row defines
 - Where the item physically lives (`level_id`, `source_file`, `offset`)
 - What item is there in vanilla (`object`, `category`)
 - What logic gates access to it (`level_region`, `sub_region`)
+- Whether placing a key item here could softlock the player (`can_softlock`)
+
+### `can_softlock` flag
+
+Set `can_softlock = TRUE` on any cadeaux location that a player couldn't escape from if a key item were placed there — ledges, one-way drops, tight spots the player can reach but not exit while carrying a heavy item. Locations with this flag are excluded from key item placement at **all** insanity tiers while still receiving a cadeaux normally during the filler phase, so the 666 total count is never affected.
 
 To add or edit locations, modify the CSV then run:
 ```bash
@@ -350,8 +387,6 @@ game so you can inspect it. Safe to delete. Re-run the patcher to start clean.
 
 **Want vanilla back fast.** `python patcher.py --restore --game-dir <PATH>` or
 just delete `mods/shadowman_randomizer.kpf`.
-
----
 
 ---
 

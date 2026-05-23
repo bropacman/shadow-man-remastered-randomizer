@@ -26,7 +26,7 @@ class EnemyLocation(NamedTuple):
                          Empty for enemy_locked records.
 
     Tracking fields (ignored by shuffle logic):
-        instance_id, is_tracked, is_verified, zone, x, y, z, notes
+        save_idx, is_tracked, is_verified, zone, x, y, z, notes
     """
     level_id:      str
     source_file:   str
@@ -39,7 +39,7 @@ class EnemyLocation(NamedTuple):
     level_region:  Optional[str]
     sub_region:    Optional[str]
     gate_expr:     Optional[str]
-    instance_id:   Optional[int]
+    save_idx:      Optional[int]
     is_tracked:    Optional[bool]
     is_verified:   Optional[bool]
     zone:          Optional[str]

@@ -1,4 +1,4 @@
-level_id,source_file,offset,object,category,level_region,sub_region,context_group,movement_type,instance_id,is_tracked,is_verified,zone,x,y,z,notes
+level_id,source_file,offset,object,category,level_region,sub_region,context_group,movement_type,save_idx,is_tracked,is_verified,zone,x,y,z,notes
 ah1cagew,enemies.rsc,0x002A,RSC_BAD_DEADWORM,enemy,Asylum: Cageways,N,deadside,ground,0,FALSE,FALSE,0,1604.1309,0.3641,504.4484,
 ah1cagew,enemies.rsc,0x0072,RSC_BAD_DEADWORM,enemy,Asylum: Cageways,N,deadside,ground,0,FALSE,FALSE,0,4812.8965,1044.1833,179.199,
 ah1cagew,enemies.rsc,0x00BA,RSC_BAD_DEADWORM,enemy,Asylum: Cageways,N,deadside,ground,0,FALSE,FALSE,0,2060.0718,424.0169,-540.1567,

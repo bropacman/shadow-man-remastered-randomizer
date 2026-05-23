@@ -27,7 +27,7 @@ OUT_PATH = ROOT / "extracted_locations.py"
 REQUIRED_COLUMNS = {
     "level_id", "source_file", "friendly_name", "object", "offset", "category",
     "level_region", "sub_region",
-    "instance_id", "is_tracked", "is_verified", "zone", "x", "y", "z", "notes",
+    "track_type", "save_idx", "is_tracked", "is_verified", "zone", "x", "y", "z", "notes", "can_softlock",
 }
 
 VALID_CATEGORIES = {
@@ -221,7 +221,12 @@ class RawLocation(NamedTuple):
         gate_raw      : Original CSV value, for debugging
 
     Tracking fields — for human navigation/debugging only, ignored by logic:
-        instance_id, is_tracked, is_verified, zone, x, y, z, notes
+        save_idx, is_tracked, is_verified, zone, x, y, z, notes
+
+    Placement fields — used by fill logic:
+        can_softlock  : True if placing a key item here could softlock the player
+                        (e.g. a ledge the player can't return from). Such slots
+                        are excluded from key-item placement at all insanity tiers.
 
     loc_key is derived at runtime as f"{level_id}:{source_file}:0x{offset:04X}"
     and is never stored in the CSV to avoid drift.
@@ -242,7 +247,14 @@ class RawLocation(NamedTuple):
     gate_raw:      Optional[str]   # Original CSV value, for debugging
 
     # ── tracking / debug metadata ────────────────────────────────────────────
-    instance_id:   Optional[int]
+    # TrackType flag from the RSC record (2-byte big-endian at offset 0x1C):
+    #   0x0002 = persistent / cadeaux  (collected once, saved to profile)
+    #   0x0020 = volatile barrel A     (respawns)
+    #   0x0021 = volatile barrel B     (respawns, variant)
+    #   0x0022-0x0024 = other volatile variants
+    #   0x0000 = static / decorative
+    track_type:    Optional[int]
+    save_idx:      Optional[int]
     is_tracked:    Optional[bool]
     is_verified:   Optional[bool]
     zone:          Optional[str]
@@ -250,6 +262,9 @@ class RawLocation(NamedTuple):
     y:             Optional[float]
     z:             Optional[float]
     notes:         Optional[str]
+
+    # ── placement flags ───────────────────────────────────────────────────────
+    can_softlock:  Optional[bool]  # True → exclude from key-item placement (ledges, one-way drops, etc.)
 
     @property
     def loc_key(self) -> str:
@@ -349,23 +364,34 @@ def generate(rows: list[dict]) -> str:
         gate_raw_str  = "None" if gate_raw  is None else _q(gate_raw)
         fname_str     = "None" if not friendly_name else _q(friendly_name)
 
-        instance_str  = _opt_numeric(row["instance_id"], int)
+        # track_type stored as hex string in CSV ("0x0002"), output as int
+        raw_track = row["track_type"].strip()
+        if raw_track:
+            try:
+                track_type_str = str(int(raw_track, 16))
+            except ValueError:
+                track_type_str = "None"
+        else:
+            track_type_str = "None"
+
+        save_idx_str  = _opt_numeric(row["save_idx"], int)
         tracked_str   = _opt_bool(row["is_tracked"])
         verified_str  = _opt_bool(row["is_verified"])
         zone_str      = _opt_str(row["zone"])
         x_str         = _opt_numeric(row["x"], float)
         y_str         = _opt_numeric(row["y"], float)
         z_str         = _opt_numeric(row["z"], float)
-        notes_str     = _opt_str(row["notes"])
+        notes_str        = _opt_str(row["notes"])
+        can_softlock_str = _opt_bool(row.get("can_softlock") or "")
 
         lines.append(
             f"    RawLocation("
             f"{_q(level_id)}, {_q(source_file)}, 0x{offset:04X}, "
             f"{fname_str}, {_q(obj)}, {_q(category)}, "
             f"{_q(level_region)}, {gate_expr_str}, {gate_raw_str}, "
-            f"{instance_str}, {tracked_str}, {verified_str}, {zone_str}, "
+            f"{track_type_str}, {save_idx_str}, {tracked_str}, {verified_str}, {zone_str}, "
             f"{x_str}, {y_str}, {z_str}, "
-            f"{notes_str}),\n"
+            f"{notes_str}, {can_softlock_str}),\n"
         )
 
     lines.append(FOOTER)

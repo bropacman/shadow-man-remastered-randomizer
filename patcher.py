@@ -67,6 +67,8 @@ from randomizers.music_randomizer import shuffle_music
 from randomizers.sfx_randomizer import shuffle_sfx, sfx_spoiler_section
 from randomizers.sky_randomizer import shuffle_sky, sky_spoiler_section
 from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
+from cadeaux_patch import apply_cadeau_step_patch
+from health_patch import apply_health_patch
 from setup_gad_records import inject_record, _find_existing
 from rsc_utils import inject_rsc_record, build_rsc_record
 from patchers.levels_txt_patcher import patch_levels_txt, strip_levels_txt
@@ -90,10 +92,76 @@ RECORD_SIZE  = 72    # every record is exactly 72 bytes, no exceptions
 NAME_OFF     = 0x22  # byte offset within a record where the RSC_ string begins
 NAME_MAXLEN  = 30    # max bytes available for the name before the next field
 ZONE_OFF     = 0x11  # zone/cluster group this record belongs to — read-only, never written
-INSTANCE_OFF = 0x21  # unique save-game instance ID — read-only, never written
+SAVE_IDX_OFF = 0x1E  # save-game ID — 4-byte big-endian; NAME_OFF - SAVE_IDX_OFF = 4
+INSTANCE_OFF = 0x21  # last byte of SAVE_IDX (kept for reference; use SAVE_IDX_OFF for reads/writes)
 XYZ_OFF      = 0x04  # start of the three little-endian floats for world position (X, Y, Z)
 
 _RSC_TO_FRIENDLY = {v: k for k, v in STARTING_ITEM_POOL.items()}
+
+
+def _int_or_random(val: str):
+    """Argparse type that accepts an integer or the literal string 'random'."""
+    if val == "random":
+        return "random"
+    return int(val)
+
+
+def _resolve_random_config(config: dict, rng: random.Random) -> None:
+    """Resolve 'random' sentinel values using the seeded RNG.
+
+    Called once at the very start of run_patcher(), before any other processing,
+    so that the spoiler log and all downstream code see concrete values.
+    Mirrors the same defaults and clamping used in cadeaux_patch / health_patch.
+    """
+    if config.get("gate_preset") == "random":
+        config["gate_preset"] = rng.choice(["open", "easy", "medium", "hard", "chaos"])
+        print(f"  [random] gate_preset → {config['gate_preset']}")
+    if config.get("entrance_mode") == "random":
+        config["entrance_mode"] = rng.choice(["off", "deadside_only", "cross_hub"])
+        print(f"  [random] entrance_mode → {config['entrance_mode']}")
+    if str(config.get("insanity", 0)) == "random":
+        config["insanity"] = rng.randint(0, 3)
+        print(f"  [random] insanity → {config['insanity']}")
+    if config.get("enemy_mode") == "random":
+        config["enemy_mode"] = rng.choice(["difficulty", "contextual", "full"])
+        print(f"  [random] enemy_mode → {config['enemy_mode']}")
+    if str(config.get("progression_balancing", 50)) == "random":
+        config["progression_balancing"] = rng.randint(0, 100)
+        print(f"  [random] progression_balancing → {config['progression_balancing']}")
+
+    # ── Health (mirrors health_patch.py defaults/clamping) ───────────────────
+    if str(config.get("starting_health", 5)) == "random":
+        lo = int(config.get("starting_health_min", 1))
+        hi = int(config.get("starting_health_max", 10))
+        config["starting_health"] = rng.randint(lo, hi)
+        print(f"  [random] starting_health → {config['starting_health']}/10")
+    if str(config.get("altar_health_grant", 1)) == "random":
+        lo = int(config.get("altar_health_grant_min", 1))
+        hi = int(config.get("altar_health_grant_max", 5))
+        config["altar_health_grant"] = rng.randint(lo, hi)
+        print(f"  [random] altar_health_grant → {config['altar_health_grant']}/10")
+
+    # ── Cadeaux (mirrors cadeaux_patch.py defaults/clamping) ─────────────────
+    _ALTAR_MAX  = 133   # floor(666 / 5)
+    _FOG_VANILLA = 666
+    altar = config.get("altar_cadeaux_required", 100)
+    if altar == "random":
+        lo    = int(config.get("altar_cadeaux_required_min", 50))
+        hi    = int(config.get("altar_cadeaux_required_max", 100))
+        altar = max(1, min(_ALTAR_MAX, rng.randint(lo, hi)))
+        config["altar_cadeaux_required"] = altar
+        print(f"  [random] altar_cadeaux_required → {altar}")
+    else:
+        altar = max(1, min(_ALTAR_MAX, int(altar)))
+
+    fog = config.get("fogometers_cadeaux_required", _FOG_VANILLA)
+    if fog == "random":
+        fog_lo = int(config.get("fogometers_cadeaux_required_min", altar * 5))
+        fog_hi = int(config.get("fogometers_cadeaux_required_max", _FOG_VANILLA))
+        fog    = max(altar * 5, min(_FOG_VANILLA, rng.randint(fog_lo, fog_hi)))
+        config["fogometers_cadeaux_required"] = fog
+        print(f"  [random] fogometers_cadeaux_required → {fog}")
+
 
 VANILLA_SL_THRESHOLDS = {
     0:   0,
@@ -179,7 +247,7 @@ class QuestRecord:
     offset: int
     name: str
     zone: int
-    instance_id: int
+    save_idx: int
     x: float
     y: float
     z: float
@@ -189,7 +257,7 @@ class QuestRecord:
 
     @property
     def has_drop(self) -> bool:
-        return self.instance_id != 0
+        return self.save_idx != 0
 
     @property
     def category(self) -> str:
@@ -238,7 +306,7 @@ def parse_rsc_file(filepath: str, folder: str = "") -> list:
             offset=HEADER_SIZE + i * RECORD_SIZE + NAME_OFF,
             name=name,
             zone=chunk[ZONE_OFF],
-            instance_id=chunk[INSTANCE_OFF],
+            save_idx=struct.unpack('>I', chunk[SAVE_IDX_OFF:SAVE_IDX_OFF + 4])[0],
             x=x, y=y, z=z,
             raw=chunk,
             folder=folder,
@@ -271,7 +339,7 @@ def parse_rsc_file(filepath: str, folder: str = "") -> list:
                 offset=name_pos,
                 name=name,
                 zone=data[rec_start + ZONE_OFF],
-                instance_id=data[rec_start + INSTANCE_OFF],
+                save_idx=struct.unpack('>I', data[rec_start + SAVE_IDX_OFF:rec_start + SAVE_IDX_OFF + 4])[0],
                 x=x, y=y, z=z,
                 raw=data[rec_start:rec_start + RECORD_SIZE],
                 folder=folder,
@@ -302,7 +370,7 @@ def patch_rsc_file(filepath: str, patches: dict, record_templates: dict = None) 
             # data[rec_start + 0x1E] = template[0x1E]
             data[rec_start + 0x20] = template[0x20]
 
-        # Then write name and instance_id as before
+        # Then write name and save_idx as before
         new_name = p['name'].encode("ascii")
         if len(new_name) >= NAME_MAXLEN:
             new_name = new_name[:NAME_MAXLEN - 1]
@@ -311,7 +379,7 @@ def patch_rsc_file(filepath: str, patches: dict, record_templates: dict = None) 
 
         reward = p.get('reward')
         if reward is not None:
-            data[anchor_offset - 1] = reward & 0xFF
+            struct.pack_into('>I', data, anchor_offset - 4, reward)
 
         y_adjust = p.get('y_adjust', 0.0)
         if y_adjust != 0.0:
@@ -709,7 +777,7 @@ def verify_patch(filepath: str, patches: dict) -> None:
     ok = fail = 0
     for anchor_offset, p in patches.items():
         actual_name    = data[anchor_offset:anchor_offset+30].split(b'\x00')[0].decode('ascii', errors='replace')
-        actual_reward  = data[anchor_offset - 1]
+        actual_reward  = struct.unpack(">I", data[anchor_offset - 4:anchor_offset])[0]
         expected_reward = p.get('reward')
         name_ok   = (actual_name == p['name'])
         reward_ok = (expected_reward is None or actual_reward == expected_reward)
@@ -861,7 +929,7 @@ def write_placement_patches(
         for lk in missing_from_index[:5]:
             print(f"      {lk}")
 
-    def make_patch(rec, new_name, instance_id):
+    def make_patch(rec, new_name, save_idx):
         new_tall          = new_name in DARK_SOUL_TYPES
         old_dark_soul_slot = rec.name == "RSC_X_DARK_SOUL"
         old_govi_slot      = rec.name == "RSC_X_GOVI"
@@ -886,7 +954,7 @@ def write_placement_patches(
         else:
             y_adj = 0.0
         y_adj += ITEM_Y_ADJUST.get(new_name, 0.0)
-        return {"name": new_name, "reward": instance_id,
+        return {"name": new_name, "reward": save_idx,
                 "logic": rec.zone, "y_adjust": y_adj, "source_file": rec.source_file}
 
     patches_by_folder: dict = {}
@@ -919,7 +987,7 @@ def write_placement_patches(
         # custom visuals — prevents the marker crate appearing at filler spots.
         rsc_name = BARREL_RSC_SUBSTITUTIONS.get(rsc_name, rsc_name)
 
-        instance_id = source_loc.instance_id
+        save_idx = source_loc.save_idx
         old_soul_slot = rec.name in DARK_SOUL_TYPES or rec.name in CADEAUX_TYPES
         old_barrel_slot = rec.name in BARREL_TYPES
         new_is_key = (rsc_name not in DARK_SOUL_TYPES
@@ -934,7 +1002,7 @@ def write_placement_patches(
                                  BARREL_SLOT_MARKER_FX))
         k = (rec.folder, rec.source_file)
         patches_by_folder.setdefault(k, {})[rec.offset] = \
-            make_patch(rec, rsc_name, instance_id if instance_id is not None else rec.instance_id)
+            make_patch(rec, rsc_name, save_idx if save_idx is not None else rec.save_idx)
         matched += 1
 
     print(f"  RSC patches: {matched} locations written from fill placement")
@@ -1011,11 +1079,14 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
     open_gates = config.get('open_gates_n')
     insanity   = config.get('insanity', 0)
 
+    settings_str = config.get('settings_string')
+
     lines = [
         "=" * 60,
         "SHADOW MAN REMASTERED - RANDOMIZER SPOILER LOG",
         "=" * 60,
         f"Seed: {seed}",
+        *([ f"Settings: {settings_str}" ] if settings_str else []),
         f"Progression balancing: {config.get('progression_balancing', 50)}/100",
         f"Randomize key items: {config.get('shuffle_progression', True)}",
         f"Starting item: {starting_friendly}",
@@ -1037,6 +1108,10 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"Shuffle weapon SFX: {config.get('shuffle_weapons_sfx', False)}",
         f"Patch tracker: {config.get('patch_tracker', False)}",
         f"Entrance mode: {config.get('entrance_mode', 'off')} (deadside + soul gates)",
+        f"Altar cadeaux required: {config.get('altar_cadeaux_required', 100)}",
+        f"Fogometers cadeaux required: {config.get('fogometers_cadeaux_required', 666)}",
+        f"Starting health: {config.get('starting_health', 5)}/10",
+        f"Altar health grant: {config.get('altar_health_grant', 1)}/10",
         "",
     ]
 
@@ -1202,7 +1277,7 @@ def validate_final_seed(work_dir: str, progression_placement: dict = None, patch
             except ValueError:
                 continue
             for r in records:
-                if r.name in DARK_SOUL_TYPES and r.instance_id == 0:
+                if r.name in DARK_SOUL_TYPES and r.save_idx == 0:
                     print(f"  [!] Soul ID=0: {folder}/{source_file} at 0x{r.offset:04X}")
                     error_count += 1
                 if not r.name.upper().startswith("RSC_"):
@@ -1238,6 +1313,7 @@ def validate_final_seed(work_dir: str, progression_placement: dict = None, patch
 
 def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=True):
     rng       = random.Random(seed)
+    _resolve_random_config(config, rng)
     game_path = Path(game_dir)
 
     # ── KPF extraction (now uses updated KPFs) ────────────────────────────────
@@ -1350,7 +1426,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     object_map = [
         {"folder": folder, "source_file": rec.source_file,
          "offset": f"0x{rec.offset:04X}", "name": rec.name, "category": rec.category,
-         "instance_id": rec.instance_id, "has_drop": rec.has_drop, "zone": rec.zone,
+         "save_idx": rec.save_idx, "has_drop": rec.has_drop, "zone": rec.zone,
          "x": round(rec.x, 2), "y": round(rec.y, 2), "z": round(rec.z, 2)}
         for folder, records in records_by_folder.items()
         for rec in records
@@ -1471,20 +1547,20 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     if starting_item_rsc:
         swamp_instance = levels_path / "swampday" / "instance.rsc"
         if swamp_instance.exists():
-            instance_id = None
+            save_idx = None
             template = None
             for folder, records in records_by_folder.items():
                 for rec in records:
                     if rec.name == starting_item_rsc:
-                        instance_id = rec.instance_id
+                        save_idx = rec.save_idx
                         template = rec.raw
                         break
-                if instance_id is not None:
+                if save_idx is not None:
                     break
             patch_rsc_file(str(swamp_instance), {
                 0x17CA: {
                     "name": starting_item_rsc,
-                    "reward": instance_id or 0,
+                    "reward": save_idx or 0,
                     "y_adjust": 0.0,
                     "source_file": "instance.rsc",
                 }
@@ -1786,21 +1862,38 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     if exe_src:
         src = exe_src[0]
         patched = src.parent / "thoth_x64_patched.exe"
-        shutil.copy2(str(src), str(patched))
+        try:
+            shutil.copy2(str(src), str(patched))
 
-        # Always: prison key card render fix
-        apply_prison_keycard_patch(str(patched), dry_run=dry_run)
+            # Always: prison key card render fix
+            apply_prison_keycard_patch(str(patched), dry_run=dry_run)
 
-        # Conditional: gad pickup dispatch patch + temple NOPs
-        if config.get("shuffle_gad_temples", False):
-            apply_gad_pickup_patch(
-                str(patched),
-                shuffle_temples=True,
-                dry_run=dry_run,
+            # Cadeaux interaction threshold/cost patch
+            cadeau_result = apply_cadeau_step_patch(
+                str(patched), rng, config, dry_run=dry_run
             )
-            print(f"\nThe Asylum's code has been rewritten — EXE patched: {patched.name}")
-        else:
-            print(f"\nPrison key card fixed — EXE patched: {patched.name}")
+
+            # Health patch
+            health_result = apply_health_patch(
+                str(patched), rng, config, dry_run=dry_run
+            )
+
+            # Conditional: gad pickup dispatch patch + temple NOPs
+            if config.get("shuffle_gad_temples", False):
+                apply_gad_pickup_patch(
+                    str(patched),
+                    shuffle_temples=True,
+                    dry_run=dry_run,
+                )
+                print(f"\nThe Asylum's code has been rewritten — EXE patched: {patched.name}")
+            else:
+                print(f"\nPrison key card fixed — EXE patched: {patched.name}")
+
+        except PermissionError:
+            print(
+                f"\n⚠ Cannot write to {patched.name} — is Shadow Man Remastered currently running?\n"
+                f"  Close the game and run the randomizer again."
+            )
     else:
         print("\nWARNING: thoth_x64.exe not found - EXE patches skipped")
 
@@ -1924,11 +2017,11 @@ if __name__ == "__main__":
     parser.add_argument("--config",                default=None)
     parser.add_argument("--dry-run",               action="store_true")
     parser.add_argument("--restore",               action="store_true")
-    parser.add_argument("--progression-balancing", type=int, default=50)
+    parser.add_argument("--progression-balancing", type=_int_or_random, default=50)
     parser.add_argument("--shuffle-progression", action=argparse.BooleanOptionalAction, default=True,
                         help="Shuffle key progression items using assumed-fill (default: on)")
     parser.add_argument("--gate-preset",
-                        choices=["open", "easy", "medium", "hard", "chaos"],
+                        choices=["open", "easy", "medium", "hard", "chaos", "random"],
                         default=None,
                         help="Gate difficulty preset: open=all gates free, easy=light shuffle SL5 cap, "
                              "medium=standard shuffle SL8 cap, hard=full shuffle, chaos=fully unconstrained")
@@ -1946,11 +2039,11 @@ if __name__ == "__main__":
                         help="RSC name of item to place at swamp church (e.g. RSC_X_ENGINEERS_KEY)")
     parser.add_argument("--random-starting-item", action="store_true",
                         help="Pick a random starting item using the seed RNG")
-    parser.add_argument("--insanity", nargs="?", const=3, type=int, default=0,
-                        help="Insanity tier 1-3: 1=soul/govi slots, 2=+cadeaux slots, 3=all slots. Bare --insanity = tier 3.")
+    parser.add_argument("--insanity", nargs="?", const=3, type=_int_or_random, default=0,
+                        help="Insanity tier 1-3: 1=soul/govi slots, 2=+cadeaux slots, 3=all slots. Bare --insanity = tier 3. Pass 'random' to randomize per-seed.")
     parser.add_argument("--shuffle-enemies", action="store_true",
                         help="Randomize enemy types in each level")
-    parser.add_argument("--enemy-mode", choices=["difficulty", "full", "contextual"],
+    parser.add_argument("--enemy-mode", choices=["difficulty", "full", "contextual", "random"],
                         default="difficulty",
                         help="difficulty: depth-weighted placement by enemy tier (default). "
                              "full: purely random within movement type. "
@@ -1986,8 +2079,18 @@ if __name__ == "__main__":
     parser.add_argument("--patch-tracker", action="store_true",
                         help="Rewrite levels.txt map badges to reflect randomized item locations "
                              "(default: strip all item badges to avoid incorrect vanilla hints)")
+    parser.add_argument("--altar-cadeaux-required", type=_int_or_random, default=None,
+                        help="Cadeaux required and spent per altar/door interaction (1-133, vanilla: 100). Pass 'random' to randomize per-seed.")
+    parser.add_argument("--fogometers-cadeaux-required", type=_int_or_random, default=None,
+                        help="Cadeaux required to open Fogometers door (min: 5×altar, max: 666, vanilla: 666). Pass 'random' to randomize per-seed.")
+    parser.add_argument("--starting-health", type=_int_or_random, default=None,
+                        help="Starting max health scale 1-10, where each step = 1000 units (vanilla: 5). Pass 'random' to randomize per-seed.")
+    parser.add_argument("--altar-health-grant", type=_int_or_random, default=None,
+                        help="Health granted per life altar interaction, scale 1-10 (vanilla: 1). Pass 'random' to randomize per-seed.")
+    parser.add_argument("--settings-string", default=None,
+                        help="Base64 settings string from the GUI — recorded in spoiler log for reproducibility")
     parser.add_argument("--entrance-mode",
-                        choices=["off", "deadside_only", "cross_hub"],
+                        choices=["off", "deadside_only", "cross_hub", "random"],
                         default="off",
                         help="Shuffle hub <-> spoke entrances. "
                              "deadside_only: shuffle the 9 Deadside portals among themselves; "
@@ -2032,6 +2135,11 @@ if __name__ == "__main__":
         "patch_tracker":         args.patch_tracker,
         "open_gates_n":          args.open_gates,
         "entrance_mode":         args.entrance_mode,
+        "altar_cadeaux_required":      args.altar_cadeaux_required or 100,
+        "fogometers_cadeaux_required": args.fogometers_cadeaux_required or 666,
+        "starting_health":             args.starting_health or 5,
+        "altar_health_grant":          args.altar_health_grant or 1,
+        "settings_string":             args.settings_string,
     }
     if args.config and Path(args.config).exists():
         yaml_data = yaml.safe_load(Path(args.config).read_text())
