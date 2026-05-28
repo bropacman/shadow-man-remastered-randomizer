@@ -41,9 +41,9 @@ seed is beatable.
 ### Gameplay Tuning (EXE patches)
 - **Life altar cadeaux requirement** — cadeaux cost and minimum required per altar interaction (default 100, configurable 1–133)
 - **Fogometers light soul door** — cadeaux required to open the final Fogometers gate (default 666, configurable 5–666)
-- **Starting max health** — player max health at game start on a 1–10 scale (default 5 = 5 000 units)
-- **Life altar health grant** — health restored per altar interaction on the same 1–10 scale (default 1 = 1 000 units)
-- **Death penalty** — reduces max health by a configurable step×1 000 on each death, floored at that same value so the player always retains at least one step of health; step 0 = disabled (default), steps 1–10 scale the penalty from mild to brutal
+- **Starting max health** — player max health at game start on a 1–10 scale (vanilla default: 5)
+- **Life altar health grant** — health restored per altar interaction on the same 1–10 scale (vanilla default: 1)
+- **Death penalty** — reduces max health by a configurable number of steps on each death, floored at that step so the player always retains at least one step of health; 0 = disabled (default), 1–10 scale the penalty from mild (−1 step/death) to brutal (−10 steps/death)
 - **Soul level thresholds** — randomizes the soul counts required to reach SL1–SL10 via three modes: `progressive` (geometric ramp), `balanced` (even spacing), or `random` (fully random distribution); SL0 is always 0 and SL10 is always 120; intermediate breakpoints are patched directly into the EXE
 
 > **Note:** Cadeaux counting is not yet fully reliable — some cadeaux may not register correctly in-game depending on how they were placed. Consider lowering the altar cost and Fogometers door values from their defaults until this is resolved.
@@ -244,9 +244,9 @@ Several of the options below accept `random` in place of a number — when passe
 |------|---------|-------------|
 | `--altar-cadeaux-required N` | `100` | Cadeaux required **and** spent per life altar interaction (1–133, vanilla: 100). Max of 133 = ⌊666 ÷ 5⌋. Accepts `random`. |
 | `--fogometers-cadeaux-required N` | `666` | Cadeaux required to open the Fogometers light soul door (must be ≥ 5 × altar cost, max 666, vanilla: 666). Accepts `random`. |
-| `--starting-health N` | `5` | Starting max health on a scale of 1–10, where each step = 1 000 units (vanilla: 5 = 5 000). Accepts `random`. |
-| `--altar-health-grant N` | `1` | Health granted per life altar interaction, on the same 1–10 scale (vanilla: 1 = 1 000). Note: starting health + 5 × grant should not exceed the 10 000 cap. Accepts `random`. |
-| `--death-penalty N` | `0` | Reduce max health by N×1 000 on each death, floored at N×1 000 (so the player retains at least that much health). 0 = disabled. 1–10 scale the penalty from −1 000/death (mild) to −10 000/death (brutal). |
+| `--starting-health N` | `5` | Starting max health on a 1–10 scale (vanilla: 5). Accepts `random`. |
+| `--altar-health-grant N` | `1` | Health granted per life altar interaction on a 1–10 scale (vanilla: 1). Note: starting health + 5 × grant should not exceed the cap of 10. Accepts `random`. |
+| `--death-penalty N` | `0` | Reduce max health by N steps on each death, floored at N steps. 0 = disabled. 1 = −1 step/death (mild), 10 = −10 steps/death (brutal). |
 | `--death-penalty-random` | off | Choose a random death-penalty step (1–10) per-seed rather than disabling it. Reproducible for a given seed. |
 
 > **Cadeaux note:** Cadeaux counting is not yet fully reliable in-game. It is recommended to keep the altar cost and Fogometers door values lower than their defaults until this is resolved.
@@ -330,7 +330,8 @@ shadow-man-remastered-randomizer/
 ```
 
 `extracted_locations.py` and `extracted_enemy_locations.py` are generated from the
-CSVs and are not tracked in git — run the scripts in `tools/` to (re)create them.
+CSVs and are tracked in git so they work out of the box. If you modify the CSVs,
+re-run the scripts in `tools/` to regenerate them.
 
 ---
 
@@ -420,6 +421,10 @@ just delete `mods/shadowman_randomizer.kpf`.
 Bug reports, seed pathology cases, and PRs welcome. When filing an issue, please
 include the seed, the exact CLI flags you used, and the spoiler log if the run
 completed.
+
+Join the discussion or share feedback on the
+[GitHub Discussions board](https://github.com/bropacman/shadow-man-remastered-randomizer/discussions).
+You can also reach me directly on Discord: **bropacman**.
 
 ---
 
