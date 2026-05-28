@@ -1068,9 +1068,11 @@ def assumed_fill(
                     depth += 2    # Wasteland enseigne interior gate (SL6)
 
             # ── Govi slot nudge ───────────────────────────────────────────────
-            # Govi slots are physically harder to reach in-level than open
-            # cadeaux/barrel slots, so bias key items and souls toward them.
-            if loc.object == "RSC_X_GOVI":
+            # Govi slots are physically harder to reach than open barrel/cadeaux
+            # slots — but only when they also carry an item gate requirement.
+            # A govi gated purely by soul level (gate_expr empty) is no harder
+            # to collect than a barrel in the same room, so skip the nudge.
+            if loc.object == "RSC_X_GOVI" and loc.gate_expr:
                 depth += 2
 
             if item.category == "soul":
