@@ -86,7 +86,7 @@ EXCLUDED_LOCS: frozenset[str] = frozenset({
 # Level IDs that are cut/inaccessible and must be excluded entirely from the
 # randomizer pool, regardless of how many entries are in the CSV for them.
 EXCLUDED_LEVELS: frozenset[str] = frozenset({
-    "t4ndgad",   # cut sub-zone of Mojave Salvage Yard — no entrance in game
+    "t4ndgad",   # cut random bonus level temple t4
 })
 
 FIXED_SOUL_LOCS: list = [
@@ -228,9 +228,24 @@ def _is_checkable(raw) -> bool:
 
 AP_LOCATIONS: list = [r for r in RAW_LOCATIONS if _is_ap_location(r)]
 
+# Loc keys explicitly confirmed as phantom / invisible / unreachable in-game.
+# Excluded from CHECKABLE_LOCS so nothing is ever placed there, and exported so
+# patcher.py can suppress them from the coverage-validation error count.
+UNVERIFIED_LOCS: frozenset[str] = frozenset(
+    l.loc_key for l in AP_LOCATIONS
+    if l.is_verified is False
+)
+
 CHECKABLE_LOCS: list = [
     l for l in AP_LOCATIONS
-    if l.loc_key not in EXCLUDED_LOCS and _is_checkable(l)
+    if l.loc_key not in EXCLUDED_LOCS
+    and _is_checkable(l)
+    # Never place souls or key items in locations that haven't been verified as
+    # real, visible, collectable spots in-game.  is_verified=None means the field
+    # wasn't filled in yet and we give the benefit of the doubt; is_verified=False
+    # means we explicitly confirmed the slot is phantom/invisible/unreachable and
+    # it must be kept at its vanilla value.
+    and l.loc_key not in UNVERIFIED_LOCS
 ]
 
 # ── Gate region mapping ────────────────────────────────────────────────────────
@@ -558,22 +573,52 @@ def build_item_pool(
     shuffle_weapons: bool = True,
     shuffle_lore: bool = True,
     shuffle_bonus: bool = False,
+    shuffle_retractors: bool = True,
+    shuffle_accumulators: bool = True,
+    shuffle_eclipsers: bool = True,
+    shuffle_prisms: bool = False,
+    shuffle_gad_temples: bool = False,
 ) -> list:
     """
     Build the item pool for placement. Always includes all logic-critical items
-    (souls, progression, retractors, accumulators, gad). Includes weapons/lore/bonus
-    based on their respective shuffle flags.
+    (souls, progression, gad). Retractors, accumulators, and eclipsers are included
+    by default but can be excluded when their shuffle flags are False (they then
+    stay vanilla and are credited to the player via baseline counts in the fill).
+    Weapons/lore/bonus/prisms included based on their respective shuffle flags.
+
+    When shuffle_gad_temples is True, RSC_X_PROPHECY is excluded from the pool.
+    The gad pickup patch repurposes that RSC type for the gad power visuals, and
+    the asset overrides replace PROPHECY.PNG with gad-themed art — so the vanilla
+    Book of Prophecy lore item would look like a 4th gad power pickup in-game.
+    Its location slot remains in the candidate pool and receives a different item.
     """
-    include_cats = {"soul", "progression", "eclipser", "retractor", "accumulator", "gad"}
-    if shuffle_weapons: include_cats.add("weapon")
-    if shuffle_lore:    include_cats.add("lore")
-    if shuffle_bonus:   include_cats.add("bonus")
+    include_cats = {"soul", "progression", "gad"}
+    if shuffle_retractors:   include_cats.add("retractor")
+    if shuffle_accumulators: include_cats.add("accumulator")
+    if shuffle_eclipsers:    include_cats.add("eclipser")
+    if shuffle_weapons:      include_cats.add("weapon")
+    if shuffle_lore:         include_cats.add("lore")
+    if shuffle_bonus:        include_cats.add("bonus")
+    if shuffle_prisms:       include_cats.add("prism")
 
     pool = [loc for loc in locations if loc.category in include_cats]
 
-    # Uniqueness audit
+    # When gad temples are shuffled, RSC_X_PROPHECY is repurposed as the gad
+    # power pickup model and PROPHECY.PNG is replaced with gad art. Keeping the
+    # vanilla Book of Prophecy in the item pool would give the player a visually
+    # identical 4th gad pickup. Remove it; its slot still receives another item.
+    if shuffle_gad_temples:
+        pool = [loc for loc in pool if loc.object != "RSC_X_PROPHECY"]
+
+    # Uniqueness audit — skip items that are intentionally excluded from the pool
+    # (e.g. eclipser parts when shuffle_eclipsers=False).
+    intentionally_excluded: set[str] = set()
+    if not shuffle_eclipsers:
+        intentionally_excluded |= ECLIPSER_ITEMS
     non_soul_counts = Counter(loc.object for loc in pool if loc.category != "soul")
     for item in ALL_UNIQUES:
+        if item in intentionally_excluded:
+            continue
         count = non_soul_counts.get(item, 0)
         if count > 1:
             raise ValueError(f"DATA BUG: '{item}' exists {count} times in CSV!")
@@ -594,6 +639,8 @@ def simulate_playthrough(
     placement, locations, level_rules,
     debug=False, collect_spheres=False, shuffle_gad_temples=False,
     item_category=None,
+    baseline_retractor_count: int = 0,
+    baseline_inv: dict | None = None,
 ):
     """
     Simulate a full playthrough of the given placement.
@@ -601,9 +648,15 @@ def simulate_playthrough(
     item_category: pre-built {object: category} dict. Pass this in from
     assumed_fill to avoid rebuilding it on every iteration of the sweep (~130x).
     If None, it is built internally — used by validate_fill and patcher.
+
+    baseline_retractor_count: retractors the player has from vanilla (unshuffled)
+    positions. Used when shuffle_retractors=False so gate checks work correctly.
+    baseline_inv: additional pre-credited items (e.g. accumulators, eclipser parts)
+    for categories that are not being shuffled.
     """
-    inv: dict[str, int] = {}
-    soul_count = retractor_count = cadeaux_count = 0
+    inv: dict[str, int] = dict(baseline_inv) if baseline_inv else {}
+    soul_count = cadeaux_count = 0
+    retractor_count = baseline_retractor_count
     reached_keys: set[str] = set()
     reached_regions: set[str] = set()
     fixed_keys = {l.loc_key for l in locations if l.category in ("boss", "true_form")}
@@ -737,6 +790,10 @@ def assumed_fill(
     shuffle_weapons: bool = True,
     shuffle_lore: bool = True,
     shuffle_bonus: bool = False,
+    shuffle_retractors: bool = True,
+    shuffle_accumulators: bool = True,
+    shuffle_eclipsers: bool = True,
+    shuffle_prisms: bool = False,
     shuffle_gad_temples: bool = False,
     starting_item: str | None = None,
     true_form_loc_remap: dict[str, str] | None = None,
@@ -782,10 +839,32 @@ def assumed_fill(
 
     active_fixed_soul_locs = apply_true_form_remap(true_form_loc_remap)
 
+    # ── Baseline counts for unshuffled categories ─────────────────────────────
+    # When a category is not shuffled, its items stay vanilla. The simulation
+    # must credit the player with those items so gate checks work correctly.
+    _bl_retractor = 0 if shuffle_retractors else 5
+    _bl_inv: dict[str, int] = {}
+    if not shuffle_accumulators:
+        _bl_inv["RSC_X_ACCUMULATOR"] = 3
+    if not shuffle_eclipsers:
+        _bl_inv.update({
+            "RSC_X_ECLIPSER_PART1": 1,
+            "RSC_X_ECLIPSER_PART2": 1,
+            "RSC_X_ECLIPSER_PART3": 1,
+        })
+
     # ── Step 2: Build candidate pool ──────────────────────────────────────────
     active_slot_cats = set(SLOT_ACCEPTS.keys())
     if not shuffle_gad_temples:
         active_slot_cats.discard("gad")
+    if not shuffle_retractors:
+        active_slot_cats.discard("retractor")
+    if not shuffle_accumulators:
+        active_slot_cats.discard("accumulator")
+    if not shuffle_eclipsers:
+        active_slot_cats.discard("eclipser")
+    if not shuffle_prisms:
+        active_slot_cats.discard("prism")
 
     if insanity >= 3:
         candidate_pool = [
@@ -820,6 +899,11 @@ def assumed_fill(
         shuffle_weapons=shuffle_weapons,
         shuffle_lore=shuffle_lore,
         shuffle_bonus=shuffle_bonus,
+        shuffle_retractors=shuffle_retractors,
+        shuffle_accumulators=shuffle_accumulators,
+        shuffle_gad_temples=shuffle_gad_temples,
+        shuffle_eclipsers=shuffle_eclipsers,
+        shuffle_prisms=shuffle_prisms,
     )
     rng.shuffle(item_pool)
 
@@ -872,6 +956,11 @@ def assumed_fill(
         for p in build_item_pool(
             [l for l in candidate_pool if l.category not in FILLER_SLOT_CATS],
             shuffle_weapons=True, shuffle_lore=True, shuffle_bonus=False,
+            shuffle_retractors=shuffle_retractors,
+            shuffle_accumulators=shuffle_accumulators,
+            shuffle_eclipsers=shuffle_eclipsers,
+            shuffle_prisms=shuffle_prisms,
+            shuffle_gad_temples=shuffle_gad_temples,
         )
     }
 
@@ -956,10 +1045,42 @@ def assumed_fill(
                     elif "r.gad1_hand(" in expr_l:
                         depth += 0.5   # one temple required
 
+            # ── gate_raw nudges (region-level soul gates) ─────────────────────
+            # These are Deadside coffin gates and temple interior gates that
+            # gate_expr alone doesn't capture — they're region transitions
+            # requiring soul level, not item checks.  Boosts stack with any
+            # item-gate nudges above for locs that require both.
+            if loc.gate_raw:
+                gate_r = loc.gate_raw.upper()
+                if "INTERIOR" in gate_r:
+                    depth += 2  # temple interior soul gate (Prophecy/Blood/Fogometers)
+                if "MYSTERY" in gate_r:
+                    depth += 2    # Deadside mystery gate — deepest area
+                if "LALAME" in gate_r:
+                    depth += 2    # La Lame eclipser soul gate (SL7 vanilla)
+                if "LALUNE" in gate_r:
+                    depth += 2  # La Lune eclipser soul gate (SL3 vanilla)
+                if "FIRE_FLAMBEAU" in gate_r:
+                    depth += 2  # Temple of Fire upper gate (SL5)
+                if "FIRE_POIGNE" in gate_r:
+                    depth += 2    # Temple of Fire lower gate (SL4)
+                if "ENSEIGNE" in gate_r:
+                    depth += 2    # Wasteland enseigne interior gate (SL6)
+
+            # ── Govi slot nudge ───────────────────────────────────────────────
+            # Govi slots are physically harder to reach in-level than open
+            # cadeaux/barrel slots, so bias key items and souls toward them.
+            if loc.object == "RSC_X_GOVI":
+                depth += 2
+
             if item.category == "soul":
                 already = _level_soul_count(loc.level_id)
                 effective_depth = max(depth, 0.5)
                 depth = effective_depth / (1 + already * 0.8)
+                # Deadside Marrow Gates is hub world — less interesting for
+                # soul placement than the spokes.  Pull its weight down.
+                if loc.level_id == "deadside":
+                    depth *= 0.4
             elif item.category in {"progression", "eclipser", "retractor", "accumulator", "gad", "weapon", "lore", "bonus"}:
                 already = _level_key_count(loc.level_id)
                 effective_depth = max(depth, 0.5)
@@ -991,6 +1112,8 @@ def assumed_fill(
             level_rules,
             shuffle_gad_temples=shuffle_gad_temples,
             item_category=item_category,
+            baseline_retractor_count=_bl_retractor,
+            baseline_inv=_bl_inv or None,
         )
 
         def _slot_ok(loc) -> bool:
@@ -1089,10 +1212,14 @@ def assumed_fill(
     # candidate_pool) to ensure complete coverage of all levels including
     # liveside, which phase 1 may have excluded from its candidate set.
 
-    include_cats = {"soul", "progression", "eclipser", "retractor", "accumulator", "gad"}
-    if shuffle_weapons: include_cats.add("weapon")
-    if shuffle_lore:    include_cats.add("lore")
-    if shuffle_bonus:   include_cats.add("bonus")
+    include_cats = {"soul", "progression", "gad"}
+    if shuffle_retractors:   include_cats.add("retractor")
+    if shuffle_accumulators: include_cats.add("accumulator")
+    if shuffle_eclipsers:    include_cats.add("eclipser")
+    if shuffle_weapons:      include_cats.add("weapon")
+    if shuffle_lore:         include_cats.add("lore")
+    if shuffle_bonus:        include_cats.add("bonus")
+    if shuffle_prisms:       include_cats.add("prism")
 
     # Items to place — all cadeaux + any barrels whose slot is still unfilled.
     # Cadeaux are always included regardless of whether their slot was claimed
@@ -1116,7 +1243,11 @@ def assumed_fill(
         loc.loc_key for loc in CHECKABLE_LOCS
         if loc.loc_key not in placement
         and loc.level_id not in EXCLUDED_LEVELS
-        and (shuffle_gad_temples or loc.category != "gad")
+        and (shuffle_gad_temples  or loc.category != "gad")
+        and (shuffle_retractors   or loc.category != "retractor")
+        and (shuffle_accumulators or loc.category != "accumulator")
+        and (shuffle_eclipsers    or loc.category != "eclipser")
+        and (shuffle_prisms       or loc.category != "prism")
     ]
     rng.shuffle(remaining_locs)
 
@@ -1126,16 +1257,7 @@ def assumed_fill(
     # vanilla and never duplicate instance IDs.
     for i, loc_key in enumerate(remaining_locs):
         if i < len(filler_items):
-            item = filler_items[i]
-            if item.category == "cadeaux":
-                from types import SimpleNamespace
-                item = SimpleNamespace(
-                    object="RSC_X_CADEAUX",
-                    save_idx=item.save_idx,
-                    friendly_name="RSC_X_CADEAUX",
-                    category="cadeaux",
-                )
-            placement[loc_key] = item
+            placement[loc_key] = filler_items[i]
         else:
             placement[loc_key] = _plain_barrel(rng)
 
@@ -1152,6 +1274,9 @@ def validate_fill(
     verbose: bool = False,
     gate_remap: dict[str, int] | None = None,
     shuffle_gad_temples: bool = False,
+    shuffle_retractors: bool = True,
+    shuffle_accumulators: bool = True,
+    shuffle_eclipsers: bool = True,
     starting_item: str | None = None,
     true_form_loc_remap: dict[str, str] | None = None,
     entrance_shuffle=None,
@@ -1162,9 +1287,22 @@ def validate_fill(
 
     placed_objects = [v.object if hasattr(v, "object") else v for v in placement.values()]
     for item_name in ALL_UNIQUES:
+        if not shuffle_eclipsers and item_name in ECLIPSER_ITEMS:
+            continue  # eclipsers intentionally stay vanilla
         count = placed_objects.count(item_name)
         if count > 1:
             print(f"⚠️ LOGIC WARNING: {item_name} placed {count} times!")
+
+    _bl_retractor = 0 if shuffle_retractors else 5
+    _bl_inv: dict[str, int] = {}
+    if not shuffle_accumulators:
+        _bl_inv["RSC_X_ACCUMULATOR"] = 3
+    if not shuffle_eclipsers:
+        _bl_inv.update({
+            "RSC_X_ECLIPSER_PART1": 1,
+            "RSC_X_ECLIPSER_PART2": 1,
+            "RSC_X_ECLIPSER_PART3": 1,
+        })
 
     active_fixed_soul_locs = apply_true_form_remap(true_form_loc_remap)
     reached_keys, final_state, _ = simulate_playthrough(
@@ -1173,6 +1311,8 @@ def validate_fill(
         level_rules=_regions.build_level_rules(gate_remap, entrance_shuffle),
         debug=verbose,
         shuffle_gad_temples=False,
+        baseline_retractor_count=_bl_retractor,
+        baseline_inv=_bl_inv or None,
     )
 
     _loc_by_key_all = {**LOCATION_TABLE, **{l.loc_key: l for l in active_fixed_soul_locs}}
@@ -1185,7 +1325,10 @@ def validate_fill(
 
     checkable_locs = [
         l for l in CHECKABLE_LOCS
-        if (shuffle_gad_temples or l.category != "gad")
+        if (shuffle_gad_temples  or l.category != "gad")
+           and (shuffle_retractors   or l.category != "retractor")
+           and (shuffle_accumulators or l.category != "accumulator")
+           and (shuffle_eclipsers    or l.category != "eclipser")
            and l.category not in FILLER_SLOT_CATS
     ]
     total_checkable = len(checkable_locs)
@@ -1316,7 +1459,7 @@ if __name__ == "__main__":
             if args.verbose or len(seeds) == 1:
                 from collections import defaultdict
 
-                soul_dist = aultdict(int)
+                soul_dist = defaultdict(int)
                 key_dist = defaultdict(int)
                 for loc_key, item in placement.items():
                     level = loc_key.split(":")[0]

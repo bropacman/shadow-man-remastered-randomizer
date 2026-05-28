@@ -45,6 +45,36 @@ spoiler_seed_*.txt
 # ── Local test / research scripts ────────────────────────────────
 tests/
 fx_buffet.py
+tools/backfill_cadeaux.py
+tools/check_cadeaux_counts.py
+tools/compare_barrel_bytes.py
+tools/count_cadeaux.py
+tools/dump_ambient_csv.py
+tools/find_phantom_cadeaux.py
+tools/find_phantom_locations.py
+tools/fix_instance_ids.py
+tools/inspect_true_form_records.py
+tools/scan_ambient_creatures.py
+tools/scan_drop_ids.py
+tools/scan_weapon_sfx.py
+tools/spawn_buffet.py
 
 # ── Misc ──────────────────────────────────────────────────────────
 testfile.txt
+
+# ── Game files (never commit) ─────────────────────────────────────
+reference/data/
+
+# ── Local data / scratch ─────────────────────────────────────────
+data/locations_backup_*.csv
+data/fix.log
+salvage_rsc_dump.csv
+new_ambients.csv
+new_ambients_clean.csv
+gui_prefs.json
+
+# ── LibreOffice lock files ────────────────────────────────────────
+.~lock.*
+
+# ── AI assistant instructions (local only) ───────────────────────
+CLAUDE.md

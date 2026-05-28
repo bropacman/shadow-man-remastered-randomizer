@@ -24,7 +24,7 @@ SOUL_RSC_FILES = {
     "enemies.rsc",
 }
 
-ENEMY_RSC_FILES = {"enemies.rsc", "enemys.rsc","objects.rsc", "resource.rsc","events.rsc"}
+ENEMY_RSC_FILES = {"enemies.rsc", "enemys.rsc","objects.rsc", "resource.rsc","events.rsc","day.rsc","night.rsc"}
 
 # File extensions extracted from KPF for randomizer use
 KPF_TARGET_EXTENSIONS = {".rsc", ".evt", ".e2o"}
@@ -121,7 +121,7 @@ GATE_VANILLA_SL: dict[str, int] = {
     "GATE_FIRE_FLAMBEAU"        :  5,  # t1tchgad  — Temple of Fire upper gate
     "GATE_PROPHECY_INTERIOR"    :  7,  # t2wlkgad  — Temple of Prophecy interior
     "GATE_BLOOD_INTERIOR"       :  9,  # t3swmgad  — Temple of Blood interior
-    "GATE_FOGOMETERS_INTERIOR"  : 10,  # ah4fogom  — Fogometers interior         LOCKED
+    "GATE_FOGOMETERS_INTERIOR"  : 10,  # ah4fogom  — Fogometers interior
 }
 
 # XZ positions for matching gate_id → physical location in game world.

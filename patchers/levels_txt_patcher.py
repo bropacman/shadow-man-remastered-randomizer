@@ -51,6 +51,14 @@ LEVEL_TO_NUM: dict[str, int] = {
     "uground":  3,  "nuground": 3,
     "florida":  4,  "nflorida": 4,
     "salvage":  5,  "nsalvage": 5,
+    # t4ndgad is intentionally NOT mapped here. It is a cut sub-zone of salvage
+    # with 4 RSC_CADEAUX in its resource.rsc (all is_verified=False, inaccessible).
+    # Vanilla levels.txt $cadeaux 35 for level 5 appears to count those 4 — giving
+    # 31 (salvage) + 4 (t4ndgad) = 35.  We do NOT replicate that here because
+    # t4ndgad has no entrance: adding them would make the tracker show 35 expected
+    # with only 31 collectable, breaking 100% completion for players.
+    # The patched total will be 662 instead of 666 as a result — this is a known
+    # vanilla data artifact from a cut level, not a randomizer bug.
     "deadside": 6,
     "wastland": 7,
     "asylum":   8,
@@ -126,10 +134,11 @@ RSC_TO_DIRECTIVE: dict[str, str | None] = {
     "RSC_X_SOLEIL":          "lesoleil",
     "RSC_X_LALAME":          "lalame",
     # Weapons
-    # Both Violator variants map to $violator2 (the standard collectible directive).
-    # $violator requires VIO_PLINTH (accumulator mechanism) which is never triggered
-    # in a randomized run — the Violator is always placed as RSC_Q_VIOLATOR.
-    "RSC_X_VIOLATOR":        "violator2",
+    # RSC_Q_VIOLATOR is the loose collectible Violator — maps to $violator2.
+    # RSC_X_VIOLATOR is the accumulator-mechanism Violator — maps to $violator.
+    # VIO_PLINTH is never triggered in a randomised run so $violator hints won't
+    # clear; the loc_english override labels them "(won't clear)" accordingly.
+    "RSC_X_VIOLATOR":        "violator",
     "RSC_Q_VIOLATOR":        "violator2",
     "RSC_X_TETEDEMORT":      "tetedemort",
     "RSC_X_MAC10":           "mac10",
@@ -151,8 +160,9 @@ RSC_TO_DIRECTIVE: dict[str, str | None] = {
 
 # Directives superseded in randomized output: no longer in RSC_TO_DIRECTIVE.values()
 # but must still be stripped so vanilla leftovers don't pollute the output.
-# e.g. $violator (accumulator-window variant) → replaced everywhere by $violator2.
-_STRIP_ONLY_DIRECTIVES: frozenset[str] = frozenset({"violator"})
+# Note: $violator is now a live directive again (RSC_X_VIOLATOR → "violator") so
+# it is NOT in this set — it gets stripped and re-injected through the normal loop.
+_STRIP_ONLY_DIRECTIVES: frozenset[str] = frozenset()
 
 # RSC_X_GAD_PICKUP directive is determined by the item's ORIGINAL level
 # (which temple it came from), not where it was randomized to
@@ -446,10 +456,12 @@ def patch_levels_txt(
             if m:
                 existing_soul_ids.add(int(m.group(1)))
 
-    # Build: list of (directive, target_level_num, condition).
+    # Build: list of (directive, target_level_num, condition, dest).
     # Multiple items sharing a base directive (retractor, accumulator, darksoul)
     # each get their own entry so all hints are written — no "last wins" collapse.
-    directive_entries: list[tuple[str, int, str]] = []
+    # dest is the RawLocation for the destination slot; used to supply accurate
+    # world coordinates for directives that need them (retractor, accumulator).
+    directive_entries: list[tuple[str, int, str, object]] = []
 
     for loc_key, source_loc in progression_placement.items():
         dest = LOCATION_TABLE.get(loc_key)
@@ -487,7 +499,7 @@ def patch_levels_txt(
         flags = _gate_raw_to_flags(dest.gate_raw, gate_remap)
         ordered = _order_flags(flags)
         condition = " ".join(ordered) if ordered else "NONE"
-        directive_entries.append((directive, level_num, condition))
+        directive_entries.append((directive, level_num, condition, dest))
 
     # True form souls — use loc_key_remap from randomize_true_forms.
     # src carries the soul ID (save_idx written to dst slot by enemy randomizer);
@@ -514,7 +526,7 @@ def patch_levels_txt(
                 flags.add("ECLIPSE")
             ordered = _order_flags(flags)
             condition = " ".join(ordered) if ordered else "NONE"
-            directive_entries.append((f"darksoul {soul_id}", level_num, condition))
+            directive_entries.append((f"darksoul {soul_id}", level_num, condition, None))
 
     # Bulk-strip randomizable $darksoul entries up front so vanilla souls that
     # share a block with randomized placements don't produce duplicate "Find X
@@ -550,38 +562,52 @@ def patch_levels_txt(
     # updated line into the target block.  Each entry is processed independently
     # so multi-instance directives (retractor, accumulator) all appear.
     #
-    # coords_suffix_map persists the XYZ+zone tail captured from the first
-    # vanilla line for each directive.  Without this, only the first occurrence
-    # of a repeated directive (retractor, accumulator) would get coordinates;
-    # subsequent entries would emit bare "$directive "COND"" lines that the
-    # game parser rejects as "$ is not a float".
+    # directive_has_coords tracks whether a directive's vanilla lines carried
+    # XYZ world coordinates after the condition string.  When True we build the
+    # suffix from the DESTINATION slot's actual coordinates (dest.x/y/z/zone)
+    # rather than reusing the vanilla coords — which would point to the wrong
+    # world position after shuffle and prevent the badge from clearing on pickup.
     written: set[str] = set()
-    coords_suffix_map: dict[str, str] = {}
+    directive_has_coords: dict[str, bool] = {}
 
-    for directive, target_num, condition in directive_entries:
+    for directive, target_num, condition, dest in directive_entries:
         # darksoul entries already bulk-stripped above; all others strip on
         # first encounter of that directive name.
         pat = _directive_re(directive)
         is_darksoul = directive.startswith("darksoul ")
 
         if directive not in written:
-            coords_suffix = ""
+            has_coords = False
             if not is_darksoul:
                 for b in blocks:
                     kept, removed = [], []
                     for line in b["lines"]:
                         (removed if pat.search(line) else kept).append(line)
                     b["lines"] = kept
-                    if not coords_suffix:
+                    if not has_coords:
                         for line in removed:
                             m = re.search(r'"[^"]*"(.*)', line)
                             if m and m.group(1).strip():
-                                coords_suffix = " " + m.group(1).strip()
+                                has_coords = True
                                 break
-            coords_suffix_map[directive] = coords_suffix
+            directive_has_coords[directive] = has_coords
             written.add(directive)
 
-        new_line = f'    ${directive} "{condition}"{coords_suffix_map.get(directive, "")}'
+        # Build the coordinate suffix from the actual destination location.
+        # Retractor and accumulator lines include "X Y Z zone" after the
+        # condition; using vanilla coords here would point to the wrong world
+        # position after shuffle, so the badge never clears on collection.
+        coords_suffix = ""
+        if directive_has_coords.get(directive) and dest is not None:
+            dx = getattr(dest, 'x', None)
+            dy = getattr(dest, 'y', None)
+            dz = getattr(dest, 'z', None)
+            dzone = getattr(dest, 'zone', None)
+            if dx is not None and dy is not None and dz is not None:
+                zone_str = str(dzone) if dzone is not None else "0"
+                coords_suffix = f" {dx:.6f} {dy:.6f} {dz:.6f} {zone_str}"
+
+        new_line = f'    ${directive} "{condition}"{coords_suffix}'
         target = by_num.get(target_num)
         if target is not None:
             target["lines"].append(new_line)
@@ -630,7 +656,38 @@ def patch_levels_txt(
         if getattr(source_loc, "category", None) == "cadeaux":
             cadeaux_per_level[level_num] = cadeaux_per_level.get(level_num, 0) + 1
 
+    # Unverified cadeaux locations (is_verified=False) are excluded from
+    # CHECKABLE_LOCS so fill never touches them — they stay vanilla in the
+    # game world.  When we overwrite a level's $cadeaux N line for any fill-
+    # placed cadeaux in that level, we must still count these untouched slots
+    # so the total isn't short.
+    from fill import UNVERIFIED_LOCS, AP_LOCATIONS
+    for loc in AP_LOCATIONS:
+        if loc.loc_key not in UNVERIFIED_LOCS:
+            continue
+        if loc.category != "cadeaux":
+            continue
+        level_num = LEVEL_TO_NUM.get(loc.level_id)
+        if level_num is None:
+            continue
+        # Only add to levels that fill touched (have an entry in cadeaux_per_level).
+        # Levels with no fill-placed cadeaux keep their vanilla $cadeaux line as-is,
+        # so we don't need to adjust them here.
+        if level_num in cadeaux_per_level:
+            cadeaux_per_level[level_num] += 1
+
     _cadeaux_line_re = re.compile(r'^\s*\$cadeaux\s+\d+', re.IGNORECASE)
+
+    # Snapshot vanilla counts BEFORE mutating any block lines.
+    # The summary loop below must read from this dict — not from b["lines"] —
+    # because the mutation loop overwrites the $cadeaux lines in-place.
+    vanilla_per_level: dict[int, int] = {}
+    for b in blocks:
+        for line in b["lines"]:
+            if _cadeaux_line_re.match(line):
+                vanilla_per_level[b["num"]] = int(re.search(r'\d+', line).group())
+                break
+
     cadeaux_updated = 0
     for b in blocks:
         new_count = cadeaux_per_level.get(b["num"])
@@ -646,6 +703,28 @@ def patch_levels_txt(
             else:
                 new_lines.append(line)
         b["lines"] = new_lines
+
+    missing_cadeaux = 0
+    for loc_key, source_loc in progression_placement.items():
+        if getattr(source_loc, "category", None) != "cadeaux":
+            continue
+        dest = LOCATION_TABLE.get(loc_key)
+        if dest is None:
+            missing_cadeaux += 1
+            print(f"  [levels_txt] cadeaux with no LOCATION_TABLE entry: {loc_key}")
+    print(f"  [levels_txt] cadeaux missing from count: {missing_cadeaux}")
+
+    vanilla_total = 0
+    patched_total = 0
+    for b in blocks:
+        vanilla_count = vanilla_per_level.get(b["num"], 0)
+        vanilla_total += vanilla_count
+        new_count = cadeaux_per_level.get(b["num"], vanilla_count)
+        patched_total += new_count
+        if new_count != vanilla_count:
+            print(f"  [levels_txt] level {b['num']}: cadeaux {vanilla_count} → {new_count}")
+
+    print(f"  [levels_txt] cadeaux total: vanilla={vanilla_total} patched={patched_total}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(_serialize(blocks), encoding="utf-8")

@@ -26,6 +26,14 @@ In all modes:
   - Slot positions are fixed — only RSC_ names change.
   - Slots occupied by true form patches are skipped.
 
+Optional flag: config["enemy_uncap_counts"] (bool, default False)
+  When False (default): enemy counts are preserved — each type appears the same
+    number of times it did in vanilla; only positions change.
+  When True: each slot is filled by independently sampling from the available
+    pool with replacement. Any type can appear 0 or dozens of times across the
+    whole run (e.g. 20 Choppers, 0 Deadsiders). All other constraints (movement
+    type, difficulty tier, context group) still apply within each pool.
+
 Difficulty tiers (constants.ENEMY_DIFFICULTY):
   1 — Basic fodder (Deadworms, Deadsiders, Zombies)
   2 — Common early/mid (Guards, Dogs, Gators)
@@ -70,6 +78,7 @@ def randomize_enemies(
     )
     mode         = config.get("enemy_mode", "difficulty")
     mix_movement = config.get("enemy_mix_movement", False)
+    uncap_counts = config.get("enemy_uncap_counts", False)
     patches_by_folder: dict[tuple[str, str], dict[int, dict]] = {}
     total_shuffled = 0
     total_skipped  = 0
@@ -121,9 +130,7 @@ def randomize_enemies(
 
         for movement, slots in slot_groups:
             if mode == "full":
-                names = [r.object for r in slots]
-                rng.shuffle(names)
-                _apply(slots, names)
+                _apply(slots, _draw_names(rng, slots, uncap_counts))
             else:
                 # Build (movement_key, tier) name pools — movement_key is "_any_" when mixing.
                 diff_buckets = _build_difficulty_buckets(slots, gate_remap, movement_key=movement)
@@ -153,20 +160,27 @@ def randomize_enemies(
                         key = (movement, t)
                         pool = diff_buckets.get(key)
                         if pool:
-                            idx = cursors[key] % len(pool)
-                            chosen = pool[idx]
-                            cursors[key] += 1
+                            if uncap_counts:
+                                chosen = rng.choice(pool)
+                            else:
+                                idx = cursors[key] % len(pool)
+                                chosen = pool[idx]
+                                cursors[key] += 1
                             break
                     names.append(chosen or rec.object)  # no-op if nothing found
 
                 # Handle unmapped slots — full random from whole movement pool
                 if unmapped:
                     fallback_pool = [r.object for r in slots]
-                    rng.shuffle(fallback_pool)
-                    fb_idx = 0
-                    for slot_idx, rec in unmapped:
-                        names[slot_idx] = fallback_pool[fb_idx % len(fallback_pool)]
-                        fb_idx += 1
+                    if uncap_counts:
+                        for slot_idx, rec in unmapped:
+                            names[slot_idx] = rng.choice(fallback_pool)
+                    else:
+                        rng.shuffle(fallback_pool)
+                        fb_idx = 0
+                        for slot_idx, rec in unmapped:
+                            names[slot_idx] = fallback_pool[fb_idx % len(fallback_pool)]
+                            fb_idx += 1
 
                 _apply(slots, names)
     else:  # contextual
@@ -180,21 +194,16 @@ def randomize_enemies(
                 else:
                     by_group[group].extend(slots)
             for group, slots in sorted(by_group.items()):
-                names = [r.object for r in slots]
-                rng.shuffle(names)
-                _apply(slots, names)
+                _apply(slots, _draw_names(rng, slots, uncap_counts))
             for (group, movement), slots in sorted(isolated_ctx.items()):
-                names = [r.object for r in slots]
-                rng.shuffle(names)
-                _apply(slots, names)
+                _apply(slots, _draw_names(rng, slots, uncap_counts))
         else:
             for (group, movement), slots in sorted(SLOTS_BY_CONTEXT.items()):
-                names = [r.object for r in slots]
-                rng.shuffle(names)
-                _apply(slots, names)
+                _apply(slots, _draw_names(rng, slots, uncap_counts))
 
 
-    _print_summary(patches_by_folder, total_shuffled, total_skipped, mode)
+    mode_label = f"{mode}+uncapped" if uncap_counts else mode
+    _print_summary(patches_by_folder, total_shuffled, total_skipped, mode_label)
     return patches_by_folder
 
 
@@ -320,6 +329,21 @@ _TIER_WEIGHTS: dict[int, list[int]] = {
     4: [15, 15, 30, 25, 15],
     5: [10, 10, 20, 25, 35],
 }
+
+
+def _draw_names(rng: random.Random, slots: list, uncap_counts: bool) -> list[str]:
+    """
+    Return a list of RSC names to assign to `slots`.
+
+    uncap_counts=False  → shuffle (permutation): preserves per-type counts.
+    uncap_counts=True   → sample with replacement: each slot independently
+                          picks from the pool, so counts are fully uncapped.
+    """
+    pool = [r.object for r in slots]
+    if uncap_counts:
+        return [rng.choice(pool) for _ in slots]
+    rng.shuffle(pool)
+    return pool
 
 
 def _build_difficulty_buckets(

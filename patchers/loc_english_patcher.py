@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from constants import GAD_LABEL, HINT_TIERS, DIRECTIVE_HINT_TIER
+from constants import GAD_LABEL, HINT_TIERS, DIRECTIVE_HINT_TIER, VIOLATOR_PLINTH_LABEL
 
 # -- GAD collapse -------------------------------------------------------------
 
@@ -162,6 +162,37 @@ def patch_loc_english_for_tracker(
     """
     overrides = {}
 
+    # Always: label items whose tracker hints are known not to clear.
+    # Retractor and accumulator clearance mechanics are not yet understood;
+    # Violator (VIO_PLINTH) is never triggered in a randomised run.
+    overrides["m_obj_violator"]      = VIOLATOR_PLINTH_LABEL
+    overrides["m_obj_retractor"]     = "Retractor (won't clear)"
+    overrides["m_obj_retractors"]    = "Retractors (won't clear)"
+    overrides["m_obj_accumulator"]   = "Accumulator (won't clear)"
+    overrides["m_obj_accumulators"]  = "Accumulators (won't clear)"
+
+    # Always: replace loading screen tips with randomizer-specific content.
+    overrides["m_loadtip00"] = "Legion has scattered the relics across Deadside. Nettie believes in you. Jaunty does not."
+    overrides["m_loadtip01"] = "Coffin Gates may require different Soul Levels this run. The number of Dark Souls needed is non-linear — 7 opens SL3, 95 opens SL9."
+    overrides["m_loadtip02"] = "Rolling can help you avoid dangerous traps and projectiles."
+    overrides["m_loadtip03"] = "Perform a quick turn around roll to turn 180 degrees."
+    overrides["m_loadtip04"] = "Your cadeaux counter may not always agree with reality. Consider it a rough estimate. A rough, possibly wrong estimate."
+    overrides["m_loadtip05"] = "Open the weapon wheel to quickly change the weapons in your hands."
+    overrides["m_loadtip06"] = "Killing enemies with your Shadow Gun will drop their lifeforce for you to collect."
+    overrides["m_loadtip07"] = "Enter Snipe mode for precise aiming."
+    overrides["m_loadtip08"] = "Use Luke's Teddy Bear to warp between discovered locations. The tracker hints show what you need to REACH an item, not collect it."
+    overrides["m_loadtip09"] = "Your starting item is waiting at the Louisiana Swampland church before any other pickup."
+    overrides["m_loadtip10"] = "Revisit areas after acquiring new abilities — a relic may have been waiting for you the whole time."
+    overrides["m_loadtip11"] = "If a portal leads somewhere unexpected, that's the entrance randomizer at work. Explore before assuming you're lost."
+    overrides["m_loadtip12"] = "A glowing voodoo marker near a Dark Soul or Cadeaux spot means a key relic is hidden there instead."
+    overrides["m_loadtip13"] = "If your tracker badge for a Retractor, Accumulator, Gad Power, or Violator refuses to clear — that's a feature. The game has strong feelings about those."
+    overrides["m_loadtip14"] = "Gad Powers have been pulled from their temples and hidden as physical pickups. The map tracker will point you to them."
+    overrides["m_loadtip15"] = "To reach Legion you must access all five Engine Block sections in the Asylum: London, Prison, Salvage, Queens, and Florida. Nettie left this part out of the orientation."
+    overrides["m_loadtip16"] = "All three Eclipser pieces are needed before nightfall. Without them, Liveside enemies won't appear after dark."
+    overrides["m_loadtip17"] = "Stuck? The spoiler log bundled with your seed lists the exact location of every item. No shame in looking."
+    overrides["m_loadtip18"] = "Use the Enseigne to shield yourself from deadly attacks that may not be avoidable."
+    overrides["m_loadtip19"] = "Jaunty knows exactly where everything ended up. He has chosen not to share this information with you."
+
     # 1. GAD collapse -- prevent misleading specific-power labels
     if shuffle_gad_temples:
         for key in GAD_KEYS:
@@ -190,7 +221,7 @@ def patch_loc_english_for_tracker(
         inject_missing=False,
     )
 
-    mode = []
+    mode = ["loadtips"]
     if shuffle_gad_temples:
         mode.append("GAD collapse + Book of Gad rename")
 

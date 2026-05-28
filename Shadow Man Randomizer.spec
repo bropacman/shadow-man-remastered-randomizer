@@ -1,26 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
+import glob
+
+# Auto-include all root-level .py files except gui.py (the entry point).
+# New patch/helper files are picked up automatically — no manual spec edits needed.
+root_py = [(f, '.') for f in glob.glob('*.py') if f != 'gui.py']
 
 a = Analysis(
     ['gui.py'],
     pathex=['.'],
     binaries=[],
-    datas=[
+    datas=root_py + [
         ('data', 'data'),
-        ('extracted_locations.py', '.'),
-        ('extracted_enemy_locations.py', '.'),
-        ('patcher.py', '.'),
-        ('fill.py', '.'),
-        ('access_rules.py', '.'),
-        ('regions.py', '.'),
-        ('locations.py', '.'),
-        ('BaseClasses.py', '.'),
-        ('constants.py', '.'),
-        ('kpf_handler.py', '.'),
-        ('gad_pickup_patch.py', '.'),
-        ('cadeaux_patch.py', '.'),
-        ('health_patch.py', '.'),
-        ('rsc_utils.py', '.'),
-        ('setup_gad_records.py', '.'),
         ('randomizers', 'randomizers'),
         ('patchers', 'patchers'),
         ('assets', 'assets'),

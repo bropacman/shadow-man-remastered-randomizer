@@ -37,6 +37,8 @@ VALID_CATEGORIES = {
 
 # sub_region sentinel meaning "no gate — freely accessible in the level"
 NO_GATE_SENTINEL = "N"
+# Additional values treated as no-gate (NULL used in CSV for unassigned sub-regions)
+_NO_GATE_ALIASES: frozenset[str] = frozenset({"N", "NULL", "NONE"})
 
 # ── Gate expression parser ────────────────────────────────────────────────────
 #
@@ -108,7 +110,7 @@ def parse_gate_expr(raw: str) -> str | None:
     Raises ValueError on malformed input.
     """
     s = raw.strip()
-    if not s or s.upper() == NO_GATE_SENTINEL:
+    if not s or s.upper() in _NO_GATE_ALIASES:
         return None
 
     tokens = _tokenize(s)
@@ -126,7 +128,7 @@ def parse_gate_expr(raw: str) -> str | None:
 def collect_gate_tokens(raw: str) -> set[str]:
     """Return all identifier tokens (lowercase) in a gate expression."""
     s = raw.strip()
-    if not s or s.upper() == NO_GATE_SENTINEL:
+    if not s or s.upper() in _NO_GATE_ALIASES:
         return set()
     return {tok.lower() for tok in _tokenize(s) if tok not in ("(", ")", "&", "|")}
 
@@ -179,7 +181,7 @@ def validate(rows: list[dict]) -> list[str]:
             )
 
         # Gate expression
-        if sub_region and sub_region.upper() != NO_GATE_SENTINEL:
+        if sub_region and sub_region.upper() not in _NO_GATE_ALIASES:
             try:
                 parse_gate_expr(sub_region)
             except ValueError as e:
@@ -436,7 +438,7 @@ def main() -> None:
     all_gates: set[str] = set()
     for row in rows:
         sr = row["sub_region"].strip()
-        if sr and sr.upper() != NO_GATE_SENTINEL:
+        if sr and sr.upper() not in _NO_GATE_ALIASES:
             all_gates.add(sr)
 
     all_tokens: set[str] = set()

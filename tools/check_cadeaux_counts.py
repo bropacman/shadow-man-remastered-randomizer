@@ -4,22 +4,21 @@ check_cadeaux_counts.py — Compare CSV cadeaux counts vs levels.txt per level.
 Usage:
     python tools/check_cadeaux_counts.py
     python tools/check_cadeaux_counts.py --csv data/locations.csv
-    python tools/check_cadeaux_counts.py --ignore-t4   # exclude t4ndgad from salvage count
+    python tools/check_cadeaux_counts.py --levels-txt reference/levels.txt
 """
 
 import argparse
 import csv
 import re
 from collections import defaultdict
-from pathlib import Path
 
 LEVEL_DIR_MAP = {
     0:  ["swampday", "swampnit"],
-    1:  ["tenement"],
-    2:  ["prison"],
-    3:  ["uground"],
-    4:  ["florida"],
-    5:  ["salvage", "t4ndgad"],  # t4ndgad is sub-zone of salvage
+    1:  ["tenement", "ntenemnt"],
+    2:  ["prison",   "nprison"],
+    3:  ["uground",  "nuground"],
+    4:  ["florida",  "nflorida"],
+    5:  ["salvage",  "nsalvage"],
     6:  ["deadside"],
     7:  ["wastland"],
     8:  ["asylum"],
@@ -41,8 +40,6 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--csv", default="data/locations.csv")
     parser.add_argument("--levels-txt", default="reference/levels.txt")
-    parser.add_argument("--ignore-t4", action="store_true",
-                        help="Exclude t4ndgad rows from salvage count")
     args = parser.parse_args()
 
     with open(args.levels_txt) as f:
@@ -59,12 +56,7 @@ def main() -> None:
     with open(args.csv, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             if row.get("category", "").strip().lower() == "cadeaux":
-                lid = row["level_id"]
-                if args.ignore_t4 and lid == "t4ndgad":
-                    continue
-                csv_counts[lid] += 1
-
-    t4_adj = 4 if args.ignore_t4 else 0  # t4ndgad contributes to salvage's 35
+                csv_counts[row["level_id"]] += 1
 
     print("%-4s %-32s %5s %5s %5s" % ("Lvl", "Name", "txt", "csv", "diff"))
     print("-" * 58)
@@ -72,11 +64,7 @@ def main() -> None:
     problems = []
     for lvl_num in sorted(LEVEL_DIR_MAP):
         dirs = LEVEL_DIR_MAP[lvl_num]
-        if args.ignore_t4:
-            dirs = [d for d in dirs if d != "t4ndgad"]
         txt = level_counts.get(lvl_num, 0)
-        if args.ignore_t4 and lvl_num == 5:
-            txt = max(0, txt - t4_adj)
         csv_n = sum(csv_counts[d] for d in dirs)
         diff = csv_n - txt
         m = re.search(r"\$level\s+%d\s+//(.+)" % lvl_num, content)

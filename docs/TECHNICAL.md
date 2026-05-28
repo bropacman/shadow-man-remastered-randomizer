@@ -17,6 +17,7 @@ curious players, or future maintainers.
 7. [Enemy, Music, and SFX Shuffle](#7-enemy-music-and-sfx-shuffle)
 8. [Spoiler Log](#8-spoiler-log)
 9. [Recent Fixes](#9-recent-fixes)
+10. [RSC File Format Reference](#10-rsc-file-format-reference)
 
 ---
 
@@ -516,3 +517,232 @@ The sphere simulation is produced by `simulate_playthrough()` in `fill.py`
 with `collect_spheres=True`. It replays the exact logic the fill algorithm
 used, so the spoiler log is a faithful record of the intended progression order
 for that seed — not a post-hoc reconstruction.
+
+---
+
+## 10. RSC File Format Reference
+
+This section is the authoritative byte-level description of the RSC binary
+format used throughout the game. The same 72-byte record structure appears in
+`quest.rsc`, `resource.rsc`, `enemies.rsc`, `instance.rsc`, and several other
+file types. Understanding it is required for any tool that reads or patches
+game data.
+
+### 10.1 File layout
+
+An RSC file has two parts: a header followed by a flat array of 72-byte records.
+
+```
+Offset  Size  Field
+──────  ────  ─────────────────────────────────────────────────────────
+0x00    4     Magic: ASCII "Ersc" (0x45 0x72 0x73 0x63)
+0x04    4     Version tag (e.g. "v002" for the common variant)
+0x08    …     Record array begins here  (HEADER_SIZE = 8)
+```
+
+Records are packed end-to-end with no padding between them. The total number
+of slots is:
+
+```
+n_slots = (file_size - HEADER_SIZE) // 72
+```
+
+All-zero 72-byte slots are valid padding/headroom and are skipped during
+scanning. A slot whose first byte is non-zero is considered live.
+
+### 10.2 The 72-byte record layout
+
+All multi-byte integers are **little-endian** (the game runs on x64 Windows).
+The earlier claim that the format was big-endian was incorrect; it was
+contradicted by the actual binary data in `swampday/quest.rsc`.
+
+```
++Offset  Size  Name          Description
+───────  ────  ────────────  ─────────────────────────────────────────
++0x00    4     (unknown)     Purpose not yet reversed. Observed zero in
+                             all but one live record in swampday/quest.rsc
+                             (rec 0 carries 0x00004E00 here for unknown
+                             reasons). Do not rely on this field.
++0x04    12    World XYZ     Three 32-bit little-endian floats: X, Y, Z
+                             world-space position of the object.
+                             Not always populated (enemies, some FX).
++0x10    1     (padding)     Observed zero in all known live records.
++0x11    1     Zone          8-bit unsigned integer. Zone/area index
+                             within the level. Used by tools/generate.py
+                             for the `zone` CSV column.
++0x12    2     (padding)     Observed zero in all known live records.
++0x14    2     RotationA     Big-endian signed int16. Object rotation on
+                             one axis (likely pitch/roll), in integer
+                             degrees. Observed values: 0, ±5, 6. Zero
+                             in the majority of records.
++0x16    4     RotationB     Big-endian signed int32. Object rotation on
+                             a second axis (likely yaw), in integer
+                             degrees. Observed range: -90 to 355.
+                             Zero in the majority of records.
++0x1A    2     (padding)     Always zero in all known live records.
++0x1C    2     TrackType     See §10.3 below.
++0x1E    4     SaveIdx       Unique save-state slot index. The game uses
+                             this to remember whether the player has
+                             already collected this object. See §10.4.
+                             Big-endian (confirmed by sequential slot
+                             values 1–32 reading as BE in quest.rsc).
++0x22    30    Name          Null-terminated ASCII RSC name string
+                             (e.g. "RSC_X_DARK_SOUL"). Padded to 30
+                             bytes with zero bytes after the null.
+                             **This is the field the patcher rewrites.**
++0x40    8     (tail)        Observed zero in most records; may carry
+                             additional instance data in some file types.
+```
+
+The `offset` column in `data/locations.csv` and the loc_key format
+(`level_id:source_file:0xOFFSET`) always refer to the **absolute byte offset
+of the Name field** (`+0x22` within the record, from the start of the file).
+This is what `seek(offset)` targets at patch time.
+
+### 10.3 TrackType flags
+
+`TrackType` is a 16-bit value stored at `+0x1C`. Based on `swampday/quest.rsc`
+the bytes are in big-endian order (i.e. high byte first). Observed values:
+
+| Raw bytes | BE value | Object types carrying it |
+|-----------|----------|--------------------------|
+| `00 00`   | `0x0000` | RSC_CADEAUX, RSC_X_GOVI, RSC_EX_*, RSC_TRIBUTE, RSC_VOODOO_STATUE, RSC_X_NETTIE, SW_* |
+| `00 20`   | `0x0020` | RSC_X_BARREL_L (most common barrel variant) |
+| `00 21`   | `0x0021` | RSC_X_BARREL_L |
+| `00 23`   | `0x0023` | RSC_X_BARREL_L |
+| `00 24`   | `0x0024` | RSC_X_BARREL_L |
+
+The persistent-barrel flag is **bit 5 (`0x0020`)**, not `0x0002` as previously
+documented. All `RSC_X_BARREL_L` records in `swampday/quest.rsc` carry
+`0x0020` or a superset of it (`0x0021`, `0x0023`, `0x0024`). The bits layered
+on top of `0x0020` have unknown semantics; the randomizer only needs to detect
+the `0x0020` bit to identify persistent barrels.
+
+The earlier `0x0002` claim was incorrect and has been updated everywhere the
+persistent-barrel detection logic reads TrackType.
+
+### 10.4 SaveIdx semantics
+
+`SaveIdx` is a 32-bit unsigned integer at `+0x1E`, stored **big-endian**
+(confirmed by sequential slot values 1–32 reading as BE in
+`swampday/quest.rsc`; the little-endian interpretation produces garbage values
+like 16777216 for what is clearly save slot 1).
+
+The game uses it as a slot number into a global save bitfield to record whether
+the player has collected this object.
+
+- **Non-zero** — the game tracks this object individually by this ID. Two
+  records with the same non-zero SaveIdx are treated as the same collectible
+  (collecting either clears the other). Duplicate SaveIdx values occur in
+  this file and are intentional — paired records (e.g. a CADEAUX placeholder
+  and its corresponding GOVI) share an ID by design so collecting the real
+  pickup also clears the placeholder.
+
+The `save_idx` CSV column records the value from the binary (as a BE uint32).
+The patcher writes the **source item's** SaveIdx into the destination slot at
+patch time, ensuring the game's save tracking follows the randomized item
+rather than the vanilla slot.
+
+### 10.5 RSC file roles by filename
+
+Different RSC filenames have distinct roles within each level folder. The
+randomizer treats them differently:
+
+| Filename        | Role | Cadeaux scan |
+|-----------------|------|--------------|
+| `quest.rsc`     | Key items, souls, progression pickups. The primary target for item randomization. | Full (explicit names + persistent barrels) |
+| `resource.rsc`  | Mixed: cadeaux (barrels, voodoo skulls), decorative props, secondary pickups. May contain multiple sections (see §10.6). | Full |
+| `enemies.rsc`   | Enemy spawn definitions. Same 72-byte format; name field holds RSC enemy type. | Explicit cadeaux names only (barrels here are decorative) |
+| `instance.rsc`  | Instanced prop placements (barrels, doors, interactive objects). | Explicit cadeaux names only |
+| `objects.rsc`   | Static scene geometry references. | Not scanned |
+| `fx.rsc`        | Particle and light effects. | Not scanned |
+| `day.rsc` / `night.rsc` | Day/night variant control records. | Not scanned |
+| `snd.rsc`       | Sound emitters. | Not scanned |
+
+`NON_ITEM_RSC_FILES` in `tools/count_cadeaux.py` lists the files excluded from
+persistent-barrel detection. Explicit `RSC_CADEAUX` / `RSC_X_CADEAUX` /
+`RSC_PICKUP_CADEAUX` name matches are found in any file regardless.
+
+### 10.6 Multi-section RSC files
+
+Some `resource.rsc` files contain a **second record section** after the primary
+record array ends. This was discovered in `salvage/resource.rsc` and may occur
+in other levels.
+
+The second section begins immediately after the last record of the first
+section. It has its own **16-byte header** (distinct from the standard 8-byte
+header at file offset 0), followed by a fresh 72-byte record array:
+
+```
+Primary section:   [8-byte header][record 0][record 1]…[record N]
+Second section:    [16-byte header][record 0][record 1]…[record M]
+```
+
+The 16-byte sub-header observed in `salvage/resource.rsc`:
+
+```
+Offset (within sub-section)  Value (hex)
+────────────────────────────  ──────────────────────
++0x00                         00 00 00 08 00 00 00 01
++0x08                         00 02 00 4C 00 08 00 07
+```
+
+Records in the second section start 16 bytes after the sub-header begins.
+Because their byte offsets within the file are not aligned to the primary
+section's 8-byte base, a scanner that only walks multiples of 72 from offset 8
+will silently miss every record in the second section.
+
+**Impact:** `salvage/resource.rsc` has 4 cadeaux in its second section
+(offsets `0x552A`, `0x5602`, `0x5692`, `0x56DA`) that were missing from
+`data/locations.csv` until discovered via raw-string scanning. These are the
+source of the `$cadeaux 35` vs. 31-found discrepancy for level 5 in
+`reference/levels.txt`.
+
+**Scanner note:** `tools/count_cadeaux.py` uses structured 72-byte iteration
+from offset 8 and will miss second-section records. `tools/dump_rsc.py`
+accepts an explicit base offset and can be used to scan a second section by
+passing `SEC2_BASE = <subheader_offset> + 16`. A future improvement would be
+to auto-detect second sections by checking whether name strings in the
+"garbage" region following the clean records are valid ASCII with the expected
+`RSC_` prefix.
+
+### 10.7 The loc_key format
+
+Every location in the randomizer is uniquely identified by a loc_key string:
+
+```
+"<level_id>:<source_file>:0x<OFFSET>"
+```
+
+where `OFFSET` is the **absolute byte offset of the Name field** within the
+file, zero-padded to at least 4 hex digits. Examples:
+
+```
+swampday:quest.rsc:0x002A
+salvage:resource.rsc:0x552A
+deadside:quest.rsc:0x12BA
+```
+
+This is the key used in `LOCATION_TABLE`, `CHECKABLE_LOCS`, `UNVERIFIED_LOCS`,
+`progression_placement`, and `patched_keys`. When the patcher applies a seed it
+seeks to this exact byte offset, writes the new 30-byte name, and records the
+loc_key in `patched_keys` to confirm the write occurred.
+
+### 10.8 Cadeaux detection logic
+
+A record is counted as a cadeaux collectible if either of the following is true:
+
+1. **Explicit name** — the Name field is exactly `RSC_CADEAUX`,
+   `RSC_X_CADEAUX`, or `RSC_PICKUP_CADEAUX`.
+
+2. **Persistent barrel** — the Name field contains `BARREL`, `CRATE`, or
+   `PACKBOX` (case-sensitive substring match) **and** TrackType has the
+   `0x0020` bit set **and** the file is not in `NON_ITEM_RSC_FILES`.
+
+The second rule excludes files like `enemies.rsc` and `night.rsc` from barrel
+detection because those files may carry TrackType flags unrelated to
+collectibility. The `RSC_EXPLOSIVE_BARREL` type is not persistent (`0x0020` not
+set) and is therefore not counted.
+
+The canonical implementation is `scan_rsc()` in `tools/count_cadeaux.py`.
+`tools/dump_rsc.py` provides a full per-record CSV dump for investigation.

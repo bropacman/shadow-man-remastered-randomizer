@@ -31,11 +31,11 @@ from collections import defaultdict
 # Update this if your level directory names differ.
 LEVEL_DIR_MAP: dict[int, list[str]] = {
     0:  ["swampday", "swampnit"],
-    1:  ["tenement"],
-    2:  ["prison"],
-    3:  ["uground"],
-    4:  ["florida"],
-    5:  ["salvage"],
+    1:  ["tenement", "ntenemnt"],
+    2:  ["prison",   "nprison"],
+    3:  ["uground",  "nuground"],
+    4:  ["florida",  "nflorida"],
+    5:  ["salvage",  "nsalvage"],
     6:  ["deadside"],
     7:  ["wastland"],
     8:  ["asylum"],
