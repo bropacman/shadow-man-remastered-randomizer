@@ -15,7 +15,8 @@ seed is beatable.
 
 ### What Gets Randomized
 - **Progression items** — Engineers Key, Poigne, Baton, Flambeau, Marteau, Calabash,
-  Eclipser parts, Retractors, Accumulators, Prison Key Card
+  Eclipser parts, Retractors, Accumulators, Prison Key Card; each sub-group
+  (Eclipsers, Retractors, Accumulators) can be individually toggled or randomised per-seed
 - **Gad powers** — Touch, Walk, and Swim Gad as physical pickups shuffled across
   temple locations (EXE patch applied automatically; disable with `--no-shuffle-gad-temples`)
 - **Weapons** — Asson, Shotgun, Sawed-off Shotgun, Enseigne, MP-909, 0.9-SMG, Tête de Mort, Flashlight, Violator
@@ -42,6 +43,8 @@ seed is beatable.
 - **Fogometers light soul door** — cadeaux required to open the final Fogometers gate (default 666, configurable 5–666)
 - **Starting max health** — player max health at game start on a 1–10 scale (default 5 = 5 000 units)
 - **Life altar health grant** — health restored per altar interaction on the same 1–10 scale (default 1 = 1 000 units)
+- **Death penalty** — reduces max health by a configurable step×1 000 on each death, floored at that same value so the player always retains at least one step of health; step 0 = disabled (default), steps 1–10 scale the penalty from mild to brutal
+- **Soul level thresholds** — randomizes the soul counts required to reach SL1–SL10 via three modes: `progressive` (geometric ramp), `balanced` (even spacing), or `random` (fully random distribution); SL0 is always 0 and SL10 is always 120; intermediate breakpoints are patched directly into the EXE
 
 > **Note:** Cadeaux counting is not yet fully reliable — some cadeaux may not register correctly in-game depending on how they were placed. Consider lowering the altar cost and Fogometers door values from their defaults until this is resolved.
 
@@ -141,10 +144,10 @@ python patcher.py --game-dir <PATH> --shuffle-enemies-sfx
 # Shuffle sky textures across levels
 python patcher.py --game-dir <PATH> --shuffle-sky
 
-# Light shuffle with SL8 cap
+# Light shuffle with SL7 cap, 6 gates forced open
 python patcher.py --game-dir <PATH> --gate-preset easy
 
-# Standard shuffle with SL8 cap
+# Standard shuffle with SL8 cap, 3 gates forced open
 python patcher.py --game-dir <PATH> --gate-preset medium
 
 # Start with the Engineers Key already in hand
@@ -201,22 +204,37 @@ python patcher.py --restore --game-dir <PATH>
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--shuffle-progression` / `--no-shuffle-progression` | on | Shuffle key progression items using assumed-fill |
+| `--shuffle-key-items-random` | off | Randomly decide per-seed whether to shuffle key items |
 | `--shuffle-weapons` / `--no-shuffle-weapons` | on | Shuffle weapons |
+| `--shuffle-weapons-random` | off | Randomly decide per-seed whether to shuffle weapons |
 | `--shuffle-lore` / `--no-shuffle-lore` | on | Shuffle lore items |
+| `--shuffle-lore-random` | off | Randomly decide per-seed whether to shuffle lore items |
 | `--shuffle-light-soul` | off | Include the Light Soul bonus item in the shuffle pool |
+| `--shuffle-light-soul-random` | off | Randomly decide per-seed whether to include the Light Soul |
 | `--shuffle-gad-temples` / `--no-shuffle-gad-temples` | on | Gad powers as physical pickups (EXE patch) |
+| `--shuffle-gad-temples-random` | off | Randomly decide per-seed whether to shuffle gad temples |
+| `--shuffle-prisms` / `--no-shuffle-prisms` | off | Shuffle prism items as progression items (requires prism locations in CSV) |
+| `--shuffle-prisms-random` | off | Randomly decide per-seed whether to shuffle prisms |
+| `--shuffle-retractors` / `--no-shuffle-retractors` | on | Shuffle retractor items; when off, all 5 retractors stay vanilla |
+| `--shuffle-retractors-random` | off | Randomly decide per-seed whether to shuffle retractors |
+| `--shuffle-accumulators` / `--no-shuffle-accumulators` | on | Shuffle accumulator items; when off, all 3 accumulators stay vanilla |
+| `--shuffle-accumulators-random` | off | Randomly decide per-seed whether to shuffle accumulators |
+| `--shuffle-eclipsers` / `--no-shuffle-eclipsers` | on | Shuffle Eclipser parts; when off, all 3 parts stay vanilla |
+| `--shuffle-eclipsers-random` | off | Randomly decide per-seed whether to shuffle Eclipser parts |
 | `--starting-item RSC_NAME` | none | Place a specific item at the Louisiana Swampland church at run start (e.g. `RSC_X_ENGINEERS_KEY`) |
 | `--random-starting-item` | off | Pick a random starting item using the seed RNG — reproducible for a given seed |
 | `--insanity [1\|2\|3\|random]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. Pass `random` to let the seed pick a tier. |
-| `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world |
+| `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world. Accepts `random`. |
 
 ### Coffin gates
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = many gates locked, SL7 cap, 6 gates forced open; `medium` = entry gates locked, SL8 cap, 3 gates forced open; `hard` = entry gates locked, no SL cap, 1 gate forced open; `chaos` = no locks, no cap, no safety |
+| `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = many gates locked, SL7 cap, 6 gates forced open; `medium` = entry gates locked, SL8 cap, 3 gates forced open; `hard` = entry gates locked, no SL cap, 1 gate forced open; `chaos` = no locks, no cap, no safety; `random` = preset chosen randomly per-seed |
 | `--max-sl N` | none | Override the preset's SL cap — cap the highest SL any shuffled gate can receive (0–10) |
 | `--open-gates N` | preset | Override the preset's open-gates default — force the first N linear coffin gates to SL0 (order: Marrow → Wasteland → Asylum → Temple of Fire → Cageways → Playrooms; beyond 6 chosen randomly) |
+| `--soul-threshold-mode MODE` | none | Randomize the soul counts required to reach SL1–SL10. `progressive` = geometric ramp, `balanced` = even spacing, `random` = fully random distribution. SL0 stays at 0 and SL10 stays at 120; all intermediate breakpoints are patched into the EXE. Omit the flag to keep vanilla thresholds (1, 3, 7, 15, 23, 35, 51, 71, 95, 120). |
+| `--soul-threshold-mode-random` | off | Pick a soul threshold mode randomly per-seed (reproducible for a given seed). |
 
 ### Gameplay tuning
 
@@ -228,6 +246,8 @@ Several of the options below accept `random` in place of a number — when passe
 | `--fogometers-cadeaux-required N` | `666` | Cadeaux required to open the Fogometers light soul door (must be ≥ 5 × altar cost, max 666, vanilla: 666). Accepts `random`. |
 | `--starting-health N` | `5` | Starting max health on a scale of 1–10, where each step = 1 000 units (vanilla: 5 = 5 000). Accepts `random`. |
 | `--altar-health-grant N` | `1` | Health granted per life altar interaction, on the same 1–10 scale (vanilla: 1 = 1 000). Note: starting health + 5 × grant should not exceed the 10 000 cap. Accepts `random`. |
+| `--death-penalty N` | `0` | Reduce max health by N×1 000 on each death, floored at N×1 000 (so the player retains at least that much health). 0 = disabled. 1–10 scale the penalty from −1 000/death (mild) to −10 000/death (brutal). |
+| `--death-penalty-random` | off | Choose a random death-penalty step (1–10) per-seed rather than disabling it. Reproducible for a given seed. |
 
 > **Cadeaux note:** Cadeaux counting is not yet fully reliable in-game. It is recommended to keep the altar cost and Fogometers door values lower than their defaults until this is resolved.
 
@@ -248,9 +268,14 @@ Several of the options below accept `random` in place of a number — when passe
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--shuffle-enemies` | off | Randomize enemy types in each level |
-| `--enemy-mode MODE` | `difficulty` | `difficulty` = depth-weighted by tier, `full` = random within movement type, `contextual` = shuffle within context-group pools |
+| `--shuffle-enemies-random` | off | Decide randomly per-seed whether to shuffle enemies (reproducible for a given seed). |
+| `--enemy-mode MODE` | `difficulty` | `difficulty` = depth-weighted by tier, `full` = random within movement type, `contextual` = shuffle within context-group pools; `random` = mode chosen randomly per-seed |
 | `--enemy-mix-movement` | off | Allow enemies to swap across movement-type pools (ground/flying/swimming mix freely) |
+| `--enemy-mix-movement-random` | off | Decide randomly per-seed whether to mix movement types. |
+| `--enemy-uncap-counts` | off | Uncap enemy type counts: each slot independently samples from the pool with replacement, so any type can appear 0 or many times |
+| `--enemy-uncap-counts-random` | off | Randomly decide per-seed whether to uncap enemy type counts |
 | `--shuffle-true-forms` | off | Shuffle true-form enemy positions with regular enemies |
+| `--shuffle-true-forms-random` | off | Decide randomly per-seed whether to shuffle true forms. |
 | `--shuffle-ambients` | off | Shuffle friendly/ambient creatures (rats, egrets, flies, butterflies, fish) across spawn slots |
 | `--ambient-mode MODE` | `global` | `global` = one free-for-all pool (default), `full` = shuffle within movement type, `contextual` = shuffle within context-group + movement-type pools |
 | `--shuffle-music` | off | Shuffle music tracks globally across all levels |

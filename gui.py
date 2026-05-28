@@ -58,6 +58,21 @@ if getattr(sys, 'frozen', False):
 SCRIPT_DIR = Path(__file__).resolve().parent
 PATCHER    = SCRIPT_DIR / "patcher.py"
 DEFAULT_GAME_DIR = SCRIPT_DIR.parent
+PREFS_FILE = SCRIPT_DIR / "gui_prefs.json"
+
+
+def _load_prefs() -> dict:
+    try:
+        return json.load(open(PREFS_FILE, encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_prefs(prefs: dict) -> None:
+    try:
+        json.dump(prefs, open(PREFS_FILE, "w", encoding="utf-8"), indent=2)
+    except Exception:
+        pass
 
 
 def _looks_like_install(path: Path) -> bool:
@@ -143,7 +158,7 @@ _HTML = r"""<!DOCTYPE html>
   .btn-restore { background: #3a1a1a; color: #e8a0a0; border: 1px solid #522020; font-size: 13px; padding: 7px 22px; }
 
   /* Checkboxes */
-  .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 20px; }
+  .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; }
   .check-label { display: flex; align-items: center; gap: 7px; padding: 4px 0; cursor: pointer; color: #ccc; }
   .check-label:hover { color: #fff; }
   input[type=checkbox] { width: 14px; height: 14px; accent-color: #4a7a5a; cursor: pointer; flex-shrink: 0; }
@@ -241,7 +256,7 @@ _HTML = r"""<!DOCTYPE html>
 <body>
 
 <div class="header">
-  <h1>Shadow Man Remastered Randomizer <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:6px">v1.1.5</span></h1>
+  <h1>Shadow Man Remastered Randomizer <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:6px">v1.1.6</span></h1>
   <p>Generates a guaranteed-beatable seed &mdash; drop the .kpf in your mods folder and play.</p>
 </div>
 
@@ -264,7 +279,7 @@ _HTML = r"""<!DOCTYPE html>
         <span class="tip anchor-bottom" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">A number that controls everything random in the run. To reproduce a run exactly, you need the same seed <b>and</b> the same settings — changing any option will produce a different result even with the same seed. Leave blank to get a fresh random seed each time you click Run.</span></span>
       </div>
       <div class="row">
-        <input type="number" id="seed" class="seed-input" placeholder="random" min="1" max="2147483647">
+        <input type="number" id="seed" class="seed-input" placeholder="random" min="1000000000" max="9999999999">
         <button class="btn-dice" onclick="randomizeSeed()">&#127922;&ensp;Randomize</button>
       </div>
       <div class="hint" style="margin-top:4px">Leave blank for a new random seed each run.</div>
@@ -276,6 +291,7 @@ _HTML = r"""<!DOCTYPE html>
         <span style="flex:1"></span>
         <button class="btn-ghost" onclick="exportSettings()" style="white-space:nowrap;font-size:11px;padding:2px 8px">&#128203;&ensp;Copy</button>
         <button class="btn-ghost" onclick="importSettings()" style="white-space:nowrap;font-size:11px;padding:2px 8px">&#8628;&ensp;Import</button>
+        <button class="btn-ghost" onclick="if(confirm('Reset all randomizer settings to defaults?')){applyConfig(FIELD_DEFAULTS);document.getElementById('settingsMsg').textContent='reset';setTimeout(()=>document.getElementById('settingsMsg').textContent='',1500)}" style="white-space:nowrap;font-size:11px;padding:2px 8px">&#8635;&ensp;Reset</button>
         <span id="settingsMsg" style="font-size:11px;min-width:50px"></span>
       </div>
       <input type="text" id="settingsString" placeholder="Paste a settings string to restore&hellip;"
@@ -286,37 +302,69 @@ _HTML = r"""<!DOCTYPE html>
 </div>
 
 <!-- Row 2: Gameplay+Starting Item (left) | Coffin Gates+Progression (centre) | Gameplay Tuning (right) -->
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
+<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.0fr) minmax(0,1.0fr);gap:10px;margin-bottom:10px;align-items:stretch">
 
 
   <!-- Left: Gameplay checkboxes + Starting Item -->
   <div class="card" style="flex:1 ;min-width:280px">
-    <div class="card-title">Gameplay</div>
+    <div class="card-title">Gameplay — Shuffle</div>
     <div class="check-grid">
       <label class="check-label">
         <input type="checkbox" id="shuffleKeyItems" class="default-on" checked>
-        Shuffle Key Items
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles key progression items (Engineer&rsquo;s Key, Poign&eacute;, Baton, Flambeau, Marteau, Calabash, Retractors, etc.) using assumed-fill logic that guarantees every seed is beatable.</span></span>
+        Key Items
+        <button class="rng-btn" id="shuffleKeyItemsRng" onclick="event.preventDefault();toggleRng('shuffleKeyItems')" title="Randomize per seed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles key progression items (Engineer&rsquo;s Key, Poign&eacute;, Baton, Flambeau, Marteau, Calabash, Prison Key Card) using assumed-fill logic that guarantees every seed is beatable.</span></span>
       </label>
       <label class="check-label">
         <input type="checkbox" id="shuffleGad" class="default-on" checked>
-        Shuffle Gad Pickups
+        Gad Pickups
+        <button class="rng-btn" id="shuffleGadRng" onclick="event.preventDefault();toggleRng('shuffleGad')" title="Randomize per seed">&#127922;</button>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Converts Gad powers (Touch, Walk, Swim) into physical pickups and shuffles them across temple locations. Requires an EXE patch, which is applied automatically.</span></span>
       </label>
       <label class="check-label">
         <input type="checkbox" id="shuffleWeapons" class="default-on" checked>
-        Shuffle Weapons
+        Weapons
+        <button class="rng-btn" id="shuffleWeaponsRng" onclick="event.preventDefault();toggleRng('shuffleWeapons')" title="Randomize per seed">&#127922;</button>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapons (Asson, Shotgun, Enseigne, MP5, T&ecirc;te de Mort, Desert Eagle) across item locations. Uncheck to leave weapons in their vanilla spots.</span></span>
       </label>
       <label class="check-label">
         <input type="checkbox" id="shuffleLore" class="default-on" checked>
-        Shuffle Lore
+        Lore
+        <button class="rng-btn" id="shuffleLoreRng" onclick="event.preventDefault();toggleRng('shuffleLore')" title="Randomize per seed">&#127922;</button>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles lore items (Book of Shadows, Prophecy, Jack&rsquo;s Schematic) across locations. Uncheck to leave them in vanilla positions.</span></span>
       </label>
       <label class="check-label">
+        <input type="checkbox" id="shuffleRetractors" class="default-on" checked>
+        Retractors
+        <button class="rng-btn" id="shuffleRetractorsRng" onclick="event.preventDefault();toggleRng('shuffleRetractors')" title="Randomize per seed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles the 5 Retractor items across locations. Uncheck to leave all Retractors in their vanilla spots.</span></span>
+        <span class="tip"><span class="tip-icon" style="color:var(--red)">!</span><span class="tip-box">Turning this off is untested &mdash; not guaranteed to produce a beatable seed.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleAccumulators" class="default-on" checked>
+        Accumulators
+        <button class="rng-btn" id="shuffleAccumulatorsRng" onclick="event.preventDefault();toggleRng('shuffleAccumulators')" title="Randomize per seed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles the 3 Accumulator items across locations. Uncheck to leave all Accumulators in their vanilla spots.</span></span>
+        <span class="tip"><span class="tip-icon" style="color:var(--red)">!</span><span class="tip-box">Turning this off is untested &mdash; not guaranteed to produce a beatable seed.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleEclipsers" class="default-on" checked>
+        Eclipsers
+        <button class="rng-btn" id="shuffleEclipsersRng" onclick="event.preventDefault();toggleRng('shuffleEclipsers')" title="Randomize per seed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles the 3 Eclipser parts across locations. Uncheck to leave all Eclipser parts in their vanilla spots.</span></span>
+        <span class="tip"><span class="tip-icon" style="color:var(--red)">!</span><span class="tip-box">Turning this off is untested &mdash; not guaranteed to produce a beatable seed.</span></span>
+      </label>
+      <label class="check-label">
         <input type="checkbox" id="shuffleLightSoul">
-        Shuffle Light Soul
+        Light Soul
+        <button class="rng-btn" id="shuffleLightSoulRng" onclick="event.preventDefault();toggleRng('shuffleLightSoul')" title="Randomize per seed">&#127922;</button>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item in the shuffle pool. Off by default as it can affect run balance.</span></span>
+      </label>
+      <label class="check-label" style="opacity:0.4;cursor:not-allowed" title="Coming soon">
+        <input type="checkbox" id="shufflePrisms" disabled>
+        Prisms
+        <button class="rng-btn" id="shufflePrismsRng" disabled style="cursor:not-allowed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Prism shuffle is not yet implemented — coming soon.</span></span>
       </label>
     </div>
     <hr class="divider">
@@ -355,16 +403,27 @@ _HTML = r"""<!DOCTYPE html>
     <hr class="divider">
     <div class="card-title" style="margin-bottom:8px">Teddy Bear Hints</div>
     <label class="check-label">
-      <input type="checkbox" id="patchTracker">
-      Patch Tracker
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Rewrites map badge hints to reflect randomized item locations. Off by default (strips all item badges to avoid wrong vanilla hints).</span></span>
+      <input type="checkbox" id="patchTracker" checked>
+      Map Level Hints
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Rewrites map level hints to reflect randomized item locations. Off by default (strips all item hints to avoid wrong vanilla locations).</span></span>
     </label>
+    <hr class="divider">
+    <div class="card-title" style="margin-bottom:6px">Death Penalty</div>
+    <div class="row">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per death:</span>
+      <input type="range" id="deathPenalty" min="0" max="10" value="0"
+             oninput="document.getElementById('deathPenaltyVal').textContent=(this.value==='0'?'Off':this.value)">
+      <span class="slider-val" id="deathPenaltyVal">Off</span>
+      <button class="rng-btn" id="deathPenaltyRng" onclick="toggleRng('deathPenalty');refreshDeathPenaltyLabel()" title="Randomize per seed">&#127922;</button>
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by step&times;1000 on each death, floored at step&times;1000. <b>Off (0)</b> disables the penalty. <b>1</b> = &minus;1000/death (mild), <b>10</b> = &minus;10&thinsp;000/death (brutal). Applied as a direct EXE patch.</span></span>
+    </div>
+    <div class="hint" style="margin-top:4px">0 = disabled &nbsp;&nbsp; 10 = &minus;10&thinsp;000/death</div>
   </div>
 
   <!-- Right column: Coffin Gates + Progression stacked -->
   <div style="display:flex;flex-direction:column;gap:10px">
 
-    <div class="card" style="flex:1 ;min-width:280px">
+    <div class="card" style="flex:1;min-width:0">
       <div class="card-title">
         Coffin Gate Soul Levels
         <span class="tip" style="vertical-align:middle">
@@ -372,66 +431,89 @@ _HTML = r"""<!DOCTYPE html>
           <span class="tip-box">Shuffles the soul level (SL) thresholds on deadside coffin gates. Higher SL gates require more Dark Souls collected before they open. Starting gates are always kept at SL&le;3 so the game is immediately playable.</span>
         </span>
       </div>
-      <div class="row">
-        <label style="color:var(--muted);font-size:11px;white-space:nowrap">Preset:</label>
-        <select id="gatePreset" onchange="updateGateDesc()">
-          <option value="none">none</option>
-          <option value="open">open</option>
-          <option value="easy">easy</option>
-          <option value="medium">medium</option>
-          <option value="hard">hard</option>
-          <option value="chaos">chaos</option>
-          <option value="random">🎲 random</option>
-        </select>
-        <span class="gate-desc" id="gateDesc">default shuffle</span>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <label style="color:var(--muted);font-size:11px;white-space:nowrap">Max SL cap:</label>
-        <select id="maxSl" style="width:120px;flex:none">
-          <option value="">preset</option>
-          <option value="0">0 — all free</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="7">7</option>
-          <option value="8">8</option>
-          <option value="9">9</option>
-          <option value="10">10</option>
-        </select>
-        <span class="tip">
-          <span class="tip-icon">?</span>
-          <span class="tip-box">Overrides the preset's SL cap. Choose 0–10 to cap the highest gate level; lower values keep gates more accessible. Leave at <b>preset</b> to use the preset's built-in cap.</span>
-        </span>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <label style="color:var(--muted);font-size:11px;white-space:nowrap">Open first N gates:</label>
-        <select id="openGatesN" style="width:120px;flex:none">
-          <option value="">preset</option>
-          <option value="0">0 — none</option>
-          <option value="1">1 — Marrow</option>
-          <option value="2">2 — + Wasteland</option>
-          <option value="3">3 — + Asylum</option>
-          <option value="4">4 — + Temple of Fire</option>
-          <option value="5">5 — + Cageways</option>
-          <option value="6">6 — + Playrooms</option>
-        </select>
-        <span class="tip">
-          <span class="tip-icon">?</span>
-          <span class="tip-box">Forces the first N linear coffin gates to SL0, regardless of the gate preset. Gates are opened in sequence: Marrow → Wasteland → Asylum → Temple of Fire → Cageways → Playrooms. Beyond 6, gates are chosen randomly. Overrides the preset default.</span>
-        </span>
+<div style="display:flex;flex-direction:column;gap:7px">
+        <!-- Row: Preset -->
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:58px">Preset:</label>
+          <select id="gatePreset" onchange="updateGateDesc()" style="flex:1;min-width:0">
+            <option value="none">none — default coffin gates</option>
+            <option value="open">open — all gates free</option>
+            <option value="easy">easy — light shuffle, SL7 cap, 6 open</option>
+            <option value="medium">medium — standard, SL8 cap, 3 open</option>
+            <option value="hard">hard — full shuffle, no SL cap, 1 open</option>
+            <option value="chaos">chaos — fully unconstrained</option>
+            <option value="random">🎲 random — preset rolled per seed</option>
+          </select>
+          <span class="tip">
+            <span class="tip-icon">?</span>
+            <span class="tip-box">Sets the starting configuration for the coffin gate shuffle — controls the SL cap and how many gates start open. You can override either value below with Max SL and Open N.</span>
+          </span>
+        </div>
+        <!-- Row: Max SL -->
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:58px">Max SL:</label>
+          <select id="maxSl" style="flex:1;min-width:0">
+            <option value="">preset</option>
+            <option value="0">0 — free</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+          </select>
+          <span class="tip">
+            <span class="tip-icon">?</span>
+            <span class="tip-box">Overrides the preset's SL cap. Choose 0–10 to cap the highest gate level; lower values keep gates more accessible. Leave at <b>preset</b> to use the preset's built-in cap.</span>
+          </span>
+        </div>
+        <!-- Row: Open N -->
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:58px">Open N:</label>
+          <select id="openGatesN" style="flex:1;min-width:0">
+            <option value="">preset</option>
+            <option value="0">0 — none</option>
+            <option value="1">1 — Marrow</option>
+            <option value="2">2 — Wasteland</option>
+            <option value="3">3 — Asylum</option>
+            <option value="4">4 — Temple</option>
+            <option value="5">5 — Cageways</option>
+            <option value="6">6 — Playrooms</option>
+          </select>
+          <span class="tip">
+            <span class="tip-icon">?</span>
+            <span class="tip-box">Forces the first N linear coffin gates to SL0, regardless of the gate preset. Gates are opened in sequence: Marrow → Wasteland → Asylum → Temple of Fire → Cageways → Playrooms. Beyond 6, gates are chosen randomly. Overrides the preset default.</span>
+          </span>
+        </div>
+        <!-- Row: SL threshold mode -->
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap">SL Req Shuffle:</label>
+          <select id="randomizeSoulThresholds" style="flex:1;min-width:0">
+            <option value="off">Off (vanilla)</option>
+            <option value="progressive">Progressive</option>
+            <option value="balanced">Balanced</option>
+            <option value="random">Random</option>
+          </select>
+          <button class="rng-btn" id="randomizeSoulThresholdsRng" onclick="event.preventDefault();toggleRng('randomizeSoulThresholds')" title="Randomize per seed">&#127922;</button>
+          <span class="tip">
+            <span class="tip-icon">?</span>
+            <span class="tip-box">Redistributes the soul counts required for SL1–SL10 gates (vanilla: 1, 3, 7, 15, 23, 35, 51, 71, 95, 120). <b>Progressive:</b> gaps grow larger at higher SLs — early gates are cheap, late gates demand many souls. <b>Balanced:</b> roughly equal spacing throughout. <b>Random:</b> fully random redistribution. SL0 always stays at 0 and SL10 at 120. The 🎲 button randomly picks a mode each seed.</span>
+          </span>
+        </div>
       </div>
     </div>
 
-    <div class="card" style="flex:1;min-width:280px">
+    <div class="card" style="flex:1;min-width:0">
       <div class="card-title">
         Entrance Randomizer
         <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>deadside only:</b> shuffles the 9 Deadside levels among themselves — which level you enter is randomized but the Engine Rooms stay vanilla.<br><b>cross hub:</b> 14 levels (Deadside levels + Engine Rooms) shuffled together; a Deadside portal may lead to an Engine Room and vice versa.</span></span>
       </div>
       <div class="row">
-        <select id="entranceMode" onchange="onEntranceModeChange()">
+        <select id="entranceMode" onchange="onEntranceModeChange()" style="width:100%;min-width:0">
           <option value="off">Off — vanilla entrances</option>
           <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
           <option value="cross_hub">Cross Hub — Deadside levels &amp; Engine Rooms shuffled</option>
@@ -494,8 +576,8 @@ _HTML = r"""<!DOCTYPE html>
       <select id="insanity" style="width:180px;flex:none;margin-left:8px">
         <option value="0">Off</option>
         <option value="1">Tier 1 &mdash; Soul &amp; Govi slots</option>
-        <option value="2">Tier 2 &mdash; + Cadeaux slots (untested)</option>
-        <option value="3">Full &mdash; All slots (untested)</option>
+        <option value="2">Tier 2 &mdash; + Cadeaux slots</option>
+        <option value="3">Full &mdash; All slots</option>
         <option value="random">🎲 random tier</option>
       </select>
       <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls where key progression items can be placed. By default, key items shuffle among key item slots and dark souls shuffle anywhere.<br><b>Tier 1:</b> Also allows key items in Soul &amp; Govi pickup slots.<br><b>Tier 2:</b> Also allows Cadeaux slots (untested).<br><b>Full:</b> Any slot in the game — wildly random.</span></span>
@@ -509,6 +591,7 @@ _HTML = r"""<!DOCTYPE html>
       <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls how deep into the world progression items tend to be placed. Default 50 is balanced. 0 = items placed early, 100 = items pushed deep.</span></span>
     </div>
     <div class="hint" style="margin-top:6px">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</div>
+
   </div>
 
 </div>
@@ -522,16 +605,25 @@ _HTML = r"""<!DOCTYPE html>
         <input type="checkbox" id="shuffleEnemies" onchange="onEnemiesChange()">
         Shuffle Enemies
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes enemy types in each level. Use the Enemy Mode dropdown to control how they are assigned.</span></span>
+        <button class="rng-btn" id="shuffleEnemiesRng" onclick="event.preventDefault();toggleRng('shuffleEnemies');onEnemiesChange()" title="Randomize per seed">&#127922;</button>
       </label>
       <label class="check-label">
         <input type="checkbox" id="shuffleTrueforms">
         Shuffle Trueforms
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles true-form enemy positions into the same pool as regular enemies. Only meaningful when Shuffle Enemies is also enabled.</span></span>
+        <button class="rng-btn" id="shuffleTrueformsRng" onclick="event.preventDefault();toggleRng('shuffleTrueforms')" title="Randomize per seed">&#127922;</button>
       </label>
       <label class="check-label">
         <input type="checkbox" id="enemyMixMovement" disabled>
         Mix Movement Types
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Allows ground, flying, and swimming enemies to swap with each other. Off by default — mixing types can place flying enemies in water areas or vice versa.</span></span>
+        <button class="rng-btn" id="enemyMixMovementRng" onclick="event.preventDefault();toggleRng('enemyMixMovement');onEnemiesChange()" title="Randomize per seed">&#127922;</button>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="enemyUncapCounts" disabled>
+        Uncap Enemy Counts
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Each slot independently picks a random enemy type with replacement — the same type can fill dozens of slots or none at all. Off by default, which preserves vanilla per-type counts.</span></span>
+        <button class="rng-btn" id="enemyUncapCountsRng" onclick="event.preventDefault();toggleRng('enemyUncapCounts');onEnemiesChange()" title="Randomize per seed">&#127922;</button>
       </label>
     </div>
     <div class="enemy-row">
@@ -609,7 +701,6 @@ const GATE_DESCS = {
 };
 function updateGateDesc() {
   const preset = document.getElementById('gatePreset').value;
-  document.getElementById('gateDesc').textContent = GATE_DESCS[preset] || '';
   const maxSlEl = document.getElementById('maxSl');
   const openGatesEl = document.getElementById('openGatesN');
   if (preset === 'open') {
@@ -634,9 +725,16 @@ function onEntranceModeChange() {
   document.getElementById('entranceHint').style.display = (mode !== 'off') ? 'block' : 'none';
 }
 function onEnemiesChange() {
-  const on = document.getElementById('shuffleEnemies').checked;
+  const rngActive = isRng('shuffleEnemies');
+  const on = rngActive || document.getElementById('shuffleEnemies').checked;
   document.getElementById('enemyMode').disabled = !on;
-  document.getElementById('enemyMixMovement').disabled = !on;
+  // Only control each checkbox if it is not itself in random mode
+  if (!isRng('enemyMixMovement')) {
+    document.getElementById('enemyMixMovement').disabled = !on;
+  }
+  if (!isRng('enemyUncapCounts')) {
+    document.getElementById('enemyUncapCounts').disabled = !on;
+  }
   document.getElementById('enemyHint').textContent = on ? '' : 'enable Shuffle Enemies to unlock';
 }
 // ── Per-field RNG toggle (🎲 buttons) ────────────────────────────────────────
@@ -715,8 +813,13 @@ function syncCadeauxConstraints() {
     fogMsg.style.display = 'none';
   }
 }
+function refreshDeathPenaltyLabel() {
+  if (isRng('deathPenalty')) return;
+  const v = document.getElementById('deathPenalty').value;
+  document.getElementById('deathPenaltyVal').textContent = (v === '0' ? 'Off' : v);
+}
 function randomizeSeed() {
-  document.getElementById('seed').value = Math.floor(Math.random() * 2147483647) + 1;
+  document.getElementById('seed').value = Math.floor(Math.random() * 9000000000) + 1000000000;
 }
 async function browseDir() {
   const current = document.getElementById('gameDir').value || '';
@@ -729,10 +832,10 @@ function getConfig() {
     seed:             document.getElementById('seed').value.trim(),
     gatePreset:       document.getElementById('gatePreset').value,
     maxSl:            document.getElementById('maxSl').value,
-    shuffleGad:       document.getElementById('shuffleGad').checked,
+    shuffleGad:       isRng('shuffleGad') ? 'random' : document.getElementById('shuffleGad').checked,
     startingItem:     document.getElementById('startingItem').value,
-    shuffleEnemies:   document.getElementById('shuffleEnemies').checked,
-    shuffleTrueforms: document.getElementById('shuffleTrueforms').checked,
+    shuffleEnemies:   isRng('shuffleEnemies') ? 'random' : document.getElementById('shuffleEnemies').checked,
+    shuffleTrueforms: isRng('shuffleTrueforms') ? 'random' : document.getElementById('shuffleTrueforms').checked,
     shuffleMusic:     document.getElementById('shuffleMusic').checked,
     shuffleVoices:    document.getElementById('shuffleVoices').checked,
     shuffleWeaponsSfx:document.getElementById('shuffleWeaponsSfx').checked,
@@ -741,12 +844,17 @@ function getConfig() {
     patchTracker:        document.getElementById('patchTracker').checked,
     openGatesN:          document.getElementById('openGatesN').value,
     insanity:         document.getElementById('insanity').value,
-    shuffleLightSoul: document.getElementById('shuffleLightSoul').checked,
-    shuffleKeyItems:  document.getElementById('shuffleKeyItems').checked,
-    shuffleWeapons:   document.getElementById('shuffleWeapons').checked,
-    shuffleLore:      document.getElementById('shuffleLore').checked,
+    shuffleLightSoul: isRng('shuffleLightSoul') ? 'random' : document.getElementById('shuffleLightSoul').checked,
+    shuffleKeyItems:  isRng('shuffleKeyItems') ? 'random' : document.getElementById('shuffleKeyItems').checked,
+    shuffleWeapons:   isRng('shuffleWeapons') ? 'random' : document.getElementById('shuffleWeapons').checked,
+    shuffleLore:      isRng('shuffleLore') ? 'random' : document.getElementById('shuffleLore').checked,
+    shufflePrisms:        isRng('shufflePrisms') ? 'random' : document.getElementById('shufflePrisms').checked,
+    shuffleRetractors:    isRng('shuffleRetractors') ? 'random' : document.getElementById('shuffleRetractors').checked,
+    shuffleAccumulators:  isRng('shuffleAccumulators') ? 'random' : document.getElementById('shuffleAccumulators').checked,
+    shuffleEclipsers:     isRng('shuffleEclipsers') ? 'random' : document.getElementById('shuffleEclipsers').checked,
     enemyMode:        document.getElementById('enemyMode').value.split('—')[0].trim(),
-    enemyMixMovement: document.getElementById('enemyMixMovement').checked,
+    enemyMixMovement: isRng('enemyMixMovement') ? 'random' : document.getElementById('enemyMixMovement').checked,
+    enemyUncapCounts: isRng('enemyUncapCounts') ? 'random' : document.getElementById('enemyUncapCounts').checked,
     shuffleAmbients:  document.getElementById('shuffleAmbients').checked,
     progBalance:               isRng('progBalance') ? 'random' : document.getElementById('progBalance').value,
     entranceMode:              document.getElementById('entranceMode').value,
@@ -754,15 +862,103 @@ function getConfig() {
     fogometersCadeauxRequired: isRng('fogometersCadeauxRequired') ? 'random' : document.getElementById('fogometersCadeauxRequired').value,
     startingHealth:            isRng('startingHealth') ? 'random' : document.getElementById('startingHealth').value,
     altarHealthGrant:          isRng('altarHealthGrant') ? 'random' : document.getElementById('altarHealthGrant').value,
+    randomizeSoulThresholds:   isRng('randomizeSoulThresholds') ? 'random' : document.getElementById('randomizeSoulThresholds').value,
+    deathPenalty:              isRng('deathPenalty') ? 'random' : document.getElementById('deathPenalty').value,
   };
 }
 // ── Settings string export / import ──────────────────────────────────────────
 const SETTINGS_OMIT = new Set(['gameDir', 'seed']); // never encoded — machine-specific
 
+// v2 compact format: abbreviated keys + defaults omitted.
+// Long key → short code (2–3 chars, all unique).
+const FIELD_SHORT = {
+  gatePreset:                'gP',
+  maxSl:                     'mS',
+  shuffleGad:                'sG',
+  startingItem:              'sI',
+  shuffleEnemies:            'sE',
+  shuffleTrueforms:          'sT',
+  shuffleMusic:              'sm',
+  shuffleVoices:             'sV',
+  shuffleWeaponsSfx:         'wS',
+  shuffleEnemiesSfx:         'eS',
+  shuffleSky:                'sk',
+  patchTracker:              'pT',
+  openGatesN:                'oG',
+  insanity:                  'in',
+  shuffleLightSoul:          'sL',
+  shuffleKeyItems:           'sK',
+  shuffleWeapons:            'sW',
+  shuffleLore:               'sLo',
+  enemyMode:                 'eM',
+  enemyMixMovement:          'eX',
+  enemyUncapCounts:          'eU',
+  shuffleAmbients:           'sA',
+  progBalance:               'pB',
+  entranceMode:              'eN',
+  altarCadeauxRequired:      'aC',
+  fogometersCadeauxRequired: 'fC',
+  startingHealth:            'sH',
+  altarHealthGrant:          'aH',
+  randomizeSoulThresholds:   'rST',
+  deathPenalty:              'dP',
+  shufflePrisms:             'sPr',
+  shuffleRetractors:         'sRt',
+  shuffleAccumulators:       'sAc',
+  shuffleEclipsers:          'sEc',
+};
+// Reverse map: short code → long key
+const FIELD_LONG = Object.fromEntries(Object.entries(FIELD_SHORT).map(([l, s]) => [s, l]));
+// Default values as returned by getConfig() — fields matching these are omitted when encoding.
+const FIELD_DEFAULTS = {
+  gatePreset:                'none',
+  maxSl:                     '',
+  shuffleGad:                true,
+  startingItem:              '',
+  shuffleEnemies:            false,
+  shuffleTrueforms:          false,
+  shuffleMusic:              false,
+  shuffleVoices:             false,
+  shuffleWeaponsSfx:         false,
+  shuffleEnemiesSfx:         false,
+  shuffleSky:                false,
+  patchTracker:              true,
+  openGatesN:                '',
+  insanity:                  '0',
+  shuffleLightSoul:          false,
+  shuffleKeyItems:           true,
+  shuffleWeapons:            true,
+  shuffleLore:               true,
+  enemyMode:                 'difficulty',
+  enemyMixMovement:          false,
+  enemyUncapCounts:          false,
+  shuffleAmbients:           false,
+  progBalance:               '50',
+  entranceMode:              'off',
+  altarCadeauxRequired:      '100',
+  fogometersCadeauxRequired: '666',
+  startingHealth:            '5',
+  altarHealthGrant:          '1',
+  randomizeSoulThresholds:   'off',
+  deathPenalty:              '0',
+  shufflePrisms:             false,
+  shuffleRetractors:         true,
+  shuffleAccumulators:       true,
+  shuffleEclipsers:          true,
+};
+
 function encodeSettings() {
   const cfg = getConfig();
   SETTINGS_OMIT.forEach(k => delete cfg[k]);
-  return btoa(JSON.stringify(cfg));
+  // Build compact object: short keys, defaults omitted.
+  const compact = {};
+  for (const [longKey, shortKey] of Object.entries(FIELD_SHORT)) {
+    const val = cfg[longKey];
+    if (val === undefined) continue;
+    if (val === FIELD_DEFAULTS[longKey]) continue; // skip defaults
+    compact[shortKey] = val;
+  }
+  return 'v2:' + btoa(JSON.stringify(compact));
 }
 
 function exportSettings() {
@@ -784,10 +980,26 @@ function exportSettings() {
 function importSettings() {
   const raw = document.getElementById('settingsString').value.trim();
   const msg = document.getElementById('settingsMsg');
-  if (!raw) return;
+  if (!raw) {
+    msg.textContent = 'No settings string to import';
+    msg.style.color = 'var(--red)';
+    setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 2500);
+    return;
+  }
   let cfg;
   try {
-    cfg = JSON.parse(atob(raw));
+    if (raw.startsWith('v2:')) {
+      // Compact format: expand short keys back to long, fill missing fields from defaults.
+      const compact = JSON.parse(atob(raw.slice(3)));
+      cfg = { ...FIELD_DEFAULTS };
+      for (const [shortKey, val] of Object.entries(compact)) {
+        const longKey = FIELD_LONG[shortKey];
+        if (longKey) cfg[longKey] = val;
+      }
+    } else {
+      // Legacy v1: full JSON key names — decode as-is.
+      cfg = JSON.parse(atob(raw));
+    }
   } catch(e) {
     msg.textContent = 'Invalid string';
     msg.style.color = 'var(--red)';
@@ -810,10 +1022,19 @@ function applyConfig(cfg) {
   }
   set('gatePreset',               cfg.gatePreset);
   set('maxSl',                    cfg.maxSl);
-  set('shuffleGad',               cfg.shuffleGad);
+  if (cfg.shuffleGad !== undefined) {
+    if (cfg.shuffleGad === 'random') { applyRng('shuffleGad', 'random'); }
+    else { applyRng('shuffleGad', cfg.shuffleGad); set('shuffleGad', cfg.shuffleGad); }
+  }
   set('startingItem',             cfg.startingItem);
-  set('shuffleEnemies',           cfg.shuffleEnemies);
-  set('shuffleTrueforms',         cfg.shuffleTrueforms);
+  if (cfg.shuffleEnemies !== undefined) {
+    if (cfg.shuffleEnemies === 'random') { applyRng('shuffleEnemies', 'random'); }
+    else { applyRng('shuffleEnemies', cfg.shuffleEnemies); set('shuffleEnemies', cfg.shuffleEnemies); }
+  }
+  if (cfg.shuffleTrueforms !== undefined) {
+    if (cfg.shuffleTrueforms === 'random') { applyRng('shuffleTrueforms', 'random'); }
+    else { applyRng('shuffleTrueforms', cfg.shuffleTrueforms); set('shuffleTrueforms', cfg.shuffleTrueforms); }
+  }
   set('shuffleMusic',             cfg.shuffleMusic);
   set('shuffleVoices',            cfg.shuffleVoices);
   set('shuffleWeaponsSfx',        cfg.shuffleWeaponsSfx);
@@ -822,11 +1043,46 @@ function applyConfig(cfg) {
   set('patchTracker',             cfg.patchTracker);
   set('openGatesN',               cfg.openGatesN);
   set('insanity',                 cfg.insanity);
-  set('shuffleLightSoul',         cfg.shuffleLightSoul);
-  set('shuffleKeyItems',          cfg.shuffleKeyItems);
-  set('shuffleWeapons',           cfg.shuffleWeapons);
-  set('shuffleLore',              cfg.shuffleLore);
-  set('enemyMixMovement',         cfg.enemyMixMovement);
+  if (cfg.shuffleLightSoul !== undefined) {
+    if (cfg.shuffleLightSoul === 'random') { applyRng('shuffleLightSoul', 'random'); }
+    else { applyRng('shuffleLightSoul', cfg.shuffleLightSoul); set('shuffleLightSoul', cfg.shuffleLightSoul); }
+  }
+  if (cfg.shuffleKeyItems !== undefined) {
+    if (cfg.shuffleKeyItems === 'random') { applyRng('shuffleKeyItems', 'random'); }
+    else { applyRng('shuffleKeyItems', cfg.shuffleKeyItems); set('shuffleKeyItems', cfg.shuffleKeyItems); }
+  }
+  if (cfg.shuffleWeapons !== undefined) {
+    if (cfg.shuffleWeapons === 'random') { applyRng('shuffleWeapons', 'random'); }
+    else { applyRng('shuffleWeapons', cfg.shuffleWeapons); set('shuffleWeapons', cfg.shuffleWeapons); }
+  }
+  if (cfg.shuffleLore !== undefined) {
+    if (cfg.shuffleLore === 'random') { applyRng('shuffleLore', 'random'); }
+    else { applyRng('shuffleLore', cfg.shuffleLore); set('shuffleLore', cfg.shuffleLore); }
+  }
+  if (cfg.shufflePrisms !== undefined) {
+    if (cfg.shufflePrisms === 'random') { applyRng('shufflePrisms', 'random'); }
+    else { applyRng('shufflePrisms', cfg.shufflePrisms); set('shufflePrisms', cfg.shufflePrisms); }
+  }
+  if (cfg.shuffleRetractors !== undefined) {
+    if (cfg.shuffleRetractors === 'random') { applyRng('shuffleRetractors', 'random'); }
+    else { applyRng('shuffleRetractors', cfg.shuffleRetractors); set('shuffleRetractors', cfg.shuffleRetractors); }
+  }
+  if (cfg.shuffleAccumulators !== undefined) {
+    if (cfg.shuffleAccumulators === 'random') { applyRng('shuffleAccumulators', 'random'); }
+    else { applyRng('shuffleAccumulators', cfg.shuffleAccumulators); set('shuffleAccumulators', cfg.shuffleAccumulators); }
+  }
+  if (cfg.shuffleEclipsers !== undefined) {
+    if (cfg.shuffleEclipsers === 'random') { applyRng('shuffleEclipsers', 'random'); }
+    else { applyRng('shuffleEclipsers', cfg.shuffleEclipsers); set('shuffleEclipsers', cfg.shuffleEclipsers); }
+  }
+  if (cfg.enemyMixMovement !== undefined) {
+    if (cfg.enemyMixMovement === 'random') { applyRng('enemyMixMovement', 'random'); }
+    else { applyRng('enemyMixMovement', cfg.enemyMixMovement); set('enemyMixMovement', cfg.enemyMixMovement); }
+  }
+  if (cfg.enemyUncapCounts !== undefined) {
+    if (cfg.enemyUncapCounts === 'random') { applyRng('enemyUncapCounts', 'random'); }
+    else { applyRng('enemyUncapCounts', cfg.enemyUncapCounts); set('enemyUncapCounts', cfg.enemyUncapCounts); }
+  }
   set('shuffleAmbients',          cfg.shuffleAmbients);
   set('entranceMode',             cfg.entranceMode);
   // Restore rng-toggle fields (value may be 'random' or a concrete value)
@@ -849,6 +1105,14 @@ function applyConfig(cfg) {
   if (cfg.altarHealthGrant !== undefined) {
     if (cfg.altarHealthGrant === 'random') { applyRng('altarHealthGrant', 'random'); }
     else { applyRng('altarHealthGrant', cfg.altarHealthGrant); set('altarHealthGrant', cfg.altarHealthGrant); }
+  }
+  if (cfg.randomizeSoulThresholds !== undefined) {
+    if (cfg.randomizeSoulThresholds === 'random') { applyRng('randomizeSoulThresholds', 'random'); }
+    else { applyRng('randomizeSoulThresholds', cfg.randomizeSoulThresholds); set('randomizeSoulThresholds', cfg.randomizeSoulThresholds); }
+  }
+  if (cfg.deathPenalty !== undefined) {
+    if (String(cfg.deathPenalty) === 'random') { applyRng('deathPenalty', 'random'); }
+    else { applyRng('deathPenalty', cfg.deathPenalty); set('deathPenalty', String(cfg.deathPenalty)); }
   }
   // Restore enemy mode — strip the label suffix before setting
   if (cfg.enemyMode) {
@@ -965,6 +1229,9 @@ class _Api:
         self._window = w
 
     def get_default_dir(self) -> str:
+        saved = _load_prefs().get("game_dir", "")
+        if saved and _looks_like_install(Path(saved)):
+            return saved
         return str(DEFAULT_GAME_DIR) if _looks_like_install(DEFAULT_GAME_DIR) else ""
 
     def validate_dir(self, game_dir: str) -> bool:
@@ -1010,6 +1277,10 @@ class _Api:
         if not _looks_like_install(Path(game_dir)):
             raise ValueError(f"Game directory does not look like a Shadow Man Remastered install: {game_dir}")
         cmd += ["--game-dir", game_dir]
+        prefs = _load_prefs()
+        if prefs.get("game_dir") != game_dir:
+            prefs["game_dir"] = game_dir
+            _save_prefs(prefs)
 
         if restore:
             cmd.append("--restore")
@@ -1024,20 +1295,109 @@ class _Api:
             cmd += ["--gate-preset", preset]
 
         flag_map = [
-            ("shuffleGad",        "--shuffle-gad-temples"),
-            ("shuffleEnemies",    "--shuffle-enemies"),
-            ("shuffleTrueforms",  "--shuffle-true-forms"),
-            ("shuffleMusic",      "--shuffle-music"),
-            ("shuffleVoices",     "--shuffle-voices"),
-            ("shuffleWeaponsSfx", "--shuffle-weapons-sfx"),
-            ("shuffleEnemiesSfx", "--shuffle-enemies-sfx"),
-            ("shuffleSky",        "--shuffle-sky"),
-            ("shuffleLightSoul",  "--shuffle-light-soul"),
-            ("patchTracker",      "--patch-tracker"),
+            ("shuffleMusic",            "--shuffle-music"),
+            ("shuffleVoices",           "--shuffle-voices"),
+            ("shuffleWeaponsSfx",       "--shuffle-weapons-sfx"),
+            ("shuffleEnemiesSfx",       "--shuffle-enemies-sfx"),
+            ("shuffleSky",              "--shuffle-sky"),
+            ("patchTracker",            "--patch-tracker"),
         ]
         for key, flag in flag_map:
             if config.get(key):
                 cmd.append(flag)
+
+        # Handle shuffle-key-items with random support (default-on toggle)
+        ski_val = config.get("shuffleKeyItems")
+        if ski_val == 'random':
+            cmd.append("--shuffle-key-items-random")
+        elif ski_val is False or ski_val == False:
+            cmd.append("--no-shuffle-progression")
+        # True is the default — nothing needed
+
+        # Handle shuffle-gad with random support (default-on toggle)
+        gad_val = config.get("shuffleGad")
+        if gad_val == 'random':
+            cmd.append("--shuffle-gad-temples-random")
+        elif gad_val is False or gad_val == False:
+            cmd.append("--no-shuffle-gad-temples")
+        # True is the default — nothing needed
+
+        # Handle shuffle-weapons with random support (default-on toggle)
+        sw_val = config.get("shuffleWeapons")
+        if sw_val == 'random':
+            cmd.append("--shuffle-weapons-random")
+        elif sw_val is False or sw_val == False:
+            cmd.append("--no-shuffle-weapons")
+
+        # Handle shuffle-lore with random support (default-on toggle)
+        sl_val = config.get("shuffleLore")
+        if sl_val == 'random':
+            cmd.append("--shuffle-lore-random")
+        elif sl_val is False or sl_val == False:
+            cmd.append("--no-shuffle-lore")
+
+        # Handle shuffle-light-soul with random support (default-off toggle)
+        sls_val = config.get("shuffleLightSoul")
+        if sls_val == 'random':
+            cmd.append("--shuffle-light-soul-random")
+        elif sls_val:
+            cmd.append("--shuffle-light-soul")
+
+        # Handle shuffle-prisms with random support (default-off toggle)
+        spr_val = config.get("shufflePrisms")
+        if spr_val == 'random':
+            cmd.append("--shuffle-prisms-random")
+        elif spr_val:
+            cmd.append("--shuffle-prisms")
+
+        # Handle shuffle-retractors with random support (default-on toggle)
+        sret_val = config.get("shuffleRetractors")
+        if sret_val == 'random':
+            cmd.append("--shuffle-retractors-random")
+        elif sret_val is False or sret_val == False:
+            cmd.append("--no-shuffle-retractors")
+
+        # Handle shuffle-accumulators with random support (default-on toggle)
+        sacc_val = config.get("shuffleAccumulators")
+        if sacc_val == 'random':
+            cmd.append("--shuffle-accumulators-random")
+        elif sacc_val is False or sacc_val == False:
+            cmd.append("--no-shuffle-accumulators")
+
+        # Handle shuffle-eclipsers with random support (default-on toggle)
+        sec_val = config.get("shuffleEclipsers")
+        if sec_val == 'random':
+            cmd.append("--shuffle-eclipsers-random")
+        elif sec_val is False or sec_val == False:
+            cmd.append("--no-shuffle-eclipsers")
+
+        # Handle SL threshold mode with random support
+        rst_val = config.get("randomizeSoulThresholds", "off")
+        if rst_val == 'random':
+            cmd.append("--soul-threshold-mode-random")
+        elif rst_val and rst_val != 'off':
+            cmd.extend(["--soul-threshold-mode", rst_val])
+
+        # Handle death penalty with random support
+        death_penalty = str(config.get("deathPenalty", "0")).strip()
+        if death_penalty == "random":
+            cmd.append("--death-penalty-random")
+        elif death_penalty and death_penalty != "0":
+            cmd += ["--death-penalty", death_penalty]
+
+        # Handle shuffle-enemies with random support
+        enemies_val = config.get("shuffleEnemies")
+        if enemies_val == 'random':
+            cmd.append("--shuffle-enemies-random")
+        elif enemies_val:
+            cmd.append("--shuffle-enemies")
+
+        # Handle shuffle-true-forms with random support
+        trueforms_val = config.get("shuffleTrueforms")
+        if trueforms_val == 'random':
+            cmd.append("--shuffle-true-forms-random")
+        elif trueforms_val:
+            cmd.append("--shuffle-true-forms")
 
         starting_item = config.get("startingItem", "")
         if starting_item == "random":
@@ -1051,10 +1411,18 @@ class _Api:
         elif int(insanity_val) > 0:
             cmd += ["--insanity", str(int(insanity_val))]
 
-        if config.get("shuffleEnemies"):
+        if enemies_val == 'random' or enemies_val:
             cmd += ["--enemy-mode", config.get("enemyMode", "difficulty")]
-            if config.get("enemyMixMovement"):
+            mix_val = config.get("enemyMixMovement")
+            if mix_val == 'random':
+                cmd.append("--enemy-mix-movement-random")
+            elif mix_val:
                 cmd.append("--enemy-mix-movement")
+            uncap_val = config.get("enemyUncapCounts")
+            if uncap_val == 'random':
+                cmd.append("--enemy-uncap-counts-random")
+            elif uncap_val:
+                cmd.append("--enemy-uncap-counts")
 
         if config.get("shuffleAmbients"):
             cmd.append("--shuffle-ambients")
@@ -1071,12 +1439,6 @@ class _Api:
         if str(prog) != "50":
             cmd += ["--progression-balancing", str(prog)]
 
-        if not config.get("shuffleKeyItems", True):
-            cmd.append("--no-shuffle-progression")
-        if not config.get("shuffleWeapons", True):
-            cmd.append("--no-shuffle-weapons")
-        if not config.get("shuffleLore", True):
-            cmd.append("--no-shuffle-lore")
         entrance_mode = config.get("entranceMode", "off")
         if entrance_mode and entrance_mode != "off":
             cmd += ["--entrance-mode", entrance_mode]
