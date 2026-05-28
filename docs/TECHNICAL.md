@@ -547,6 +547,13 @@ of slots is:
 n_slots = (file_size - HEADER_SIZE) // 72
 ```
 
+The live record count is stored as a **2-byte big-endian unsigned integer
+at file offset 8** (the first two bytes of slot 0's unknown field). For
+levels with ≤255 live records `data[8]==0x00`, making it appear to be a
+single byte at offset 9. Prison/quest.rsc has 257 live records, so
+`data[8:10] == b'\x01\x01'` (big-endian 257). Always read/write this
+count as a big-endian uint16 using offset 8.
+
 All-zero 72-byte slots are valid padding/headroom and are skipped during
 scanning. A slot whose first byte is non-zero is considered live.
 

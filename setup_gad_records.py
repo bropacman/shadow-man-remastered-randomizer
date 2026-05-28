@@ -90,9 +90,13 @@ ZONE_OFF     = 0x11
 INSTANCE_OFF = 0x21
 XYZ_OFF      = 0x04
 
-# File offset of the live-record count byte.
-# This is record[0][1] (the second byte of the first record body).
-COUNT_BYTE = 9
+# The live-record count is a 2-byte big-endian uint at file offset 8.
+# For levels with ≤255 live records data[8]==0, making it look like a
+# single byte at offset 9 — but prison has 257 live records (0x0101 BE).
+COUNT_OFF = 8
+
+def _get_count(data): return struct.unpack_from('>H', data, COUNT_OFF)[0]
+def _set_count(data, n): struct.pack_into('>H', data, COUNT_OFF, min(n, 0xFFFF))
 
 GAD_PICKUP_RSC = "RSC_X_GAD_PICKUP"
 
@@ -130,7 +134,7 @@ def _find_existing(data: bytes, zone: int, x: float, y: float, z: float) -> int 
     against the vanilla RSC_X_GAD_PICKUP records that already exist in the
     file for the altar/temple gad mechanic.
     """
-    count = data[COUNT_BYTE]
+    count = _get_count(data)
     needle = GAD_PICKUP_RSC.encode('ascii')
     body = data[HEADER_SIZE:]
     for i in range(count):
@@ -228,7 +232,7 @@ def run_setup(game_dir: str, dry_run: bool = False, verify: bool = False) -> Non
             existing = _find_existing(data, zone, x, y, z)
             if existing is not None:
                 rx, ry, rz = struct.unpack_from("<fff", data, existing - NAME_OFF + XYZ_OFF)
-                count = data[COUNT_BYTE]
+                count = _get_count(data)
                 slot  = (existing - HEADER_SIZE - NAME_OFF) // RECORD_SIZE
                 print(f"  ✅ {folder}/{filename} @ {hex_offset(existing)}"
                       f"  slot={slot} (count={count})"
@@ -255,14 +259,14 @@ def run_setup(game_dir: str, dry_run: bool = False, verify: bool = False) -> Non
             continue
 
         data = bytearray(rsc_path.read_bytes())
-        count_before = data[COUNT_BYTE]
+        count_before = _get_count(data)
 
         name_off, already = inject_record(data, x, y, z, zone)
 
         status = "already present" if already else ("would inject" if dry_run else "injected")
         slot   = (name_off - HEADER_SIZE - NAME_OFF) // RECORD_SIZE
         print(f"  {folder}/{filename}")
-        print(f"    slot:   {slot}  (count {count_before} → {data[COUNT_BYTE]})")
+        print(f"    slot:   {slot}  (count {count_before} → {_get_count(data)})")
         print(f"    offset: {hex_offset(name_off)}  ({status})")
         print(f"    coords: ({x}, {y}, {z})  zone={zone}")
         print()
