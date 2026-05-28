@@ -1111,6 +1111,15 @@ def write_placement_patches(
         # custom visuals — prevents the marker crate appearing at filler spots.
         rsc_name = BARREL_RSC_SUBSTITUTIONS.get(rsc_name, rsc_name)
 
+        # When a cadeaux-carrying barrel (category="cadeaux", object=RSC_X_BARREL_*)
+        # is placed into a different level, normalize its RSC name to RSC_X_CADEAUX.
+        # This guarantees the cadeaux registers correctly regardless of whether the
+        # destination slot's track_type matches the source barrel's original level.
+        if (rsc_name in BARREL_TYPES
+                and hasattr(source_loc, "category") and source_loc.category == "cadeaux"
+                and hasattr(source_loc, "level_id") and source_loc.level_id != rec.folder):
+            rsc_name = "RSC_X_CADEAUX"
+
         save_idx = source_loc.save_idx
         old_soul_slot = rec.name in DARK_SOUL_TYPES or rec.name in CADEAUX_TYPES
         old_barrel_slot = rec.name in BARREL_TYPES
@@ -1916,7 +1925,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         STARTING_ITEMS.discard(config["starting_item"])
 
     # ── Step 5: Spoiler log ───────────────────────────────────────────────────
-    spoiler_path = out_path / f"spoiler_seed_{seed}.txt"
+    spoiler_path = out_path / f"spoiler_log_{seed}.txt"
     write_spoiler_log(
         str(spoiler_path), seed, patches_by_folder,
         gate_remap, records_by_folder, config,

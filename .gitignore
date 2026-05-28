@@ -40,7 +40,7 @@ _randomizer_work_*/
 *.kpf
 thoth_x64_patched.exe
 # Spoiler logs from local runs.
-spoiler_seed_*.txt
+spoiler_log_*.txt
 
 # ── Local test / research scripts ────────────────────────────────
 tests/

@@ -111,7 +111,7 @@ Run `build.bat` from the randomizer folder. It installs PyInstaller automaticall
 
 ---
 
-The patcher writes a spoiler log next to itself (`spoiler_seed_<N>.txt`).
+The patcher writes a spoiler log next to itself (`spoiler_log_<N>.txt`).
 Drop the generated `shadowman_randomizer.kpf` in the game's `mods/` folder and play.
 
 ### Common recipes
@@ -419,19 +419,18 @@ just delete `mods/shadowman_randomizer.kpf`.
 ## Contributing
 
 Bug reports, seed pathology cases, and PRs welcome. When filing an issue, please
-include the seed, the exact CLI flags you used, and the spoiler log if the run
-completed.
+include the seed, the exact CLI flags you used, and the spoiler log (`spoiler_log_<N>.txt`) if one was generated.
 
 Join the discussion or share feedback on the
 [GitHub Discussions board](https://github.com/bropacman/shadow-man-remastered-randomizer/discussions).
-You can also reach me directly on Discord: **bropacman**.
+You can also reach me directly on Discord: **bropacman**
 
 ---
 
 ## Credits
 
 - Game by Nightdive Studios
-- Randomizer by the Shadow Man modding community
+- Randomizer by [bropacman](https://github.com/bropacman) and the Shadow Man modding community
 
 ---
 
