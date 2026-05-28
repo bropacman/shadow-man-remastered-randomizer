@@ -412,12 +412,12 @@ _HTML = r"""<!DOCTYPE html>
     <div class="row">
       <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per death:</span>
       <input type="range" id="deathPenalty" min="0" max="10" value="0"
-             oninput="document.getElementById('deathPenaltyVal').textContent=(this.value==='0'?'Off':this.value)">
+             oninput="document.getElementById('deathPenaltyVal').textContent=(this.value==='0'?'Off':'−'+this.value+' step/death')">
       <span class="slider-val" id="deathPenaltyVal">Off</span>
       <button class="rng-btn" id="deathPenaltyRng" onclick="toggleRng('deathPenalty');refreshDeathPenaltyLabel()" title="Randomize per seed">&#127922;</button>
-      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by step&times;1000 on each death, floored at step&times;1000. <b>Off (0)</b> disables the penalty. <b>1</b> = &minus;1000/death (mild), <b>10</b> = &minus;10&thinsp;000/death (brutal). Applied as a direct EXE patch.</span></span>
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by 1 step per death, floored at that step. <b>Off</b> disables the penalty. <b>1</b> = &minus;1 step/death (mild), <b>10</b> = &minus;10 steps/death (brutal). Applied as a direct EXE patch.</span></span>
     </div>
-    <div class="hint" style="margin-top:4px">0 = disabled &nbsp;&nbsp; 10 = &minus;10&thinsp;000/death</div>
+    <div class="hint" style="margin-top:4px">Off = disabled &nbsp;&nbsp; 10 = &minus;10 steps/death</div>
   </div>
 
   <!-- Right column: Coffin Gates + Progression stacked -->
@@ -538,7 +538,7 @@ _HTML = r"""<!DOCTYPE html>
              oninput="document.getElementById('startingHealthVal').textContent=this.value">
       <span class="slider-val" id="startingHealthVal">5</span>
       <button class="rng-btn" id="startingHealthRng" onclick="toggleRng('startingHealth')" title="Randomize per seed">&#127922;</button>
-      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Starting max health on a 1&ndash;10 scale (each step = 1&thinsp;000 units). Vanilla is 5 = 5&thinsp;000. Current health is set to max on spawn.</span></span>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Starting max health on a 1&ndash;10 scale. Vanilla is 5. Current health is set to max on spawn.</span></span>
     </div>
     <div class="row" style="margin-bottom:6px">
       <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per altar:</span>
@@ -546,7 +546,7 @@ _HTML = r"""<!DOCTYPE html>
              oninput="document.getElementById('altarHealthGrantVal').textContent=this.value">
       <span class="slider-val" id="altarHealthGrantVal">1</span>
       <button class="rng-btn" id="altarHealthGrantRng" onclick="toggleRng('altarHealthGrant')" title="Randomize per seed">&#127922;</button>
-      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Health restored per life altar interaction on the same 1&ndash;10 scale (vanilla: 1 = 1&thinsp;000). Starting health + 5 &times; altar grant should not exceed the 10&thinsp;000 cap.</span></span>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Health restored per life altar interaction on a 1&ndash;10 scale. Vanilla is 1.</span></span>
     </div>
     <div class="hint" style="margin-bottom:6px">start + 5 &times; per-altar &le; 10 (hard cap)</div>
 
@@ -816,7 +816,7 @@ function syncCadeauxConstraints() {
 function refreshDeathPenaltyLabel() {
   if (isRng('deathPenalty')) return;
   const v = document.getElementById('deathPenalty').value;
-  document.getElementById('deathPenaltyVal').textContent = (v === '0' ? 'Off' : v);
+  document.getElementById('deathPenaltyVal').textContent = (v === '0' ? 'Off' : '−' + v + ' step/death');
 }
 function randomizeSeed() {
   document.getElementById('seed').value = Math.floor(Math.random() * 9000000000) + 1000000000;
