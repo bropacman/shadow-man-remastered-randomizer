@@ -22,7 +22,7 @@ enemies, music, and SFX using a custom assumed-fill algorithm.
 - **Dark Engine piston combinations** — the six dark engine piston combos can be randomized per-seed; new values are patched directly into the in-game Jack's Schematic journal page, making it a required progression item
 - **Dark Souls and Govis** — shuffled across all soul, barrel, and cadeaux slots
 - **Starting item** — choose a specific item to receive at the Louisiana Swampland church before any other pickup, or randomize per-seed
-- **Starting bundles** — grant all Accumulators, all Retractors, or all Eclipsers at seed start, removing them from the shuffle pool
+- **Starting bundles** — grant all Accumulators, all Retractors, all Eclipsers, all Gad Powers at seed start, removing them from the shuffle pool
 
 ### Coffin Gates
 - **Gate SL requirements** — coffin gate thresholds reshuffled across Deadside; in-world ARC ring decorations updated to match
