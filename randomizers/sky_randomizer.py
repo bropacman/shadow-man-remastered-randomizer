@@ -122,8 +122,8 @@ def sky_spoiler_section(swap_map: dict[str, str]) -> list[str]:
     for slot, source in sorted(swap_map.items()):
         if slot == source:
             continue
-        slot_level  = Path(slot).parts[1]  if len(Path(slot).parts) > 1 else slot
-        src_level   = Path(source).parts[1] if len(Path(source).parts) > 1 else source
+        slot_level  = Path(slot).parts[-4] if len(Path(slot).parts) > 3 else Path(slot).parts[-2] if len(Path(slot).parts) > 1 else slot
+        src_level   = Path(source).parts[-4] if len(Path(source).parts) > 3 else Path(source).parts[-2] if len(Path(source).parts) > 1 else source
         fname       = Path(slot).name
         lines.append(f"  {slot_level:<40}  {src_level:<40}  {fname}")
     return lines

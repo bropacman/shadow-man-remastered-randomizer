@@ -36,6 +36,7 @@ exe = EXE(
     a.datas,
     [],
     name='shadow_man_randomizer',
+    icon='assets/randomizer.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

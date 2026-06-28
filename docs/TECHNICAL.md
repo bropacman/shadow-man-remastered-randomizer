@@ -15,9 +15,10 @@ curious players, or future maintainers.
 5. [From CSV to Logic — How Location Data Flows](#5-from-csv-to-logic)
 6. [Logic Edge Cases](#6-logic-edge-cases)
 7. [Enemy, Music, and SFX Shuffle](#7-enemy-music-and-sfx-shuffle)
-8. [Spoiler Log](#8-spoiler-log)
-9. [Recent Fixes](#9-recent-fixes)
-10. [RSC File Format Reference](#10-rsc-file-format-reference)
+8. [Dark Engine Piston Combos](#8-dark-engine-piston-combos)
+9. [Spoiler Log](#9-spoiler-log)
+10. [Recent Changes](#10-recent-changes)
+11. [RSC File Format Reference](#11-rsc-file-format-reference)
 
 ---
 
@@ -39,11 +40,11 @@ through to the originals. This means:
 
 - **Original files are never modified.** The randomizer reads from the base
   KPFs, makes changes in a temporary working directory, and packs only the
-  changed files into `mods/shadowman_randomizer.kpf`.
+  changed files into `mods/shadowman_randomizer_&lt;seed&gt;.kpf`.
 - **Restoration is instant.** Delete (or rename) the mod KPF and the game
   returns to vanilla on next launch, with no file verification needed.
 - **Multiple mods are supported.** Load order among mod KPFs is alphabetical;
-  `shadowman_randomizer.kpf` is named to sort predictably.
+  `shadowman_randomizer_&lt;seed&gt;.kpf` is named to sort predictably.
 
 ### How the patcher uses KPFs
 
@@ -55,7 +56,7 @@ through to the originals. This means:
    the appropriate base archive into a temporary working directory.
 3. **Modify** — the patcher applies all changes (name swaps, gate writes,
    deco renames, etc.) to the extracted copies.
-4. **Repack** — assembles all modified files into `shadowman_randomizer.kpf`
+4. **Repack** — assembles all modified files into `shadowman_randomizer_&lt;seed&gt;.kpf`
    using `ZIP_STORED` and installs it to `mods/`.
 
 The temporary working directory is cleaned up automatically on success. If the
@@ -100,7 +101,7 @@ entry:
    to 30 bytes.
 4. Writes the modified file back out.
 
-All modified files are then repacked into a single `shadowman_randomizer.kpf`
+All modified files are then repacked into a single `shadowman_randomizer_&lt;seed&gt;.kpf`
 mod archive and installed to the game's `mods/` folder. The game's mod loader
 prefers files in `mods/` over the base KPF archives, so vanilla files are never
 touched. Deleting the mod KPF instantly restores vanilla.
@@ -244,7 +245,7 @@ applies the new values by:
 2. Scanning each file for gate records matching known gate IDs.
 3. Writing the new threshold value (`new_sl × 2560`) into the record at the
    fixed offset.
-4. Including the modified files in the repacked `shadowman_randomizer.kpf`.
+4. Including the modified files in the repacked `shadowman_randomizer_&lt;seed&gt;.kpf`.
 
 The ARC decoration records that display the gate's soul count ring in-world
 are also updated to match: the patcher renames `RSC_X_COFFIN_GATE_ARC<N>`
@@ -343,7 +344,10 @@ items:
 **Step 1 — Gates.** If gate shuffle is enabled, `_shuffle_gates()` runs first
 and produces a `gate_remap` dict. This is passed to `build_gate_rules()` which
 wires up the region graph with the new SL thresholds before any placement
-begins.
+begins. If soul level threshold shuffle is also enabled, the randomized
+`SL → souls` mapping is applied at this point so the fill algorithm evaluates
+gate logic against the actual soul counts the player will encounter in-game —
+not the vanilla thresholds.
 
 **Step 2 — Candidate pool.** All checkable locations are collected (filtered
 by category and any active exclusions). If gad temple shuffle is off, gad slots
@@ -502,25 +506,126 @@ Two independent pools are shuffled:
 
 ---
 
-## 8. Spoiler Log
+## 8. Dark Engine Piston Combos
 
-After every successful run the patcher writes a `spoiler_seed_<N>.txt` file
-next to itself (or to `--output-dir` if specified). The spoiler log contains:
+The dark engine in the Asylum has six pistons, each requiring a three-bar
+combination (bars 1–5 each) to open. In vanilla these combos are fixed and
+documented in Jack's Schematic (an in-game journal page).
 
-- The seed number and all active flags used to generate the run.
-- The gate remap table showing the new SL value for every coffin gate.
-- A full sphere-by-sphere playthrough simulation: each sphere lists the new
-  areas unlocked, the key items found and where they were located, and the
-  running soul count and current SL at the start of that sphere.
+### Randomization
 
-The sphere simulation is produced by `simulate_playthrough()` in `fill.py`
-with `collect_spheres=True`. It replays the exact logic the fill algorithm
-used, so the spoiler log is a faithful record of the intended progression order
-for that seed — not a post-hoc reconstruction.
+When `--piston-combos` is active, `dark_engine_patch.py` independently assigns
+each piston a new random three-bar combination using the seed RNG. The six new
+combos are:
+
+1. Written directly into the binary data of the Jack's Schematic journal page
+   (`MUP_JACKS_SCHEMATICS`) inside the game's KPF archives — the in-game page
+   always shows the correct codes for the current seed.
+2. Applied to the dark engine's combination check table via a targeted binary
+   patch to the relevant level data.
+
+Because Jack's Schematic is the only in-game source of the new codes, the fill
+algorithm treats it as a required progression item when piston combo
+randomization is active — it is added to the progression item pool and the
+`R.pistons` rule requires the player to have it before the dark engine puzzle
+can be considered solvable.
+
+### Three-state config
+
+The `piston_combos` config key has three values:
+
+| Value | Meaning |
+|-------|---------|
+| `"off"` | Vanilla combos; Jack's Schematic is a lore item only |
+| `"on"` | Always randomize combos; Jack's Schematic becomes required |
+| `"random"` | Decide per-seed via `_resolve_random_config()` → resolves to `"off"` or `"on"` |
+
+The GUI checkbox maps to `"on"` (always shuffle) while the 🎲 button maps to
+`"random"` (let the seed decide), making them distinguishable when a settings
+string is re-imported.
+
+### Spoiler log
+
+The piston combo table is computed before the spoiler log is written, so the
+log always reflects the actual randomized values regardless of how the run
+was triggered. Each entry shows the vanilla combo on the left and the new
+combo on the right, with a `←` marker on changed pistons.
 
 ---
 
-## 10. RSC File Format Reference
+## 9. Spoiler Log
+
+After every successful run the patcher writes a `spoiler_log_<seed>.txt` file
+next to itself (or to `--output-dir` if specified). The spoiler log contains:
+
+- **Header** — randomizer version string (defined as `RANDOMIZER_VERSION` in
+  `patcher.py` so it is always in sync with the release), seed number, and a
+  compact Base64 settings string that can be pasted back into the GUI to
+  reproduce the exact configuration (padding `=` signs are stripped for easier
+  copy-paste).
+- **Settings sections** — all active flags grouped by category (gameplay,
+  coffin gates, entrance randomizer, gameplay tuning, enemies, cosmetics).
+  Boolean values are displayed as `yes`/`no`.
+- **Soul threshold table** — when soul level threshold shuffle is active, shows
+  vanilla vs. randomized soul counts for SL1–SL10 with `←` on changed rows.
+- **Dark engine combination table** — when piston combo randomization is active,
+  shows vanilla vs. new combo for each named piston with `←` on changed rows.
+- **Coffin gate table** — old vs. new SL and corresponding soul counts for every
+  gate, with `←` on changed gates.
+- **Sky shuffle table** — when sky shuffle is active, shows which level's sky
+  files were swapped into each slot.
+- **Sphere-by-sphere playthrough** — produced by `simulate_playthrough()` in
+  `fill.py` with `collect_spheres=True`. Each sphere lists newly accessible
+  areas, key items found and their locations, the running soul count, and the
+  current SL. This replays the exact logic the fill algorithm used, so the log
+  is a faithful record of the intended progression order — not a post-hoc
+  reconstruction.
+- **Full item location list** — every randomized slot grouped by level, showing
+  the slot type and the item placed there.
+
+The seed number is part of the KPF filename (`shadowman_randomizer_&lt;seed&gt;.kpf`), so the seed is always identifiable from the file alone even without the spoiler log.
+
+---
+
+## 10. Recent Changes
+
+### v1.1.7
+
+**Dark engine piston combo randomization.** `dark_engine_patch.py` randomizes
+all six piston combination values and patches both the combination check table
+and the Jack's Schematic journal page. Jack's Schematic becomes a required
+progression item in fill logic when this is active. Three-state config
+(`off`/`on`/`random`) correctly round-trips through the GUI settings string.
+
+**Starting bundles.** The `--starting-item-bundles` flag (and its GUI
+equivalent) grants a full group of sub-items at seed start and removes them
+from the shuffle pool. Current bundles: `all_accumulators`, `all_retractors`,
+`all_eclipsers`. This replaces the previous per-sub-item toggle flags
+(`--shuffle-retractors`, `--shuffle-accumulators`, `--shuffle-eclipsers`).
+
+**Fill respects soul level thresholds.** When soul threshold shuffle is active,
+the fill algorithm now uses the randomized `SL → souls` mapping during
+simulation rather than vanilla thresholds, so gate logic is evaluated against
+the soul counts the player will actually see in-game.
+
+**Seed in KPF filename.** The packed mod is now named `shadowman_randomizer_&lt;seed&gt;.kpf` so the seed is always identifiable from the filename. A legacy `shadowman_randomizer.kpf` from a previous install is automatically removed on the next run.
+
+**Randomizer version in spoiler log.** `RANDOMIZER_VERSION` is a top-level
+constant in `patcher.py`; the spoiler log header always reflects the version
+that generated it.
+
+**Decimal support for health tuning options.** `--starting-health`,
+`--altar-health-grant`, and `--death-penalty` all accept decimal values in 0.5
+steps (e.g. `--starting-health 3.5`, `--death-penalty 0.5`). Random resolution
+for health options rounds to the nearest 0.5 step via `round(x * 2) / 2`.
+
+**Spoiler log refinements.** Boolean settings display as `yes`/`no`. Piston
+combo table shows vanilla left / new right (matching soul threshold convention).
+Settings string strips trailing `=` padding for easier copy-paste.
+
+---
+
+## 11. RSC File Format Reference
 
 This section is the authoritative byte-level description of the RSC binary
 format used throughout the game. The same 72-byte record structure appears in

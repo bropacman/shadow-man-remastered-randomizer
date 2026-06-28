@@ -219,8 +219,9 @@ def sfx_spoiler_section(swap_log: dict[str, str]) -> list[str]:
         return "other"
 
     def _label(path: str) -> str:
-        """Short human-readable label: just the filename stem (no extension, no dir)."""
-        return Path(path).stem
+        """Short human-readable label: parent folder + filename stem."""
+        p = Path(path)
+        return f"{p.parent.name}/{p.stem}"
 
     lines = ["", "── SFX SHUFFLE ─────────────────────────────────────────", ""]
 

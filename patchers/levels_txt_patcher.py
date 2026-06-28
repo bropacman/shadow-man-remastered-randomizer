@@ -435,6 +435,10 @@ def patch_levels_txt(
     gate_remap: dict[str, int],
     output_path: Path,
     true_form_loc_remap: dict[str, str] | None = None,  # src_loc_key → dst_loc_key
+    starting_item_bundles: list | None = None,
+    y_adj_map: dict[str, float] | None = None,  # loc_key → y_adjust applied to physical item
+    retractor_actual_xyz: dict | None = None,    # level_id → {'retractor'/'accumulator': [(x,y,z,zone),...]}
+                                                 # scanned from patched RSC files; consumed (popped) here
 ) -> None:
     """
     Read vanilla levels.txt, rewire $directive entries to match the randomized
@@ -444,6 +448,16 @@ def patch_levels_txt(
 
     blocks = _parse(source_path.read_text(encoding="utf-8"))
     by_num = {b["num"]: b for b in blocks}
+
+    # Reverse map: block number → level_id (for retractor_actual_xyz lookup).
+    # LEVEL_TO_NUM iterates in LEVEL_FOLDERS order: day variants always come
+    # before night variants (e.g. "swampday" before "swampnit"), so the first
+    # entry seen for each block number is always the primary (day) folder —
+    # which is where the RSC files actually live.
+    _num_to_level: dict[int, str] = {}
+    for _lid, _num in LEVEL_TO_NUM.items():
+        if _num not in _num_to_level:
+            _num_to_level[_num] = _lid
 
     # Pre-scan: collect soul IDs that actually exist in vanilla levels.txt.
     # The location pool may have more soul-type slots than there are $darksoul
@@ -456,12 +470,13 @@ def patch_levels_txt(
             if m:
                 existing_soul_ids.add(int(m.group(1)))
 
-    # Build: list of (directive, target_level_num, condition, dest).
+    # Build: list of (directive, target_level_num, condition, dest, loc_key).
     # Multiple items sharing a base directive (retractor, accumulator, darksoul)
     # each get their own entry so all hints are written — no "last wins" collapse.
     # dest is the RawLocation for the destination slot; used to supply accurate
     # world coordinates for directives that need them (retractor, accumulator).
-    directive_entries: list[tuple[str, int, str, object]] = []
+    # loc_key is carried through so y_adj_map can be applied to the Y coordinate.
+    directive_entries: list[tuple[str, int, str, object, object]] = []
 
     for loc_key, source_loc in progression_placement.items():
         dest = LOCATION_TABLE.get(loc_key)
@@ -499,7 +514,33 @@ def patch_levels_txt(
         flags = _gate_raw_to_flags(dest.gate_raw, gate_remap)
         ordered = _order_flags(flags)
         condition = " ".join(ordered) if ordered else "NONE"
-        directive_entries.append((directive, level_num, condition, dest))
+        directive_entries.append((directive, level_num, condition, dest, loc_key))
+
+    # Bundled items: inject tracker entries pointing to swampday (level 0).
+    # Bundled items are excluded from fill, so they never appear in
+    # progression_placement. Without this block their vanilla levels.txt entries
+    # would remain, showing wrong locations.
+    if starting_item_bundles:
+        from constants import STARTING_ITEM_BUNDLES as _SIB
+        from fill import CHECKABLE_LOCS
+
+        class _SwampDest:
+            x, y, z, zone = 15415.0, 1800.0, 6840.0, 5  # first swampday bench
+
+        _bundle_dest = _SwampDest()
+        all_bundled_rscs = {r for bk in starting_item_bundles for r in _SIB.get(bk, [])}
+
+        for _loc in CHECKABLE_LOCS:
+            _rsc = getattr(_loc, 'object', None)
+            if _rsc not in all_bundled_rscs:
+                continue
+            if _rsc == "RSC_X_GAD_PICKUP":
+                _directive = GAD_DIRECTIVE.get(_loc.level_id)
+            else:
+                _directive = RSC_TO_DIRECTIVE.get(_rsc)
+            if not _directive:
+                continue
+            directive_entries.append((_directive, 0, "NONE", _bundle_dest, None))
 
     # True form souls — use loc_key_remap from randomize_true_forms.
     # src carries the soul ID (save_idx written to dst slot by enemy randomizer);
@@ -526,7 +567,7 @@ def patch_levels_txt(
                 flags.add("ECLIPSE")
             ordered = _order_flags(flags)
             condition = " ".join(ordered) if ordered else "NONE"
-            directive_entries.append((f"darksoul {soul_id}", level_num, condition, None))
+            directive_entries.append((f"darksoul {soul_id}", level_num, condition, None, None))
 
     # Bulk-strip randomizable $darksoul entries up front so vanilla souls that
     # share a block with randomized placements don't produce duplicate "Find X
@@ -570,7 +611,7 @@ def patch_levels_txt(
     written: set[str] = set()
     directive_has_coords: dict[str, bool] = {}
 
-    for directive, target_num, condition, dest in directive_entries:
+    for directive, target_num, condition, dest, entry_loc_key in directive_entries:
         # darksoul entries already bulk-stripped above; all others strip on
         # first encounter of that directive name.
         pat = _directive_re(directive)
@@ -595,17 +636,33 @@ def patch_levels_txt(
 
         # Build the coordinate suffix from the actual destination location.
         # Retractor and accumulator lines include "X Y Z zone" after the
-        # condition; using vanilla coords here would point to the wrong world
-        # position after shuffle, so the badge never clears on collection.
+        # condition; the XYZ must exactly match what the game writes into the
+        # save manager's spatial lookup array (populated from the live RSC
+        # record when the level loads).  We use retractor_actual_xyz — built
+        # by scanning the already-patched RSC files — so there is zero chance
+        # of a mismatch between the directive and the RSC binary.  This handles
+        # both progression items (where y_adj was applied to the RSC) and bundle
+        # items (whose positions are computed, not stored in LOCATION_TABLE).
         coords_suffix = ""
-        if directive_has_coords.get(directive) and dest is not None:
-            dx = getattr(dest, 'x', None)
-            dy = getattr(dest, 'y', None)
-            dz = getattr(dest, 'z', None)
-            dzone = getattr(dest, 'zone', None)
-            if dx is not None and dy is not None and dz is not None:
-                zone_str = str(dzone) if dzone is not None else "0"
-                coords_suffix = f" {dx:.6f} {dy:.6f} {dz:.6f} {zone_str}"
+        if directive_has_coords.get(directive):
+            _dtype = "accumulator" if directive.startswith("accumulator") else "retractor"
+            _level_id = (_num_to_level.get(target_num)
+                         if dest is None
+                         else getattr(dest, 'level_id', _num_to_level.get(target_num)))
+            _xyz_list = (retractor_actual_xyz or {}).get(_level_id or "", {}).get(_dtype, [])
+            if _xyz_list:
+                _ax, _ay, _az, _azone = _xyz_list.pop(0)
+                coords_suffix = f" {_ax:.6f} {_ay:.6f} {_az:.6f} {_azone}"
+            elif dest is not None:
+                # Fallback: dest coords + y_adj (progression items without scan data)
+                dx = getattr(dest, 'x', None)
+                dy = getattr(dest, 'y', None)
+                dz = getattr(dest, 'z', None)
+                dzone = getattr(dest, 'zone', None)
+                if dx is not None and dy is not None and dz is not None:
+                    y_adj = (y_adj_map or {}).get(entry_loc_key, 0.0)
+                    zone_str = str(dzone) if dzone is not None else "0"
+                    coords_suffix = f" {dx:.6f} {dy + y_adj:.6f} {dz:.6f} {zone_str}"
 
         new_line = f'    ${directive} "{condition}"{coords_suffix}'
         target = by_num.get(target_num)

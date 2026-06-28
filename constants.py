@@ -5,6 +5,8 @@ Single source of truth for level folders and RSC file types.
 Imported by patcher.py, kpf_handler.py, and extracted_locations.py.
 """
 
+RANDOMIZER_VERSION = "v1.1.7"
+
 LEVEL_FOLDERS = [
     "swampday", "tenement", "prison", "uground", "florida", "salvage",
     "swampnit", "ntenemnt", "nprison", "nuground", "nflorida", "nsalvage",
@@ -71,14 +73,50 @@ STARTING_ITEM_POOL: dict[str, str] = {
     "Gad Power Upgrade":  "RSC_X_GAD_PICKUP",
 }
 
+# ── Starting item bundles ────────────────────────────────────────────────────
+# Spawn spots in swampday (zone 5, near the church) for bundle injections.
+# Up to 5 items per bundle; if both bundles are active items cycle through
+# spots with a Y offset per pass so stacked pickups are still reachable.
+# 4 bench centres in swampday (zone 5, near the church). Items are laid across
+# each bench: BUNDLE_ITEMS_PER_BENCH items spread symmetrically along X.
+SWAMPDAY_BUNDLE_SPOTS: list[tuple[float, float, float, int]] = [
+    (15415.0, 1740.0, 7040.0, 5),
+    (16072.0, 1740.0, 7040.0, 5),
+    (15411.0, 1740.0, 6525.0, 5),
+    (16077.0, 1740.0, 6525.0, 5),
+]
+
+BUNDLE_ITEMS_PER_BENCH: int   = 5      # items laid along each bench
+BUNDLE_SPOT_Z_STEP:     float = 60.0   # Z distance between adjacent items on a bench
+
+# RSC names to collect (all instances across all levels) for each bundle.
+# Bundles with a shuffle requirement are gated in the GUI and patcher;
+# the injection loop itself is generic — it simply finds all matching records.
+STARTING_ITEM_BUNDLES: dict[str, list[str]] = {
+    "all_accumulators": ["RSC_X_ACCUMULATOR"],
+    "all_retractors":   ["RSC_X_RETRACT", "RSC_X_RETRACT1", "RSC_X_RETRACT2"],
+    "all_eclipsers":    ["RSC_X_ECLIPSER_PART1", "RSC_X_ECLIPSER_PART2", "RSC_X_ECLIPSER_PART3"],
+    "all_gad_pickups":  ["RSC_X_GAD_PICKUP"],
+    "all_prisms":       ["RSC_X_PRISM"],
+}
+
+# Which config key must be truthy for each bundle to be valid.
+# Bundles without an entry here are always allowed.
+BUNDLE_REQUIRES_SHUFFLE: dict[str, str] = {
+    "all_prisms":      "shuffle_prisms",
+    "all_gad_pickups": "shuffle_gad_temples",
+}
+
 # ── Asset overrides ──────────────────────────────────────────────────────────
 # (source relative to randomizer root, dest relative to game dir)
 # Applied unconditionally on every randomizer run.
 ASSET_OVERRIDES: list[tuple[str, str]] = [
     (r"assets\smrr_title_logo.png", r"gfx\ShadowMan_logo.png"),
     # (r"data\pot.dds", r"hdtextures\meshes\items\pot\000pot.dds"),
-    (r"assets\yellow_crate_1.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
-    (r"assets\yellow_crate_2.dds", r"hdtextures\levels\uground\objects\tga\020crate.dds"),
+    # (r"assets\yellow_crate_1.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
+    # (r"assets\yellow_crate_2.dds", r"hdtextures\levels\uground\objects\tga\020crate.dds"),
+    (r"assets\hd_jaunty_pot_2.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
+    # pot1.msh is handled by MSH_OVERRIDES (needs scaling), not here
     # (r"assets\shadow_man_shirt.dds", r"hdtextures\anims\mike\textures\005shirt.dds"),
 ]
 
@@ -92,9 +130,12 @@ GAD_ASSET_OVERRIDES: list[tuple[str, str]] = [
 ]
 
 # ── MSH overrides ────────────────────────────────────────────────────────────
-# (source msh relative to randomizer root, dest internal KPF path, scale factor)
-MSH_OVERRIDES: list[tuple[str, float]] = [
-    (r"levels/uground/objects/crate.msh", 1.0),
+# (kpf_internal_path, scale, local_src_or_None)
+# local_src: path relative to randomizer root — used instead of extracting from KPF.
+#            Set to None to scale the vanilla KPF file in-place.
+# Note: entries here take precedence over ASSET_OVERRIDES for the same kpf path.
+MSH_OVERRIDES: list[tuple[str, float, str | None]] = [
+    (r"levels/uground/objects/crate.msh", 2, r"assets/pot1.msh"),
 ]
 
 # ── Gate constants ────────────────────────────────────────────────────────────
@@ -369,7 +410,7 @@ PRESERVED_SOUL_IDS: frozenset[int] = BOSS_SOUL_IDS
 #   a cryptic phrase so item locations are hinted by category, not by name.
 # DIRECTIVE_HINT_TIER: maps levels.txt directive names to a HINT_TIERS key.
 
-GAD_LABEL: str = "Find Gad Power (won't clear)"
+GAD_LABEL: str = "Find Gad Power (clears on level exit)"
 
 # Label for the Violator that unlocks via the accumulator mechanism (VIO_PLINTH).
 # That mechanism is never triggered in a randomised run, so the tracker badge

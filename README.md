@@ -4,72 +4,74 @@
 
 </div>
 
+**Version: v1.1.7**
+
 A standalone randomizer for **Shadow Man Remastered** (Nightdive Studios, 2021).
 Randomizes key items, souls, weapons, gad powers, coffin gate thresholds, entrances,
-enemies, music, and SFX using a custom assumed-fill algorithm that guarantees every
-seed is beatable.
+enemies, music, and SFX using a custom assumed-fill algorithm.
 
 ---
 
 ## Features
 
-### What Gets Randomized
-- **Progression items** — Engineers Key, Poigne, Baton, Flambeau, Marteau, Calabash,
-  Eclipser parts, Retractors, Accumulators, Prison Key Card; each sub-group
-  (Eclipsers, Retractors, Accumulators) can be individually toggled or randomised per-seed
-- **Gad powers** — Touch, Walk, and Swim Gad as physical pickups shuffled across
-  temple locations (EXE patch applied automatically; disable with `--no-shuffle-gad-temples`)
+### Gameplay
+- **Progression items** — Engineers Key, Poigne, Baton, Flambeau, Marteau, Calabash, Eclipser parts, Retractors, Accumulators, Prison Key Card; shuffled across all eligible locations using an assumed-fill algorithm that guarantees every seed is beatable
+- **Gad powers** — Touch, Walk, and Swim Gad as physical pickups shuffled across temple locations (EXE patch applied automatically)
 - **Weapons** — Asson, Shotgun, Sawed-off Shotgun, Enseigne, MP-909, 0.9-SMG, Tête de Mort, Flashlight, Violator
 - **Lore items** — Book of Shadows, Prophecy, Jack's Schematic
-- **Starting item** — choose a specific item to receive at the Louisiana Swampland church before any other pickup, or use random to let the seed pick one reproducibly
-- **Dark Souls and Govis** — shuffled across all soul, barrel, and cadeaux slots, so they can end up anywhere
-- **Coffin gate SL requirements** — coffin gate thresholds reshuffled across deadside
-  (in-world ARC ring decorations updated to match)
-- **Enemies** — enemy types shuffled with three modes: depth-weighted by tier
-  (default), purely random by movement type, or themed by context group; optional
-  cross-movement-type mixing
-- **Ambient creatures** — rats, egrets, flies, butterflies, and friendly fish shuffled
-  across their spawn slots (three modes: global free-for-all, per-movement-type, or
-  per-context-group); purely cosmetic
-- **Music** — track-to-track global shuffle (optional)
-- **Entrances** — hub portals reshuffled so Deadside levels and Engine Rooms connect in a new order (two modes: Deadside-only or full cross-hub mixing both)
-- **SFX** — Shadow Man voice lines, weapon sounds, and enemy SFX (pain, startle, and
-  attack sets shuffled within their own pools)
-- **Sky textures** — sky layer TGAs shuffled across levels per-filename (horizon swaps
-  with horizon, clouds with clouds, etc.); purely cosmetic
+- **Dark Engine piston combinations** — the six dark engine piston combos can be randomized per-seed; new values are patched directly into the in-game Jack's Schematic journal page, making it a required progression item
+- **Dark Souls and Govis** — shuffled across all soul, barrel, and cadeaux slots
+- **Starting item** — choose a specific item to receive at the Louisiana Swampland church before any other pickup, or randomize per-seed
+- **Starting bundles** — grant all Accumulators, all Retractors, or all Eclipsers at seed start, removing them from the shuffle pool
+
+### Coffin Gates
+- **Gate SL requirements** — coffin gate thresholds reshuffled across Deadside; in-world ARC ring decorations updated to match
+- **Gate presets** — open, easy, medium, hard, or chaos; controls which gates are locked and whether an SL cap applies
+- **Soul level thresholds** — the soul counts required to reach SL1–SL10 can be randomized via three modes: `progressive` (geometric ramp), `balanced` (even spacing), or `random` (fully random); SL0 is always 0, SL10 is always 120
+
+### Entrance Randomizer
+- **Deadside-only** — the 9 Deadside portals reshuffled among themselves; Engine Rooms stay vanilla
+- **Cross-hub** — all 14 portals (Deadside + Engine Rooms) shuffled together; a Deadside portal may lead to an Engine Room and vice versa
 
 ### Gameplay Tuning (EXE patches)
-- **Life altar cadeaux requirement** — cadeaux cost and minimum required per altar interaction (default 100, configurable 1–133)
+- **Life altar cadeaux requirement** — cadeaux cost per altar interaction (default 100, configurable 1–133)
 - **Fogometers light soul door** — cadeaux required to open the final Fogometers gate (default 666, configurable 5–666)
-- **Starting max health** — player max health at game start on a 1–10 scale (vanilla default: 5)
-- **Life altar health grant** — health restored per altar interaction on the same 1–10 scale (vanilla default: 1)
-- **Death penalty** — reduces max health by a configurable number of steps on each death, floored at that step so the player always retains at least one step of health; 0 = disabled (default), 1–10 scale the penalty from mild (−1 step/death) to brutal (−10 steps/death)
-- **Soul level thresholds** — randomizes the soul counts required to reach SL1–SL10 via three modes: `progressive` (geometric ramp), `balanced` (even spacing), or `random` (fully random distribution); SL0 is always 0 and SL10 is always 120; intermediate breakpoints are patched directly into the EXE
+- **Starting max health** — player max health at game start on a 0.5–10 scale in 0.5 steps (vanilla: 5)
+- **Life altar health grant** — health restored per altar interaction on the same 0.5–10 scale (vanilla: 1)
+- **Death penalty** — reduces max health by a configurable step (0.5–10, in 0.5 increments) on each death, floored so the player always retains at least one step; 0 = disabled
+- **Insanity** — allows progression items to be placed in normally-excluded slots; tier 1 = soul/govi slots, tier 2 = +cadeaux, tier 3 = all slots
 
-> **Note:** Cadeaux counting is not yet fully reliable — some cadeaux may not register correctly in-game depending on how they were placed. Consider lowering the altar cost and Fogometers door values from their defaults until this is resolved.
+> **Note:** Cadeaux counting is not yet fully reliable — some cadeaux may not register correctly in-game. Consider lowering the altar cost and Fogometers door values from their defaults until this is resolved.
+
+### Enemies
+- **Enemy shuffle** — enemy types reshuffled with three modes: depth-weighted by difficulty tier (default), purely random within movement type, or themed by context group
+- **True forms** — optional; true-form enemies (which drop Dark Souls) shuffled alongside regular enemies
+- **Movement mixing** — optional cross-movement-type mixing (ground/flying/swimming can swap freely)
+- **Uncap counts** — each slot independently samples from the pool with replacement so any type can appear 0 or many times
+
+### Cosmetics
+- **Music** — track-to-track global shuffle
+- **Voice lines** — Shadow Man generic voice lines shuffled
+- **Weapon SFX** — fire and reload sounds shuffled within each weapon category
+- **Enemy SFX** — pain, startle, and attack sets shuffled within their own pools
+- **Ambient creatures** — rats, egrets, flies, butterflies, and fish shuffled across spawn slots (global, per-movement-type, or per-context-group)
+- **Sky textures** — sky layer TGAs shuffled across levels per-filename (horizon swaps with horizon, clouds with clouds, etc.)
 
 ### Logic Guarantees
-- Assumed-fill algorithm guarantees all seeds are beatable before patching
-- Starting item is granted before fill runs, so the algorithm accounts for it during logic
-- Coffin gate shuffle uses a pool-based approach (gates share a pool of SL values drawn from vanilla) so distribution stays bounded — no pile-up at max SL
+- Assumed-fill guarantees all seeds are beatable before patching
+- Starting item and bundles are granted before fill runs so the algorithm accounts for them during logic
+- Coffin gate shuffle uses a pool drawn from vanilla SL values so distribution stays bounded — no pile-up at max SL
 - Safe mode enforces per-region SL caps on early gates so the game is always immediately accessible
 - Eclipser lock group prevents circular placement
 - Liveside souls correctly require NIGHT (all three Eclipsers) to collect
-- Locations flagged `can_softlock = TRUE` in the CSV are never chosen for key item placement at any insanity tier (see [Location Data](#location-data))
-- Full sphere-by-sphere playthrough simulation written to spoiler log
+- Locations flagged `can_softlock` in the CSV are never chosen for key item placement at any insanity tier
+- Fill uses the randomized SL→souls mapping when soul threshold shuffle is active, so gate logic matches what the player will see in-game
+- Full sphere-by-sphere playthrough simulation written to the spoiler log
 
 ### Delivery
-- Patches are packed into a single `shadowman_randomizer.kpf` mod file
+- Patches are packed into a single `shadowman_randomizer_<seed>.kpf` mod file — the seed number is part of the filename
 - Installed to the game's `mods/` folder — no original files are modified
 - Delete the KPF (or run `--restore`) to instantly return to vanilla
-
----
-
-## Requirements
-
-- Python 3.10 or newer
-- Shadow Man Remastered (Steam or GOG)
-- PyYAML (`pip install -r requirements.txt`)
 
 ---
 
@@ -77,16 +79,18 @@ seed is beatable.
 
 ### Just want to play?
 
-Download **`shadow_man_randomizer.exe`** from the [Releases page](https://github.com/jonathanmanos/shadow-man-remastered-randomizer/releases/latest).
+Download **`shadow_man_randomizer.exe`** from the [Releases page](https://github.com/bropacman/shadow-man-remastered-randomizer/releases/latest).
 No Python required — double-click and go.
 
 ### Running from source
 
+**Requirements:** Python 3.10 or newer, Shadow Man Remastered (Steam or GOG), and PyYAML.
+
 **1. Install Python 3.10 or newer** if you don't have it — grab it from [python.org](https://www.python.org/downloads/). During install, check **"Add Python to PATH"**.
 
 **2. Download the randomizer.** Either:
-- Click **Code → Download ZIP** on the [GitHub page](https://github.com/jonathanmanos/shadow-man-remastered-randomizer), then extract it anywhere, or
-- If you have Git: `git clone https://github.com/jonathanmanos/shadow-man-remastered-randomizer.git`
+- Click **Code → Download ZIP** on the [GitHub page](https://github.com/bropacman/shadow-man-remastered-randomizer), then extract it anywhere, or
+- If you have Git: `git clone https://github.com/bropacman/shadow-man-remastered-randomizer.git`
 
 **3. Install the one dependency.** Open a terminal in the randomizer folder and run:
 
@@ -109,79 +113,7 @@ python patcher.py --game-dir "C:\Program Files (x86)\Steam\steamapps\common\Shad
 
 Run `build.bat` from the randomizer folder. It installs PyInstaller automatically and produces `dist/shadow_man_randomizer.exe`.
 
----
-
-The patcher writes a spoiler log next to itself (`spoiler_log_<N>.txt`).
-Drop the generated `shadowman_randomizer.kpf` in the game's `mods/` folder and play.
-
-### Common recipes
-
-```bash
-# Reproduce a specific seed
-python patcher.py --game-dir <PATH> --seed 12345
-
-# Disable gad temple shuffle (on by default)
-python patcher.py --game-dir <PATH> --no-shuffle-gad-temples
-
-# Shuffle enemies with the difficulty-weighted default
-python patcher.py --game-dir <PATH> --shuffle-enemies
-
-# Themed enemy shuffle (deadside / liveside / prison stay separated)
-python patcher.py --game-dir <PATH> --shuffle-enemies --enemy-mode contextual
-
-# Let ground/flying/swimming enemies mix freely
-python patcher.py --game-dir <PATH> --shuffle-enemies --enemy-mix-movement
-
-# Shuffle ambient creatures (rats, egrets, flies, butterflies, fish)
-python patcher.py --game-dir <PATH> --shuffle-ambients
-
-# Shuffle ambient creatures within movement-type pools (ground/flying/swimming stay separate)
-python patcher.py --game-dir <PATH> --shuffle-ambients --ambient-mode full
-
-# Shuffle enemy pain/startle/attack SFX within each sound-type pool
-python patcher.py --game-dir <PATH> --shuffle-enemies-sfx
-
-# Shuffle sky textures across levels
-python patcher.py --game-dir <PATH> --shuffle-sky
-
-# Light shuffle with SL7 cap, 6 gates forced open
-python patcher.py --game-dir <PATH> --gate-preset easy
-
-# Standard shuffle with SL8 cap, 3 gates forced open
-python patcher.py --game-dir <PATH> --gate-preset medium
-
-# Start with the Engineers Key already in hand
-python patcher.py --game-dir <PATH> --starting-item RSC_X_ENGINEERS_KEY
-
-# Let the seed pick a random starting item (reproducible)
-python patcher.py --game-dir <PATH> --random-starting-item
-
-# Enable Teddy Bear map tracker hints
-python patcher.py --game-dir <PATH> --patch-tracker
-
-# Shuffle deadside portals only
-python patcher.py --game-dir <PATH> --entrance-mode deadside_only
-
-# Shuffle all 14 portals (deadside + dark engine) together
-python patcher.py --game-dir <PATH> --entrance-mode cross_hub
-
-# Randomize the entrance mode itself per-seed
-python patcher.py --game-dir <PATH> --entrance-mode random
-
-# Randomize altar cadeaux cost and Fogometers door requirement per-seed
-python patcher.py --game-dir <PATH> --altar-cadeaux-required random --fogometers-cadeaux-required random
-
-# Throw everything in the blender
-python patcher.py --game-dir <PATH> \
-    --shuffle-enemies --shuffle-true-forms --enemy-mix-movement \
-    --shuffle-ambients --shuffle-sky \
-    --shuffle-music --shuffle-voices --shuffle-weapons-sfx --shuffle-enemies-sfx \
-    --entrance-mode cross_hub --gate-preset easy \
-    --patch-tracker
-
-# Restore vanilla
-python patcher.py --restore --game-dir <PATH>
-```
+The GUI covers all available settings and is the recommended way to generate seeds. The CLI is available for scripting or advanced use — run `python patcher.py --help` or see [All Options](#all-options) below.
 
 ---
 
@@ -203,8 +135,6 @@ python patcher.py --restore --game-dir <PATH>
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--shuffle-progression` / `--no-shuffle-progression` | on | Shuffle key progression items using assumed-fill |
-| `--shuffle-key-items-random` | off | Randomly decide per-seed whether to shuffle key items |
 | `--shuffle-weapons` / `--no-shuffle-weapons` | on | Shuffle weapons |
 | `--shuffle-weapons-random` | off | Randomly decide per-seed whether to shuffle weapons |
 | `--shuffle-lore` / `--no-shuffle-lore` | on | Shuffle lore items |
@@ -213,16 +143,13 @@ python patcher.py --restore --game-dir <PATH>
 | `--shuffle-light-soul-random` | off | Randomly decide per-seed whether to include the Light Soul |
 | `--shuffle-gad-temples` / `--no-shuffle-gad-temples` | on | Gad powers as physical pickups (EXE patch) |
 | `--shuffle-gad-temples-random` | off | Randomly decide per-seed whether to shuffle gad temples |
-| `--shuffle-prisms` / `--no-shuffle-prisms` | off | Shuffle prism items as progression items (requires prism locations in CSV) |
-| `--shuffle-prisms-random` | off | Randomly decide per-seed whether to shuffle prisms |
-| `--shuffle-retractors` / `--no-shuffle-retractors` | on | Shuffle retractor items; when off, all 5 retractors stay vanilla |
-| `--shuffle-retractors-random` | off | Randomly decide per-seed whether to shuffle retractors |
-| `--shuffle-accumulators` / `--no-shuffle-accumulators` | on | Shuffle accumulator items; when off, all 3 accumulators stay vanilla |
-| `--shuffle-accumulators-random` | off | Randomly decide per-seed whether to shuffle accumulators |
-| `--shuffle-eclipsers` / `--no-shuffle-eclipsers` | on | Shuffle Eclipser parts; when off, all 3 parts stay vanilla |
-| `--shuffle-eclipsers-random` | off | Randomly decide per-seed whether to shuffle Eclipser parts |
+| `--shuffle-prisms` / `--no-shuffle-prisms` | off | Shuffle prism items as progression items *(in development)* |
+| `--shuffle-prisms-random` | off | Randomly decide per-seed whether to shuffle prisms *(in development)* |
 | `--starting-item RSC_NAME` | none | Place a specific item at the Louisiana Swampland church at run start (e.g. `RSC_X_ENGINEERS_KEY`) |
 | `--random-starting-item` | off | Pick a random starting item using the seed RNG — reproducible for a given seed |
+| `--starting-item-bundles NAME…` | none | Grant one or more full item groups at seed start, removing them from the shuffle pool. Available bundles: `all_accumulators`, `all_retractors`, `all_eclipsers` |
+| `--piston-combos` | off | Randomize the six dark engine piston combination values; the new codes are patched into the in-game Jack's Schematic journal page, making it a required progression item |
+| `--piston-combos-random` | off | Randomly decide per-seed whether to randomize piston combinations |
 | `--insanity [1\|2\|3\|random]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. Pass `random` to let the seed pick a tier. |
 | `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world. Accepts `random`. |
 
@@ -231,7 +158,7 @@ python patcher.py --restore --game-dir <PATH>
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--gate-preset NAME` | none | `open` = all gates free, no shuffle; `easy` = many gates locked, SL7 cap, 6 gates forced open; `medium` = entry gates locked, SL8 cap, 3 gates forced open; `hard` = entry gates locked, no SL cap, 1 gate forced open; `chaos` = no locks, no cap, no safety; `random` = preset chosen randomly per-seed |
-| `--max-sl N` | none | Override the preset's SL cap — cap the highest SL any shuffled gate can receive (0–10) |
+| `--max-sl N` | none | Override the preset's SL cap — cap the highest SL any shuffled gate can receive (1–10) |
 | `--open-gates N` | preset | Override the preset's open-gates default — force the first N linear coffin gates to SL0 (order: Marrow → Wasteland → Asylum → Temple of Fire → Cageways → Playrooms; beyond 6 chosen randomly) |
 | `--soul-threshold-mode MODE` | none | Randomize the soul counts required to reach SL1–SL10. `progressive` = geometric ramp, `balanced` = even spacing, `random` = fully random distribution. SL0 stays at 0 and SL10 stays at 120; all intermediate breakpoints are patched into the EXE. Omit the flag to keep vanilla thresholds (1, 3, 7, 15, 23, 35, 51, 71, 95, 120). |
 | `--soul-threshold-mode-random` | off | Pick a soul threshold mode randomly per-seed (reproducible for a given seed). |
@@ -244,18 +171,17 @@ Several of the options below accept `random` in place of a number — when passe
 |------|---------|-------------|
 | `--altar-cadeaux-required N` | `100` | Cadeaux required **and** spent per life altar interaction (1–133, vanilla: 100). Max of 133 = ⌊666 ÷ 5⌋. Accepts `random`. |
 | `--fogometers-cadeaux-required N` | `666` | Cadeaux required to open the Fogometers light soul door (must be ≥ 5 × altar cost, max 666, vanilla: 666). Accepts `random`. |
-| `--starting-health N` | `5` | Starting max health on a 1–10 scale (vanilla: 5). Accepts `random`. |
-| `--altar-health-grant N` | `1` | Health granted per life altar interaction on a 1–10 scale (vanilla: 1). Note: starting health + 5 × grant should not exceed the cap of 10. Accepts `random`. |
-| `--death-penalty N` | `0` | Reduce max health by N steps on each death, floored at N steps. 0 = disabled. 1 = −1 step/death (mild), 10 = −10 steps/death (brutal). |
-| `--death-penalty-random` | off | Choose a random death-penalty step (1–10) per-seed rather than disabling it. Reproducible for a given seed. |
+| `--starting-health N` | `5` | Starting max health on a 0.5–10 scale in 0.5 steps (vanilla: 5). Accepts `random`. |
+| `--altar-health-grant N` | `1` | Health granted per life altar interaction on a 0.5–10 scale in 0.5 steps (vanilla: 1). Note: starting health + 5 × grant should not exceed the cap of 10. Accepts `random`. |
+| `--death-penalty N` | `0` | Reduce max health by N steps on each death, floored at N steps. 0 = disabled. Accepts decimals in 0.5 steps (e.g. `0.5` = −500/death, `1.0` = −1000/death). |
+| `--death-penalty-random` | off | Choose a random death-penalty step (0.5–10.0) per-seed rather than disabling it. Reproducible for a given seed. |
 
-> **Cadeaux note:** Cadeaux counting is not yet fully reliable in-game. It is recommended to keep the altar cost and Fogometers door values lower than their defaults until this is resolved.
 
 ### Map tracker (Teddy Bear hints)
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--patch-tracker` | off | Rewrite `levels.txt` map badges to show randomized item locations. Without this flag all item badges are stripped so no incorrect vanilla hints appear. |
+| `--patch-tracker` / `--no-patch-tracker` | on | Rewrite `levels.txt` map badges to show randomized item locations. Use `--no-patch-tracker` to strip all item badges instead. |
 
 ### Entrance randomizer
 
@@ -307,6 +233,9 @@ shadow-man-remastered-randomizer/
 │
 ├── cadeaux_patch.py              ← EXE patch for altar/door cadeaux requirement and cost
 ├── health_patch.py               ← EXE patch for starting max health and altar health grant
+├── dark_engine_patch.py          ← Randomizes dark engine piston combo values; patches in-game journal
+├── soul_threshold_patch.py       ← EXE patch for SL1–SL10 soul count requirements
+├── death_penalty_patch.py        ← EXE code-cave patch for per-death health reduction
 │
 ├── patchers/
 │   ├── gad_pickup_patch.py       ← EXE patch for gad pickup type_id dispatch
@@ -316,7 +245,8 @@ shadow-man-remastered-randomizer/
 │   ├── entrance_randomizer.py    ← Hub portal shuffle logic (deadside_only / cross_hub)
 │   ├── enemy_randomizer.py       ← Enemy type shuffle logic
 │   ├── music_randomizer.py       ← Music shuffle logic
-│   └── sfx_randomizer.py         ← Voice and weapon SFX shuffle logic
+│   ├── sfx_randomizer.py         ← Voice and weapon SFX shuffle logic
+│   └── sky_randomizer.py         ← Sky texture shuffle logic
 │
 ├── data/
 │   ├── locations.csv             ← Source of truth for all item locations + logic
@@ -326,7 +256,7 @@ shadow-man-remastered-randomizer/
 │   ├── generate.py               ← Regenerates extracted_locations.py
 │   └── generate_enemies.py       ← Regenerates extracted_enemy_locations.py
 │
-└── docs/                         ← Research notes
+└── docs/                         ← Technical documentation
 ```
 
 `extracted_locations.py` and `extracted_enemy_locations.py` are generated from the
@@ -340,14 +270,15 @@ re-run the scripts in `tools/` to regenerate them.
 1. **Extract** — pulls quest/instance/fx/resource/enemies RSC files from KPF archives
 2. **Inject** — adds `RSC_X_GAD_PICKUP` records to temple files (if gad shuffle enabled)
 3. **Parse** — reads all RSC records from extracted files
-4. **Fill** — runs assumed-fill to place progression items logically (entrance-aware variant used when entrance randomizer is enabled)
+4. **Fill** — runs assumed-fill to place progression items logically; uses randomized SL thresholds during simulation so gate logic matches what will be patched into the EXE (entrance-aware variant used when entrance randomizer is enabled)
 5. **Gate shuffle** — writes new SL thresholds to `links.e2o` files
 6. **Entrance shuffle** — rewrites level exit scripts so hub portals connect to new spokes (if enabled)
 7. **Patch RSC** — writes new item names to all RSC files
 8. **Patch enemies** — shuffles enemy type names in enemies RSC files (if enabled)
-9. **Patch EXE** — writes prison key card position fix (always) + gad pickup dispatch (if enabled) + cadeaux altar/door thresholds + starting health and altar health grant
-10. **Update decos** — renames ARC coffin gate decorations to match new SL values
-11. **Repack** — packs all modified files into `shadowman_randomizer.kpf`
+9. **Patch EXE** — writes prison key card position fix (always) + gad pickup dispatch (if enabled) + cadeaux altar/door thresholds + starting health and altar health grant + soul level thresholds (if enabled) + death penalty (if enabled)
+10. **Patch dark engine** — randomizes piston combo values and patches the Jack's Schematic journal page with the new codes (if enabled)
+11. **Update decos** — renames ARC coffin gate decorations to match new SL values
+12. **Repack** — packs all modified files into `shadowman_randomizer_<seed>.kpf` so the seed is always identifiable from the filename alone
 
 ---
 
@@ -377,49 +308,27 @@ python tools/generate_enemies.py
 
 ---
 
-## Coffin Gate Thresholds
-
-Coffin gates use a non-linear threshold scale:
-
-| SL | Souls Required |
-|----|---------------|
-| 0  | 0 |
-| 1  | 1 |
-| 2  | 3 |
-| 3  | 7 |
-| 4  | 15 |
-| 5  | 23 |
-| 6  | 35 |
-| 7  | 51 |
-| 8  | 71 |
-| 9  | 95 |
-| 10 | 120 (locked) |
-
-Gate SL values are shuffled using a pool drawn from vanilla SL values (clamped to the preset's max SL cap), so the overall distribution stays close to vanilla — you won't end up with eight gates all at max SL. Safe mode adds per-region caps on early gates so the game is always immediately accessible. The `--open-gates N` option forces the first N linear coffin gates to SL0 regardless of the shuffle result.
-
----
-
 ## Troubleshooting
 
 **"Game directory not found" / wrong files patched.** Pass the install folder
 explicitly with `--game-dir`. The default assumes the script is sitting next to
 the game folder; if you cloned somewhere else, that won't be true.
 
-**Game still loads vanilla.** The patcher writes to `mods/shadowman_randomizer.kpf`.
+**Game still loads vanilla.** The patcher writes to `mods/shadowman_randomizer_<seed>.kpf`.
 Confirm the file is there and that no other mods are overriding the same RSC files.
 
 **Run failed mid-patch.** A `_randomizer_work_<seed>` folder is left next to the
 game so you can inspect it. Safe to delete. Re-run the patcher to start clean.
 
 **Want vanilla back fast.** `python patcher.py --restore --game-dir <PATH>` or
-just delete `mods/shadowman_randomizer.kpf`.
+just delete the `mods/shadowman_randomizer_*.kpf` file.
 
 ---
 
 ## Contributing
 
 Bug reports, seed pathology cases, and PRs welcome. When filing an issue, please
-include the seed, the exact CLI flags you used, and the spoiler log (`spoiler_log_<N>.txt`) if one was generated.
+include the seed, the exact CLI flags you used, and the spoiler log (`spoiler_log_<seed>.txt`) if one was generated.
 
 Join the discussion or share feedback on the
 [GitHub Discussions board](https://github.com/bropacman/shadow-man-remastered-randomizer/discussions).
@@ -431,6 +340,7 @@ You can also reach me directly on Discord: **bropacman**
 
 - Game by Nightdive Studios
 - Randomizer by [bropacman](https://github.com/bropacman) and the Shadow Man modding community
+- Special thanks to: Momo, karrot250, Tartus, Mtamer01, Embrace Darkshade
 
 ---
 

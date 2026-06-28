@@ -85,10 +85,10 @@ DEATH_PENALTY_FLOOR = 1000
 
 # ── Cave builder ──────────────────────────────────────────────────────────────
 
-def build_death_penalty_cave(step: int = 1) -> bytes:
-    step = max(1, min(10, int(step)))
-    penalty = step * 1000
-    floor   = 1000
+def build_death_penalty_cave(step: float = 1.0) -> bytes:
+    step    = max(0.1, min(10.0, float(step)))
+    penalty = max(1, round(step * 1000))
+    floor   = penalty
 
     cave = bytearray()
     cave_va = DEATH_CAVE_VA
@@ -205,14 +205,14 @@ def verify_death_penalty(exe_path: str) -> bool:
 
 # ── Main patch entry point ────────────────────────────────────────────────────
 
-def patch_death_penalty(exe_path: str, *, step: int = 1, dry_run: bool = False) -> None:
+def patch_death_penalty(exe_path: str, *, step: float = 1.0, dry_run: bool = False) -> None:
     """
     Apply the death-penalty patch in-place to *exe_path*.
 
-    *step* is 1-10; penalty = step * 1000, floor = step * 1000.
+    *step* is 0.1-10.0; penalty = round(step * 1000), floor = penalty.
     Raises RuntimeError if vanilla verification fails.
     """
-    step = max(1, min(10, int(step)))
+    step = max(0.1, min(10.0, float(step)))
     path = Path(exe_path)
     if not path.exists():
         raise FileNotFoundError(f"[death_penalty] EXE not found: {exe_path}")
@@ -247,18 +247,18 @@ def patch_death_penalty(exe_path: str, *, step: int = 1, dry_run: bool = False) 
     print(f"  [death_penalty] Hook -> file:0x{DEATH_HOOK_FILE_OFF:X}  VA:0x{DEATH_HOOK_VA:X}")
 
     path.write_bytes(data)
-    penalty = step * 1000
+    penalty = max(1, round(step * 1000))
     print(f"  [death_penalty] Max health -{penalty} on death (floor: {penalty})")
 
 
 # ── Convenience wrapper (used by patcher.py) ─────────────────────────────────
 
-def apply_death_penalty_patch(exe_path: str, *, step: int = 1, dry_run: bool = False) -> bool:
+def apply_death_penalty_patch(exe_path: str, *, step: float = 1.0, dry_run: bool = False) -> bool:
     """
     Returns True on success, False on skip/error.
     Skips silently if the patch is already applied.
 
-    *step* is 1-10; penalty = step * 1000, floor = step * 1000.
+    *step* is 0.1-10.0; penalty = round(step * 1000), floor = penalty.
     """
     if not Path(exe_path).exists():
         print(f"  [death_penalty] EXE not found: {exe_path} -- skipping")
@@ -360,8 +360,8 @@ if __name__ == "__main__":
         description="Apply death-penalty patch to Shadow Man Remastered EXE"
     )
     parser.add_argument("exe", help="Path to thoth_x64.exe (vanilla or already patched)")
-    parser.add_argument("--step", type=int, default=1,
-                        help="Penalty step 1-10 (penalty = step * 1000, floor = step * 1000)")
+    parser.add_argument("--step", type=float, default=1.0,
+                        help="Penalty step 0.1-10.0 (penalty = round(step * 1000), floor = penalty)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Verify and build cave but write nothing")
     parser.add_argument("--verify", action="store_true",

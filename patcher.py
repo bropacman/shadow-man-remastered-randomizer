@@ -37,10 +37,11 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from constants import (
+    RANDOMIZER_VERSION,
     LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANILLA_SL, GATE_PRESETS,
     CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, ITEM_Y_ADJUST,
     SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y, DARK_SOUL_SLOT_MARKER_FX_Y, DAY_NIGHT_MIRRORS, GAD_PICKUP_EXPECTED_OFFSETS,
-    STARTING_ITEM_POOL, ASSET_OVERRIDES, MSH_OVERRIDES, BARREL_SLOT_MARKER_FX, BARREL_SLOT_MARKER_FX_Y,
+    STARTING_ITEM_POOL, STARTING_ITEM_BUNDLES, SWAMPDAY_BUNDLE_SPOTS, BUNDLE_ITEMS_PER_BENCH, BUNDLE_SPOT_Z_STEP, BUNDLE_REQUIRES_SHUFFLE, ASSET_OVERRIDES, MSH_OVERRIDES, BARREL_SLOT_MARKER_FX, BARREL_SLOT_MARKER_FX_Y,
     GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES, GAD_ASSET_OVERRIDES,
     GATE_E2O_POSITIONS, E2O_MATCH_RADIUS, LEVEL_NAMES, BARREL_RSC_SUBSTITUTIONS,
     PROGRESSION_IN_GOVI_LIFT, DARK_SOUL_SLOT_ITEM_DROP, PROGRESSION_IN_CADEAUX_LIFT, PROGRESSION_IN_BARREL_LIFT,
@@ -51,6 +52,7 @@ from fill import (
     UNVERIFIED_LOCS, EXCLUDED_LEVELS,
 )
 import regions as _regions
+from extracted_locations import RAW_LOCATIONS
 from randomizers.enemy_randomizer import (
     randomize_enemies, enemy_spoiler_section,
     randomize_true_forms, true_form_spoiler_section,
@@ -71,6 +73,10 @@ from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
 from cadeaux_patch import apply_cadeau_step_patch
 from health_patch import apply_health_patch
 from death_penalty_patch import apply_death_penalty_patch
+from dark_engine_patch import (
+    apply_dark_engine_patch, randomize_dark_engine, extract_and_patch_journal,
+    JOURNAL_MUP_PATH,
+)
 from soul_threshold_patch import (
     SOUL_THRESHOLD_MODES,
     VANILLA_SOUL_THRESHOLDS as _VANILLA_SL_THRESH_PATCH,
@@ -84,7 +90,7 @@ from patchers.loc_english_patcher import patch_loc_english_for_tracker
 from kpf_handler import (
     find_kpf_files, build_kpf_index, extract_game_files, which_kpf_has_levels,
     find_file_in_kpf, extract_file_from_kpf, build_and_install_mod,
-    find_mods_dir, remove_mod_kpf,
+    find_mods_dir, remove_mod_kpf, find_mod_kpfs, mod_kpf_name,
 )
 
 if getattr(sys, 'frozen', False):
@@ -105,6 +111,21 @@ INSTANCE_OFF = 0x21  # last byte of SAVE_IDX (kept for reference; use SAVE_IDX_O
 XYZ_OFF      = 0x04  # start of the three little-endian floats for world position (X, Y, Z)
 
 _RSC_TO_FRIENDLY = {v: k for k, v in STARTING_ITEM_POOL.items()}
+# Supplement with friendly_name entries from extracted_locations (non-null only)
+_RSC_TO_FRIENDLY.update({
+    loc.object: loc.friendly_name
+    for loc in RAW_LOCATIONS
+    if loc.friendly_name and loc.object and loc.object not in _RSC_TO_FRIENDLY
+})
+
+# Per-slot friendly names keyed by loc_key — used in the spoiler log so that
+# slots/items with shared RSC names (e.g. RSC_X_GOVI, RSC_X_DARK_SOUL) are
+# displayed with their unique per-instance name rather than a generic label.
+_LOC_KEY_TO_FRIENDLY: dict[str, str] = {
+    loc.loc_key: loc.friendly_name
+    for loc in RAW_LOCATIONS
+    if loc.friendly_name
+}
 
 
 def _int_or_random(val: str):
@@ -112,6 +133,13 @@ def _int_or_random(val: str):
     if val == "random":
         return "random"
     return int(val)
+
+
+def _float_or_random(val: str):
+    """Argparse type that accepts a float or the literal string 'random'."""
+    if val == "random":
+        return "random"
+    return float(val)
 
 
 def _resolve_random_config(config: dict, rng: random.Random) -> None:
@@ -152,11 +180,9 @@ def _resolve_random_config(config: dict, rng: random.Random) -> None:
         config["soul_threshold_mode"] = rng.choice(list(SOUL_THRESHOLD_MODES))
         print(f"  [random] soul_threshold_mode → {config['soul_threshold_mode']}")
     if str(config.get("death_penalty", 0)) == "random":
-        config["death_penalty"] = rng.randint(1, 10)
-        print(f"  [random] death_penalty → step {config['death_penalty']} (-{config['death_penalty'] * 1000}/death)")
-    if str(config.get("shuffle_progression", True)) == "random":
-        config["shuffle_progression"] = rng.choice([True, False])
-        print(f"  [random] shuffle_progression → {config['shuffle_progression']}")
+        config["death_penalty"] = round(rng.uniform(0.5, 10.0), 1)
+        penalty = round(config["death_penalty"] * 1000)
+        print(f"  [random] death_penalty → step {config['death_penalty']} (-{penalty}/death)")
     if str(config.get("shuffle_weapons", True)) == "random":
         config["shuffle_weapons"] = rng.choice([True, False])
         print(f"  [random] shuffle_weapons → {config['shuffle_weapons']}")
@@ -170,26 +196,20 @@ def _resolve_random_config(config: dict, rng: random.Random) -> None:
         config["shuffle_gad_temples"] = rng.choice([True, False])
         print(f"  [random] shuffle_gad_temples → {config['shuffle_gad_temples']}")
     config["shuffle_prisms"] = False  # not yet implemented
-    if str(config.get("shuffle_retractors", True)) == "random":
-        config["shuffle_retractors"] = rng.choice([True, False])
-        print(f"  [random] shuffle_retractors → {config['shuffle_retractors']}")
-    if str(config.get("shuffle_accumulators", True)) == "random":
-        config["shuffle_accumulators"] = rng.choice([True, False])
-        print(f"  [random] shuffle_accumulators → {config['shuffle_accumulators']}")
-    if str(config.get("shuffle_eclipsers", True)) == "random":
-        config["shuffle_eclipsers"] = rng.choice([True, False])
-        print(f"  [random] shuffle_eclipsers → {config['shuffle_eclipsers']}")
+    if str(config.get("piston_combos", "off")) == "random":
+        config["piston_combos"] = rng.choice(["off", "on"])
+        print(f"  [random] piston_combos → {config['piston_combos']}")
 
     # ── Health (mirrors health_patch.py defaults/clamping) ───────────────────
     if str(config.get("starting_health", 5)) == "random":
-        lo = int(config.get("starting_health_min", 1))
-        hi = int(config.get("starting_health_max", 10))
-        config["starting_health"] = rng.randint(lo, hi)
+        lo = float(config.get("starting_health_min", 0.5))
+        hi = float(config.get("starting_health_max", 10))
+        config["starting_health"] = round(rng.uniform(lo, hi) * 2) / 2
         print(f"  [random] starting_health → {config['starting_health']}/10")
     if str(config.get("altar_health_grant", 1)) == "random":
-        lo = int(config.get("altar_health_grant_min", 1))
-        hi = int(config.get("altar_health_grant_max", 5))
-        config["altar_health_grant"] = rng.randint(lo, hi)
+        lo = float(config.get("altar_health_grant_min", 0.5))
+        hi = float(config.get("altar_health_grant_max", 5))
+        config["altar_health_grant"] = round(rng.uniform(lo, hi) * 2) / 2
         print(f"  [random] altar_health_grant → {config['altar_health_grant']}/10")
 
     # ── Cadeaux (mirrors cadeaux_patch.py defaults/clamping) ─────────────────
@@ -842,15 +862,43 @@ def _spoiler_soul_threshold_section(thresholds: dict) -> list[str]:
         lines.append(f"  SL{sl:>2}  {vanilla:>8}  {rand:>10}{changed}")
     return lines
 
+def _spoiler_piston_combos_section(table: dict) -> list[str]:
+    """Format the piston combination table for the spoiler log."""
+    from dark_engine_patch import PISTON_NAMES, VANILLA_TABLE as _DE_VAN
+    lines = [
+        "",
+        "── DARK ENGINE COMBINATIONS ────────────────────────────",
+        "",
+        f"  {'Piston':<38} {'Vanilla':>7}  {'New':>5}",
+        f"  {'─'*38}  {'─'*7}  {'─'*5}",
+    ]
+    for pid in range(1, 7):
+        bars = table[pid]
+        van  = _DE_VAN[pid]
+        combo   = f"{bars[0]}-{bars[1]}-{bars[2]}"
+        vanilla = f"{van[0]}-{van[1]}-{van[2]}"
+        changed = " ←" if bars != van else ""
+        name = PISTON_NAMES[pid]
+        lines.append(f"  {name:<38} {vanilla:>7}  {combo:>5}{changed}")
+    return lines
+
+
 def apply_msh_overrides(randomizer_dir, work_path, kpf_index=None) -> dict:
     """Scale MSH vertex tables and return as mod_files dict for KPF packing."""
     mod_files = {}
-    VERT_OFF = 0x340
-    N_VERTS  = 8
 
-    for kpf_path, scale in MSH_OVERRIDES:
+    for kpf_path, scale, local_src in MSH_OVERRIDES:
         data = None
-        if kpf_index:
+
+        # Prefer a local source file over extracting from the KPF.
+        if local_src:
+            src_path = Path(randomizer_dir) / local_src
+            if src_path.exists():
+                data = bytearray(src_path.read_bytes())
+            else:
+                print(f"  WARNING: MSH local source not found — {local_src}")
+
+        if data is None and kpf_index:
             matches = find_file_in_kpf(kpf_index, kpf_path)
             if matches:
                 tmp = Path(work_path) / "msh_overrides" / Path(kpf_path).name
@@ -865,19 +913,27 @@ def apply_msh_overrides(randomizer_dir, work_path, kpf_index=None) -> dict:
         if data is None:
             print(f"  WARNING: MSH override source not found — {kpf_path}")
             continue
-        if len(data) != 1024:
-            print(f"  WARNING: {kpf_path} is not a standard box MSH ({len(data)} bytes) — skipping")
-            continue
-        for i in range(N_VERTS):
+
+        # EMshV001 layout: byte 15 = vertex count; vertex table is always
+        # at the end of the file (vert_off = file_size - n_verts * 24).
+        # This holds for both box meshes (8 verts, 0x340) and complex meshes.
+        n_verts  = data[15]
+        vert_off = len(data) - n_verts * 24
+
+        for i in range(n_verts):
             for axis in range(3):
-                off = VERT_OFF + i * 24 + axis * 4
+                off = vert_off + i * 24 + axis * 4
+                if off + 4 > len(data):
+                    break
                 val = struct.unpack_from('<f', data, off)[0]
                 struct.pack_into('<f', data, off, val * scale)
+
         out_path = Path(work_path) / "msh_overrides" / Path(kpf_path).name
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(bytes(data))
         mod_files[kpf_path] = str(out_path)
-        print(f"  [msh] {kpf_path} (scale {scale}x)")
+        src_label = local_src or "(from KPF)"
+        print(f"  [msh] {kpf_path} ← {src_label} (scale {scale}x)")
 
     return mod_files
 
@@ -910,8 +966,7 @@ def verify_patch(filepath: str, patches: dict) -> None:
 
 # ── Assumed fill ──────────────────────────────────────────────────────────────
 
-def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None):
-    shuffle_prog = config.get("shuffle_progression", True)
+def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_thresholds=None):
     gate_preset  = config.get("gate_preset")
 
     # Resolve gate kwargs from preset or raw config
@@ -936,27 +991,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None):
             "safe": True,
         }
 
-    if not shuffle_prog:
-        if gate_kwargs["shuffle_gates"]:
-            try:
-                gate_remap = _shuffle_gates(
-                    rng,
-                    locked=gate_kwargs["lock_gates"],
-                    max_sl=gate_kwargs["max_sl"],
-                    safe=gate_kwargs["safe"],
-                )
-                changed = sum(1 for g, sl in gate_remap.items()
-                              if sl != GATE_VANILLA_SL.get(g))
-                print(f"  Progression untouched (--no-shuffle-progression)")
-                print(f"  Soul gate seals: {changed} reforged")
-            except ImportError:
-                print("  WARNING: fill.py not found - gate shuffle skipped")
-                gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
-        else:
-            print("  Progression untouched (--no-shuffle-progression)")
-            gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
-        return {}, gate_remap
-
+    _pc_combo = config.get("piston_combos", "off")
     placement, gate_remap = assumed_fill(
         rng,
         progression_balancing=config.get("progression_balancing", 50),
@@ -967,10 +1002,10 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None):
         shuffle_lore=config.get("shuffle_lore", True),
         shuffle_bonus=config.get("shuffle_bonus", False),
         shuffle_prisms=config.get("shuffle_prisms", False),
-        shuffle_retractors=config.get("shuffle_retractors", True),
-        shuffle_accumulators=config.get("shuffle_accumulators", True),
-        shuffle_eclipsers=config.get("shuffle_eclipsers", True),
         starting_item=config.get("starting_item"),
+        starting_item_bundles=config.get("starting_item_bundles", []),
+        piston_combos=_pc_combo,
+        soul_thresholds=soul_thresholds,
         **gate_kwargs,
     )
 
@@ -991,17 +1026,23 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None):
                 shuffle_bonus=config.get("shuffle_bonus", False),
                 shuffle_prisms=config.get("shuffle_prisms", False),
                 starting_item=config.get("starting_item"),
+                starting_item_bundles=config.get("starting_item_bundles", []),
+                piston_combos=_pc_combo,
+                soul_thresholds=soul_thresholds,
                 **gate_kwargs,
             )
         ok, report = validate_fill(
             placement,
             gate_remap=gate_remap,
             shuffle_gad_temples=config.get("shuffle_gad_temples", False),
-            shuffle_retractors=config.get("shuffle_retractors", True),
-            shuffle_accumulators=config.get("shuffle_accumulators", True),
-            shuffle_eclipsers=config.get("shuffle_eclipsers", True),
+            shuffle_weapons=config.get("shuffle_weapons", True),
+            shuffle_lore=config.get("shuffle_lore", True),
+            shuffle_bonus=config.get("shuffle_bonus", False),
             starting_item=config.get("starting_item"),
+            starting_item_bundles=config.get("starting_item_bundles", []),
             entrance_shuffle=entrance_shuffle,
+            piston_combos=_pc_combo,
+            soul_thresholds=soul_thresholds,
         )
         if ok:
             break
@@ -1083,6 +1124,7 @@ def write_placement_patches(
 
     patches_by_folder: dict = {}
     marker_sites: list = []  # (folder, x, y, z, zone) for SOUL_SLOT_MARKER_FX injection
+    y_adj_map: dict = {}     # loc_key → total y_adjust applied to physical item
     matched = 0
 
     for loc_key, source_loc in progression_placement.items():
@@ -1121,8 +1163,9 @@ def write_placement_patches(
             rsc_name = "RSC_X_CADEAUX"
 
         save_idx = source_loc.save_idx
-        old_soul_slot = rec.name in DARK_SOUL_TYPES or rec.name in CADEAUX_TYPES
-        old_barrel_slot = rec.name in BARREL_TYPES
+        old_soul_slot    = rec.name in DARK_SOUL_TYPES
+        old_cadeaux_slot = rec.name in CADEAUX_TYPES
+        old_barrel_slot  = rec.name in BARREL_TYPES
         new_is_key = (rsc_name not in DARK_SOUL_TYPES
                       and rsc_name not in CADEAUX_TYPES
                       and rsc_name not in BARREL_TYPES)
@@ -1130,12 +1173,18 @@ def write_placement_patches(
             altar_y_off = DARK_SOUL_SLOT_MARKER_FX_Y if rec.name == "RSC_X_DARK_SOUL" else SOUL_SLOT_MARKER_FX_Y
             marker_sites.append((rec.folder, rec.source_file, rec.x, rec.y + altar_y_off, rec.z, rec.zone,
                                  SOUL_SLOT_MARKER_FX))
-        elif new_is_key and old_barrel_slot:
+        elif new_is_key and (old_cadeaux_slot or old_barrel_slot):
             marker_sites.append((rec.folder, rec.source_file, rec.x, rec.y + BARREL_SLOT_MARKER_FX_Y, rec.z, rec.zone,
                                  BARREL_SLOT_MARKER_FX))
         k = (rec.folder, rec.source_file)
-        patches_by_folder.setdefault(k, {})[rec.offset] = \
-            make_patch(rec, rsc_name, save_idx if save_idx is not None else rec.save_idx)
+        patch = make_patch(rec, rsc_name, save_idx if save_idx is not None else rec.save_idx)
+        # Store per-instance friendly names for the spoiler log.
+        # These differ from _RSC_TO_FRIENDLY for shared RSC names (govis, souls).
+        patch["slot_friendly"]  = _LOC_KEY_TO_FRIENDLY.get(loc_key)
+        patch["place_friendly"] = source_loc.friendly_name or None
+        patches_by_folder.setdefault(k, {})[rec.offset] = patch
+        if patch.get("y_adjust", 0.0) != 0.0:
+            y_adj_map[loc_key] = patch["y_adjust"]
         matched += 1
 
     print(f"  RSC patches: {matched} locations written from fill placement")
@@ -1151,7 +1200,7 @@ def write_placement_patches(
     )
     print(f"  RSC patches breakdown: {soul_patch_count} soul patches, {other_patch_count} non-soul patches")
 
-    return patches_by_folder, marker_sites
+    return patches_by_folder, marker_sites, y_adj_map
 
 # ── Special item FX injection ───────────────────────────────────────────────────
 
@@ -1204,7 +1253,8 @@ def inject_special_item_fx(marker_sites: list, levels_path) -> int:
 
 def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
                       records_by_folder, config, spheres=None,
-                      entrance_shuffle=None, soul_thresholds=None) -> None:
+                      entrance_shuffle=None, soul_thresholds=None,
+                      piston_combo_table=None) -> None:
     starting_rsc = config.get('starting_item', None)
     starting_friendly = _RSC_TO_FRIENDLY.get(starting_rsc, starting_rsc) if starting_rsc else 'none'
 
@@ -1213,26 +1263,26 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
     insanity   = config.get('insanity', 0)
 
     settings_str = config.get('settings_string')
+    yn = lambda v: 'yes' if v else 'no'
 
     lines = [
         "=" * 60,
         "SHADOW MAN REMASTERED - RANDOMIZER SPOILER LOG",
         "=" * 60,
+        f"Version: {RANDOMIZER_VERSION}",
         f"Seed: {seed}",
         *([ f"Settings: {settings_str}" ] if settings_str else []),
         "",
         "── GAMEPLAY ────────────────────────────────────────────",
-        f"  Randomize key items:   {config.get('shuffle_progression', True)}",
-        f"  Shuffle gad temples:   {config.get('shuffle_gad_temples', False)}",
-        f"  Shuffle weapons:       {config.get('shuffle_weapons', True)}",
-        f"  Shuffle lore:          {config.get('shuffle_lore', True)}",
-        f"  Shuffle light soul:    {config.get('shuffle_bonus', False)}",
-        f"  Shuffle prisms:        {config.get('shuffle_prisms', False)}",
-        f"  Shuffle retractors:    {config.get('shuffle_retractors', True)}",
-        f"  Shuffle accumulators:  {config.get('shuffle_accumulators', True)}",
-        f"  Shuffle eclipsers:     {config.get('shuffle_eclipsers', True)}",
+        f"  Shuffle gad temples:   {yn(config.get('shuffle_gad_temples', False))}",
+        f"  Shuffle weapons:       {yn(config.get('shuffle_weapons', True))}",
+        f"  Shuffle lore:          {yn(config.get('shuffle_lore', True))}",
+        f"  Shuffle light soul:    {yn(config.get('shuffle_bonus', False))}",
+        f"  Shuffle prisms:        {yn(config.get('shuffle_prisms', False))}",
+        f"  Shuffle piston combos: {'yes' if config.get('piston_combos', 'off') != 'off' else 'no'}",
         f"  Starting item:         {starting_friendly}",
-        f"  Patch tracker:         {config.get('patch_tracker', False)}",
+        f"  Starting bundles:      {', '.join(config.get('starting_item_bundles', [])) or 'none'}",
+        f"  Patch tracker:         {yn(config.get('patch_tracker', False))}",
         "",
         "── COFFIN GATES ────────────────────────────────────────",
         f"  Gate preset:           {config.get('gate_preset', 'none')}",
@@ -1250,31 +1300,31 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"  Fogometers cadeaux:    {config.get('fogometers_cadeaux_required', 666)}",
         f"  Insanity tier:         {insanity if insanity else 'off'}",
         f"  Progression balancing: {config.get('progression_balancing', 50)}/100",
-        *([ f"  Death penalty:         -{config['death_penalty'] * 1000} per death "
-            f"(floor: {config['death_penalty'] * 1000})" ]
-          if config.get("death_penalty", 0) else
-          [ "  Death penalty:         off" ]),
+        f"  Death penalty:         {config.get('death_penalty', 0) or 'off'}/10",
         "",
         "── ENEMIES ─────────────────────────────────────────────",
-        f"  Shuffle enemies:       {config.get('shuffle_enemies', False)}",
+        f"  Shuffle enemies:       {yn(config.get('shuffle_enemies', False))}",
         f"  Enemy mode:            {config.get('enemy_mode', 'difficulty') if config.get('shuffle_enemies', False) else 'N/A'}",
-        f"  Mix movement types:    {config.get('enemy_mix_movement', False) if config.get('shuffle_enemies', False) else 'N/A'}",
-        f"  Uncap enemy counts:    {config.get('enemy_uncap_counts', False) if config.get('shuffle_enemies', False) else 'N/A'}",
-        f"  Shuffle true forms:    {config.get('shuffle_true_forms', False)}",
+        f"  Mix movement types:    {yn(config.get('enemy_mix_movement', False)) if config.get('shuffle_enemies', False) else 'N/A'}",
+        f"  Uncap enemy counts:    {yn(config.get('enemy_uncap_counts', False)) if config.get('shuffle_enemies', False) else 'N/A'}",
+        f"  Shuffle true forms:    {yn(config.get('shuffle_true_forms', False))}",
         "",
         "── COSMETICS ───────────────────────────────────────────",
-        f"  Shuffle music:         {config.get('shuffle_music', False)}",
-        f"  Shuffle voices:        {config.get('shuffle_voices', False)}",
-        f"  Shuffle weapon SFX:    {config.get('shuffle_weapons_sfx', False)}",
-        f"  Shuffle enemy SFX:     {config.get('shuffle_enemies_sfx', False)}",
-        f"  Shuffle ambients:      {config.get('shuffle_ambients', False)}",
+        f"  Shuffle music:         {yn(config.get('shuffle_music', False))}",
+        f"  Shuffle voices:        {yn(config.get('shuffle_voices', False))}",
+        f"  Shuffle weapon SFX:    {yn(config.get('shuffle_weapons_sfx', False))}",
+        f"  Shuffle enemy SFX:     {yn(config.get('shuffle_enemies_sfx', False))}",
+        f"  Shuffle ambients:      {yn(config.get('shuffle_ambients', False))}",
         f"  Ambient mode:          {config.get('ambient_mode', 'global')}",
-        f"  Shuffle sky:           {config.get('shuffle_sky', False)}",
+        f"  Shuffle sky:           {yn(config.get('shuffle_sky', False))}",
         "",
     ]
 
     if soul_thresholds is not None:
         lines += _spoiler_soul_threshold_section(soul_thresholds)
+
+    if piston_combo_table is not None:
+        lines += _spoiler_piston_combos_section(piston_combo_table)
 
     lines += _spoiler_gate_section(gate_remap, sl_thresholds=soul_thresholds)
 
@@ -1307,15 +1357,21 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
                     for r in records_by_folder.get(folder, [])
                     if r.source_file == source_file}
         meaningful = {
-            offset: (orig_map.get(offset, "???"), pd["name"])
+            offset: pd
             for offset, pd in patches.items()
             if pd["name"] not in CADEAUX_TYPES and pd["name"] not in BARREL_TYPES
         }
         if not meaningful:
             continue
         lines.append(f"\n  {LEVEL_NAMES.get(folder, folder)} [{source_file}]:")
-        for offset, (orig, new_name) in sorted(meaningful.items()):
-            lines.append(f"    0x{offset:04X}: {orig:<35} -> {new_name}")
+        for offset, pd in sorted(meaningful.items()):
+            orig      = orig_map.get(offset, "???")
+            new_name  = pd["name"]
+            # Use per-instance friendly names when available (avoids "Govi - Dark Soul 60"
+            # for every soul slot — each slot/item has a unique number in the CSV).
+            orig_label = pd.get("slot_friendly") or _RSC_TO_FRIENDLY.get(orig, orig)
+            new_label  = pd.get("place_friendly") or _RSC_TO_FRIENDLY.get(new_name, new_name)
+            lines.append(f"    0x{offset:04X}: {orig_label:<35} -> {new_label}")
 
     # lines += ["", "── CADEAUX LOCATIONS ──────────────────────────────────", ""]
     # cadeaux_by_folder: dict = {}
@@ -1348,7 +1404,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
 # ── KPF repack ────────────────────────────────────────────────────────────────
 
 def repack_after_patch(game_dir, patches_by_folder, gate_remap, config,
-                       spoiler_path, work_dir, extra_mod_files=None):
+                       spoiler_path, work_dir, seed: int = 0, extra_mod_files=None):
     kpf_files = find_kpf_files(game_dir)
     if not kpf_files:
         print("\nNo KPF files found - cannot determine internal paths")
@@ -1418,7 +1474,7 @@ def repack_after_patch(game_dir, patches_by_folder, gate_remap, config,
     if not mod_files:
         print("  Nothing to seal — the KPF stays untouched")
         return
-    build_and_install_mod(game_dir, mod_files)
+    build_and_install_mod(game_dir, mod_files, seed)
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -1638,9 +1694,30 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         print(f"World manifest: {map_path}")
 
     # ── Resolve random starting item before fill ──────────────────────────────
+    _WEAPON_RSC  = {"RSC_X_ASSON", "RSC_X_SHOTGUN", "RSC_X_SHOTGUN2", "RSC_X_ENSEIGNE",
+                    "RSC_X_MP5", "RSC_X_TETEDEMORT", "RSC_X_MAC10", "RSC_Q_VIOLATOR"}
+    _LORE_RSC    = {"RSC_X_BOOK_OF_SHADOWS", "RSC_X_PROPHECY", "RSC_X_JACKS_SCHEMATIC"}
+    _BONUS_RSC   = {"RSC_X_LIGHT_SOUL"}
+    _GAD_RSC     = {"RSC_X_GAD_PICKUP"}
+
+    def _starting_item_allowed(rsc: str) -> bool:
+        if rsc in _WEAPON_RSC and not config.get("shuffle_weapons", True):
+            return False
+        if rsc in _LORE_RSC   and not config.get("shuffle_lore", True):
+            return False
+        if rsc in _BONUS_RSC  and not config.get("shuffle_bonus", False):
+            return False
+        if rsc in _GAD_RSC    and not config.get("shuffle_gad_temples", False):
+            return False
+        return True
+
     if config.get("random_starting_item"):
-        starting_item_rsc = rng.choice(list(STARTING_ITEM_POOL.values()))
+        pool = [v for v in STARTING_ITEM_POOL.values() if _starting_item_allowed(v)]
+        starting_item_rsc = rng.choice(pool) if pool else None
         config["starting_item"] = starting_item_rsc
+    elif config.get("starting_item") and not _starting_item_allowed(config["starting_item"]):
+        print(f"  WARNING: starting item {config['starting_item']!r} requires a shuffle that is disabled — ignored")
+        config["starting_item"] = None
 
     # ── Step 1b: Build entrance shuffle (needed by fill for correct logic) ────
     entrance_shuffle = None
@@ -1655,7 +1732,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Step 2: Run assumed fill (includes gate shuffle) ─────────────────────
     print("\nLegion's chaos reshapes the world — scattering the relics...")
-    progression_placement, gate_remap = run_assumed_fill(rng, config, entrance_shuffle=entrance_shuffle)
+    progression_placement, gate_remap = run_assumed_fill(rng, config, entrance_shuffle=entrance_shuffle, soul_thresholds=sl_thresholds_result)
 
     # Compute true form remap now (needs gate_remap) so simulate_playthrough
     # uses correct fixed soul positions for sphere log
@@ -1694,7 +1771,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Step 4: RSC item patching ─────────────────────────────────────────────
     print("\nScattering the relics across Deadside...")
-    patches_by_folder, marker_sites = write_placement_patches(
+    patches_by_folder, marker_sites, y_adj_map = write_placement_patches(
         records_by_folder,
         progression_placement=progression_placement,
         shuffle_gad_temples=config.get("shuffle_gad_temples", False),
@@ -1710,6 +1787,14 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             "RSC_X_ECLIPSER_PART2",
             "RSC_X_ECLIPSER_PART3",
         ])
+    # Skip individual starting item if its RSC is already covered by an active bundle.
+    if starting_item_rsc:
+        _bundle_rscs: set[str] = set()
+        for _bk in config.get("starting_item_bundles", []):
+            _bundle_rscs.update(STARTING_ITEM_BUNDLES.get(_bk, []))
+        if starting_item_rsc in _bundle_rscs:
+            print(f"  [starting_item] Skipping {starting_item_rsc} — already covered by bundle")
+            starting_item_rsc = None
     if starting_item_rsc:
         swamp_instance = levels_path / "swampday" / "instance.rsc"
         if swamp_instance.exists():
@@ -1735,6 +1820,98 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             print(f"  A gift stirs in the Bayou swamp — {starting_item_rsc} awaits Michael's arrival")
         else:
             print(f"  WARNING: swampday/instance.rsc not found — starting item not placed")
+
+    # ── Step 4b.5: Starting item bundles (all accumulators / all retractors) ──
+    bundle_keys = config.get("starting_item_bundles", [])
+    if bundle_keys:
+        # Validate bundles that require a shuffle to be enabled
+        _HARD_FAIL_BUNDLES = {"all_gad_pickups"}
+        active_bundle_keys = []
+        for key in bundle_keys:
+            req = BUNDLE_REQUIRES_SHUFFLE.get(key)
+            if req and not config.get(req, False):
+                if key in _HARD_FAIL_BUNDLES:
+                    print(f"\nERROR: '{key}' bundle requires '{req}' to be enabled — "
+                          f"Gad pickups are not properly initialized without the shuffle. "
+                          f"Enable Shuffle Gad Pickups or disable the All Gad Pickups bundle.")
+                    sys.exit(1)
+                print(f"  [bundle] Skipping {key} — requires {req} which is off")
+            else:
+                active_bundle_keys.append(key)
+        bundle_keys = active_bundle_keys
+
+    if bundle_keys:
+        swamp_quest = levels_path / "swampday" / "quest.rsc"
+        if swamp_quest.exists():
+            data  = bytearray(swamp_quest.read_bytes())
+            spots = SWAMPDAY_BUNDLE_SPOTS
+            n     = BUNDLE_ITEMS_PER_BENCH
+            total = 0
+
+            # One bench per bundle — each bundle's items spread symmetrically along Z
+            for bench_idx, key in enumerate(bundle_keys):
+                if bench_idx >= len(spots):
+                    print(f"  [bundle] WARNING: no bench for bundle '{key}' — skipping")
+                    continue
+
+                target_rscs = set(STARTING_ITEM_BUNDLES.get(key, []))
+                items: list[tuple[str, int]] = [
+                    (rec.name, rec.save_idx)
+                    for folder, recs in records_by_folder.items()
+                    for rec in recs
+                    if rec.name in target_rscs
+                ]
+
+                bx, by, bz, zone = spots[bench_idx]
+                for j, (rsc_name, save_idx) in enumerate(items):
+                    if j >= n:
+                        print(f"  [bundle] WARNING: bench {bench_idx} full, skipping {rsc_name}")
+                        continue
+                    z = bz + (j - (len(items) - 1) / 2) * BUNDLE_SPOT_Z_STEP
+                    record = build_rsc_record(rsc_name, bx, by, z, zone, save_idx)
+                    slot = inject_rsc_record(data, record, allow_expand=True)
+                    if slot is not None:
+                        print(f"  [bundle:{key}] {rsc_name} (save_idx={save_idx}) → bench {bench_idx} slot {slot}")
+                    else:
+                        print(f"  [bundle:{key}] WARNING: could not inject {rsc_name}")
+                    total += 1
+
+            if not dry_run:
+                swamp_quest.write_bytes(bytes(data))
+            print(f"  [bundle] {total} item(s) placed across {len(bundle_keys)} bench(es): {bundle_keys}")
+        else:
+            print("  WARNING: swampday/quest.rsc not found — bundles not placed")
+
+    # ── Step 4b.6: Scan patched RSC files for actual retractor/accumulator XYZ ──
+    # The levels.txt tracker directives for $retractor and $accumulator must
+    # contain the EXACT XYZ from the patched RSC binary.  Computing the position
+    # from LOCATION_TABLE + y_adj_map works for progression items but fails for
+    # bundle items, which are injected at computed positions that are never stored
+    # in y_adj_map.  Scanning the files here gives us the ground truth for both.
+    #
+    # Result: {level_id: {'retractor': [(x,y,z,zone), ...], 'accumulator': [...]}}
+    # consumed (popped) in patch_levels_txt when building coord suffixes.
+    _RETRACT_NAMES = frozenset({"RSC_X_RETRACT", "RSC_X_RETRACT1", "RSC_X_RETRACT2"})
+    _ACCUM_NAMES   = frozenset({"RSC_X_ACCUMULATOR"})
+    retractor_actual_xyz: dict[str, dict[str, list]] = {}
+    for _rsc_path in sorted(levels_path.rglob("*.rsc")):
+        _level_id = _rsc_path.parent.name
+        _data = _rsc_path.read_bytes()
+        _n = (len(_data) - HEADER_SIZE) // RECORD_SIZE
+        for _i in range(_n):
+            _base = HEADER_SIZE + _i * RECORD_SIZE
+            _name = _data[_base + NAME_OFF: _base + NAME_OFF + 30].split(b'\x00')[0]
+            try:
+                _name_str = _name.decode("ascii")
+            except UnicodeDecodeError:
+                continue
+            if _name_str in _RETRACT_NAMES or _name_str in _ACCUM_NAMES:
+                _x, _y, _z = struct.unpack_from("<fff", _data, _base + XYZ_OFF)
+                _zone = _data[_base + ZONE_OFF]
+                _dtype = "accumulator" if _name_str in _ACCUM_NAMES else "retractor"
+                retractor_actual_xyz.setdefault(_level_id, {}).setdefault(_dtype, []).append(
+                    (_x, _y, _z, int(_zone))
+                )
 
     # ── Step 4c: levels.txt tracker ──────────────────────────────────────────
     # Always generate all variants so the user can swap modes without re-running:
@@ -1770,7 +1947,10 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         print("\nWeaving the oracle scrolls...")
         strip_levels_txt(_levels_vanilla, _levels_stripped)
         patch_levels_txt(_levels_vanilla, progression_placement, gate_remap,
-                         _levels_hints, true_form_loc_remap=true_form_loc_remap)
+                         _levels_hints, true_form_loc_remap=true_form_loc_remap,
+                         starting_item_bundles=config.get("starting_item_bundles", []),
+                         y_adj_map=y_adj_map,
+                         retractor_actual_xyz=retractor_actual_xyz)
 
         # Copy selected variant to the active file for KPF packing
         if config.get("patch_tracker", False):
@@ -1822,6 +2002,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         patch_loc_english_for_tracker(
             _leng_base, _leng_hints,
             shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+            starting_item_bundles=config.get("starting_item_bundles", []),
         )
 
         # Copy to active file for KPF packing
@@ -1896,20 +2077,18 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     # Wasteland locked behind the salvage gate, not vanilla GATE_DEADSIDE_WASTELAND).
     _sphere_level_rules = _regions.build_level_rules(gate_remap, entrance_shuffle)
 
-    # When items aren't shuffled they stay at their vanilla locations and are
-    # never added to progression_placement by fill.  Inject those vanilla slots
-    # directly so the simulation collects them at the correct sphere (i.e. when
-    # the player first reaches their location), rather than pre-granting them
-    # in baseline_inv which would make them appear available from sphere 1.
+    # Weapons/lore/bonus may be unshuffled — inject their vanilla slots into the
+    # sphere simulation so the spoiler log shows them at the correct sphere.
+    _vanilla_cats_patcher: set[str] = set()
+    if not config.get("shuffle_weapons", True):      _vanilla_cats_patcher.add("weapon")
+    if not config.get("shuffle_lore", True):         _vanilla_cats_patcher.add("lore")
+    if not config.get("shuffle_bonus", False):       _vanilla_cats_patcher.add("bonus")
+
     _sphere_placement = dict(progression_placement)
     for _loc in CHECKABLE_LOCS:
         if _loc.loc_key in _sphere_placement:
             continue  # fill already placed something here; vanilla item is gone
-        if not config.get("shuffle_eclipsers", True) and _loc.category == "eclipser":
-            _sphere_placement[_loc.loc_key] = _loc
-        elif not config.get("shuffle_retractors", True) and _loc.category == "retractor":
-            _sphere_placement[_loc.loc_key] = _loc
-        elif not config.get("shuffle_accumulators", True) and _loc.category == "accumulator":
+        if _loc.category in _vanilla_cats_patcher:
             _sphere_placement[_loc.loc_key] = _loc
 
     if config.get("starting_item"):
@@ -1920,9 +2099,15 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         _sphere_level_rules,
         collect_spheres=True,
         shuffle_gad_temples=config.get("shuffle_gad_temples", False),
+        starting_item_bundles=config.get("starting_item_bundles", []),
+        soul_thresholds=sl_thresholds_result,
     )
     if config.get("starting_item"):
         STARTING_ITEMS.discard(config["starting_item"])
+
+    # Compute piston combo table now so the spoiler log reflects actual values.
+    # randomize_dark_engine returns VANILLA_TABLE when piston_combos == "off".
+    piston_combo_table = randomize_dark_engine(rng, config)
 
     # ── Step 5: Spoiler log ───────────────────────────────────────────────────
     spoiler_path = out_path / f"spoiler_log_{seed}.txt"
@@ -1932,6 +2117,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         spheres=spheres,
         entrance_shuffle=entrance_shuffle,
         soul_thresholds=sl_thresholds_result,
+        piston_combo_table=piston_combo_table,
     )
 
     if dry_run:
@@ -2027,7 +2213,8 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             patch_rsc_file(str(rsc_file), patches, record_templates=record_templates)
             print(f"  [{source_file.upper().replace('.RSC', '')}] "
                   f"{folder}/{source_file} ({len(patches)} changes)")
-        patches_by_folder.update(ambient_patches)
+        for key, patches in ambient_patches.items():
+            patches_by_folder.setdefault(key, {}).update(patches)
 
     # ── Step 6b.5: Inject special item FX for insanity placements ────────────
     if marker_sites:
@@ -2092,11 +2279,17 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             if sl_thresholds_result is not None:
                 apply_soul_threshold_patch(str(patched), sl_thresholds_result, dry_run=dry_run)
 
+            # Dark engine combination patch (only when combos are randomized)
+            if config.get("piston_combos", "off") != "off":
+                apply_dark_engine_patch(str(patched), piston_combo_table, dry_run=dry_run)
+
             # Conditional: gad pickup dispatch patch + temple NOPs
-            if config.get("shuffle_gad_temples", False):
+            _gad_bundle_active = "all_gad_pickups" in config.get("starting_item_bundles", [])
+            _shuffle_gad = config.get("shuffle_gad_temples", False)
+            if _shuffle_gad or _gad_bundle_active:
                 apply_gad_pickup_patch(
                     str(patched),
-                    shuffle_temples=True,
+                    shuffle_temples=_shuffle_gad,
                     dry_run=dry_run,
                 )
                 print(f"\nThe Asylum's code has been rewritten — EXE patched: {patched.name}")
@@ -2216,14 +2409,22 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     msh_mod_files = apply_msh_overrides(randomizer_dir, work_path, kpf_index=kpf_index)
 
+    # ── Step 9.8: Dark engine journal patch ──────────────────────────────────
+    journal_mod_files = {}
+    if using_kpf and config.get("piston_combos", "off") != "off":
+        mup_local = extract_and_patch_journal(kpf_files, piston_combo_table, str(work_path))
+        if mup_local and not dry_run:
+            journal_mod_files[JOURNAL_MUP_PATH] = mup_local
+
     # ── Step 10: Repack the KPF ───────────────────────────────────────────────
     if using_kpf:
         repack_after_patch(
             str(game_path), patches_by_folder, gate_remap,
             config, str(spoiler_path), str(work_path),
+            seed=seed,
             extra_mod_files={
                 **music_files, **sfx_files, **sky_files, **asset_mod_files,
-                **msh_mod_files, **entrance_cut_files,
+                **msh_mod_files, **entrance_cut_files, **journal_mod_files,
             },
         )
 
@@ -2244,10 +2445,6 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run",               action="store_true")
     parser.add_argument("--restore",               action="store_true")
     parser.add_argument("--progression-balancing", type=_int_or_random, default=50)
-    parser.add_argument("--shuffle-progression", action=argparse.BooleanOptionalAction, default=True,
-                        help="Shuffle key progression items using assumed-fill (default: on)")
-    parser.add_argument("--shuffle-key-items-random", action="store_true",
-                        help="Randomly decide per-seed whether to shuffle key items")
     parser.add_argument("--gate-preset",
                         choices=["open", "easy", "medium", "hard", "chaos", "random"],
                         default=None,
@@ -2276,22 +2473,14 @@ if __name__ == "__main__":
                         help="Shuffle prism items as progression items (requires prism locations in CSV)")
     parser.add_argument("--shuffle-prisms-random", action="store_true",
                         help="Randomly decide per-seed whether to shuffle prisms")
-    parser.add_argument("--shuffle-retractors", action=argparse.BooleanOptionalAction, default=True,
-                        help="Shuffle retractor items (default: on). When off, all 5 retractors stay vanilla.")
-    parser.add_argument("--shuffle-retractors-random", action="store_true",
-                        help="Randomly decide per-seed whether to shuffle retractors")
-    parser.add_argument("--shuffle-accumulators", action=argparse.BooleanOptionalAction, default=True,
-                        help="Shuffle accumulator items (default: on). When off, all 3 accumulators stay vanilla.")
-    parser.add_argument("--shuffle-accumulators-random", action="store_true",
-                        help="Randomly decide per-seed whether to shuffle accumulators")
-    parser.add_argument("--shuffle-eclipsers", action=argparse.BooleanOptionalAction, default=True,
-                        help="Shuffle eclipser parts (default: on). When off, all 3 eclipser parts stay vanilla.")
-    parser.add_argument("--shuffle-eclipsers-random", action="store_true",
-                        help="Randomly decide per-seed whether to shuffle eclipser parts")
     parser.add_argument("--starting-item", default=None,
                         help="RSC name of item to place at swamp church (e.g. RSC_X_ENGINEERS_KEY)")
     parser.add_argument("--random-starting-item", action="store_true",
                         help="Pick a random starting item using the seed RNG")
+    parser.add_argument("--starting-item-bundles", nargs="*",
+                        choices=list(STARTING_ITEM_BUNDLES.keys()), default=[],
+                        help="Inject all copies of item bundles into swampday at game start. "
+                             "E.g. --starting-item-bundles all_accumulators all_retractors all_eclipsers")
     parser.add_argument("--insanity", nargs="?", const=3, type=_int_or_random, default=0,
                         help="Insanity tier 1-3: 1=soul/govi slots, 2=+cadeaux slots, 3=all slots. Bare --insanity = tier 3. Pass 'random' to randomize per-seed.")
     parser.add_argument("--shuffle-enemies", action="store_true",
@@ -2340,17 +2529,17 @@ if __name__ == "__main__":
                              "000sky.tga swaps with other 000sky.tga files, etc.)")
     parser.add_argument("--open-gates", type=int, default=None, metavar="N",
                         help="Force the first N gates (by vanilla SL order) to SL0, overriding the preset default")
-    parser.add_argument("--patch-tracker", action="store_true",
+    parser.add_argument("--patch-tracker", action=argparse.BooleanOptionalAction, default=True,
                         help="Rewrite levels.txt map badges to reflect randomized item locations "
-                             "(default: strip all item badges to avoid incorrect vanilla hints)")
+                             "(default: on). Use --no-patch-tracker to strip all item badges.")
     parser.add_argument("--altar-cadeaux-required", type=_int_or_random, default=None,
                         help="Cadeaux required and spent per altar/door interaction (1-133, vanilla: 100). Pass 'random' to randomize per-seed.")
     parser.add_argument("--fogometers-cadeaux-required", type=_int_or_random, default=None,
                         help="Cadeaux required to open Fogometers door (min: 5×altar, max: 666, vanilla: 666). Pass 'random' to randomize per-seed.")
-    parser.add_argument("--starting-health", type=_int_or_random, default=None,
-                        help="Starting max health scale 1-10, where each step = 1000 units (vanilla: 5). Pass 'random' to randomize per-seed.")
-    parser.add_argument("--altar-health-grant", type=_int_or_random, default=None,
-                        help="Health granted per life altar interaction, scale 1-10 (vanilla: 1). Pass 'random' to randomize per-seed.")
+    parser.add_argument("--starting-health", type=_float_or_random, default=None,
+                        help="Starting max health scale 0.5-10, where 1.0 = 1000 units (vanilla: 5). Pass 'random' to randomize per-seed.")
+    parser.add_argument("--altar-health-grant", type=_float_or_random, default=None,
+                        help="Health granted per life altar interaction, scale 0.5-10 (vanilla: 1). Pass 'random' to randomize per-seed.")
     parser.add_argument("--soul-threshold-mode", choices=["progressive", "balanced", "random"],
                         default=None,
                         help="Randomize SL1–SL10 soul requirements. "
@@ -2359,12 +2548,18 @@ if __name__ == "__main__":
                         help="Pick soul threshold mode randomly per seed.")
     parser.add_argument("--settings-string", default=None,
                         help="Base64 settings string from the GUI — recorded in spoiler log for reproducibility")
-    parser.add_argument("--death-penalty", type=int, default=0,
-                        help="Reduce max health by step*1000 on each death (floor: step*1000). "
-                             "0 = disabled, 1–10 = enabled with that step. "
-                             "E.g. --death-penalty 1 gives -1000/death (vanilla equivalent).")
+    parser.add_argument("--death-penalty", type=float, default=0,
+                        help="Reduce max health by round(step*1000) on each death (floor: same). "
+                             "0 = disabled, 0.5–10.0 = enabled with that step. "
+                             "E.g. --death-penalty 0.5 gives -500/death, 1.0 gives -1000/death.")
     parser.add_argument("--death-penalty-random", action="store_true",
-                        help="Randomly pick a death-penalty step (1–10) per seed.")
+                        help="Randomly pick a death-penalty step (0.5–10.0) per seed.")
+    parser.add_argument("--piston-combos", action="store_true",
+                        help="Shuffle the 6 dark engine piston combination values. "
+                             "Jack's Schematic becomes a required progression item.")
+    parser.add_argument("--piston-combos-random", action="store_true",
+                        help="Randomly decide per-seed whether to shuffle piston combination values. "
+                             "When active, Jack's Schematic becomes a required progression item.")
     parser.add_argument("--entrance-mode",
                         choices=["off", "deadside_only", "cross_hub", "random"],
                         default="off",
@@ -2387,7 +2582,6 @@ if __name__ == "__main__":
 
     config = {
         "progression_balancing": args.progression_balancing,
-        "shuffle_progression":   "random" if args.shuffle_key_items_random else args.shuffle_progression,
         "gate_preset":           args.gate_preset,
         "max_sl":                args.max_sl,
         "shuffle_weapons":       "random" if args.shuffle_weapons_random else args.shuffle_weapons,
@@ -2395,11 +2589,9 @@ if __name__ == "__main__":
         "shuffle_bonus":         "random" if args.shuffle_light_soul_random else args.shuffle_light_soul,
         "shuffle_gad_temples":   "random" if args.shuffle_gad_temples_random else args.shuffle_gad_temples,
         "shuffle_prisms":        "random" if args.shuffle_prisms_random else args.shuffle_prisms,
-        "shuffle_retractors":    "random" if args.shuffle_retractors_random else args.shuffle_retractors,
-        "shuffle_accumulators":  "random" if args.shuffle_accumulators_random else args.shuffle_accumulators,
-        "shuffle_eclipsers":     "random" if args.shuffle_eclipsers_random else args.shuffle_eclipsers,
         "starting_item":         args.starting_item,
         "random_starting_item":  args.random_starting_item,
+        "starting_item_bundles": args.starting_item_bundles or [],
         "insanity":              args.insanity or 0,
         "shuffle_enemies":       "random" if args.shuffle_enemies_random else args.shuffle_enemies,
         "enemy_mode":            args.enemy_mode,
@@ -2422,6 +2614,7 @@ if __name__ == "__main__":
         "altar_health_grant":          args.altar_health_grant or 1,
         "soul_threshold_mode":         "random" if args.soul_threshold_mode_random else (args.soul_threshold_mode or "off"),
         "death_penalty":               "random" if args.death_penalty_random else args.death_penalty,
+        "piston_combos":    "random" if args.piston_combos_random else ("on" if args.piston_combos else "off"),
         "settings_string":             args.settings_string,
     }
     if args.config and Path(args.config).exists():

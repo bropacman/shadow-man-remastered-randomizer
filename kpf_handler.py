@@ -18,8 +18,27 @@ import fnmatch
 from pathlib import Path
 from dataclasses import dataclass, field
 
-MOD_KPF_NAME = "shadowman_randomizer.kpf"
+MOD_KPF_PREFIX = "shadowman_randomizer_"   # e.g. shadowman_randomizer_42857193.kpf
+_MOD_KPF_LEGACY = "shadowman_randomizer.kpf"  # pre-seed-in-filename builds; removed on upgrade
 from constants import KPF_TARGET_EXTENSIONS
+
+
+def mod_kpf_name(seed: int) -> str:
+    """Return the filename for a randomizer mod KPF with the given seed."""
+    return f"{MOD_KPF_PREFIX}{seed}.kpf"
+
+
+def find_mod_kpfs(mods_dir) -> list[Path]:
+    """
+    Return all randomizer mod KPF paths found in mods_dir.
+    Includes the legacy unsuffixed name so old installs are cleaned up automatically.
+    """
+    mods_path = Path(mods_dir)
+    found = sorted(mods_path.glob(f"{MOD_KPF_PREFIX}*.kpf"))
+    legacy = mods_path / _MOD_KPF_LEGACY
+    if legacy.exists():
+        found.append(legacy)
+    return found
 
 # ── KPF Reading (originals) ───────────────────────────────────────────────────
 
@@ -116,9 +135,7 @@ def extract_game_files(kpf_files: list, output_dir: str, level_folders: list, ga
     mod_kpf_files = []
     if game_dir:
         mods_dir = find_mods_dir(game_dir)
-        mod_kpf = mods_dir / MOD_KPF_NAME
-        if mod_kpf.exists():
-            mod_kpf_files = [str(mod_kpf)]
+        mod_kpf_files = [str(p) for p in find_mod_kpfs(mods_dir)]
 
     index = build_kpf_index(kpf_files)
     out = Path(output_dir)
@@ -173,7 +190,7 @@ def which_kpf_has_levels(index: KpfIndex) -> str:
 
 # ── Mod KPF Creation ──────────────────────────────────────────────────────────
 
-def create_mod_kpf(mods_dir, files: dict, mod_name: str = MOD_KPF_NAME) -> str:
+def create_mod_kpf(mods_dir, files: dict, mod_name: str) -> str:
     """
     Create a mod KPF with ZIP_STORED (no compression) as required by the game.
     files: {internal_kpf_path: local_file_path}
@@ -192,27 +209,25 @@ def create_mod_kpf(mods_dir, files: dict, mod_name: str = MOD_KPF_NAME) -> str:
     return str(output_path)
 
 
-def remove_mod_kpf(mods_dir, mod_name: str = MOD_KPF_NAME) -> bool:
-    """Delete the randomizer mod KPF to restore vanilla."""
-    path = Path(mods_dir) / mod_name
-    if path.exists():
+def remove_mod_kpf(mods_dir) -> bool:
+    """Delete all randomizer mod KPFs (including legacy) to restore vanilla."""
+    removed = []
+    for path in find_mod_kpfs(mods_dir):
         path.unlink()
         print(f"  Removed: {path}")
-        return True
-    return False
+        removed.append(path)
+    return bool(removed)
 
 
-def mod_kpf_exists(mods_dir, mod_name: str = MOD_KPF_NAME) -> bool:
-    return (Path(mods_dir) / mod_name).exists()
+def mod_kpf_exists(mods_dir) -> bool:
+    return bool(find_mod_kpfs(mods_dir))
 
 
-def build_and_install_mod(game_dir: str, modified_files: dict,
-                          mod_name: str = MOD_KPF_NAME) -> str:
-    """One-shot: remove any existing randomizer mod, install new one."""
+def build_and_install_mod(game_dir: str, modified_files: dict, seed: int) -> str:
+    """One-shot: remove any existing randomizer mods, install new one with seed in filename."""
     mods_dir = find_mods_dir(game_dir)
-    if mod_kpf_exists(mods_dir):
-        remove_mod_kpf(mods_dir)
-    return create_mod_kpf(mods_dir, modified_files, mod_name)
+    remove_mod_kpf(mods_dir)  # clears all existing randomizer KPFs
+    return create_mod_kpf(mods_dir, modified_files, mod_kpf_name(seed))
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
@@ -252,12 +267,13 @@ if __name__ == "__main__":
 
     elif args.cmd == "status":
         mods_dir = find_mods_dir(args.game_dir)
-        mod_path = Path(mods_dir) / MOD_KPF_NAME
-        if mod_path.exists():
-            size_kb = mod_path.stat().st_size // 1024
-            with zipfile.ZipFile(mod_path) as zf:
-                count = len([i for i in zf.infolist() if not i.is_dir()])
-            print(f"Randomizer mod ACTIVE: {mod_path}")
-            print(f"  {count} file(s), {size_kb} KB")
+        mod_paths = find_mod_kpfs(mods_dir)
+        if mod_paths:
+            for mod_path in mod_paths:
+                size_kb = mod_path.stat().st_size // 1024
+                with zipfile.ZipFile(mod_path) as zf:
+                    count = len([i for i in zf.infolist() if not i.is_dir()])
+                print(f"Randomizer mod ACTIVE: {mod_path}")
+                print(f"  {count} file(s), {size_kb} KB")
         else:
             print("No randomizer mod active — vanilla game")

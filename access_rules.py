@@ -34,11 +34,22 @@ _ENG_KEY         = "RSC_X_ENGINEERS_KEY"
 _PRISON_KEY_CARD = "RSC_X_PRISON_KEY_CARD"
 _ACCUMULATOR     = "RSC_X_ACCUMULATOR"
 _GAD_PICKUP      = "RSC_X_GAD_PICKUP"
+_SCHEMATIC       = "RSC_X_JACKS_SCHEMATIC"
 
 # Active gate→SL mapping for the current seed.
 # Populated at generation time by set_gate_remap().
 # Defaults to vanilla until explicitly set.
 _current_gate_sl: dict[str, int] = dict(GATE_VANILLA_SL)
+
+# Set to True when piston_combos=random so R.pistons() requires the
+# schematic item in inventory (analogous to Light Arrows in OoT).
+_piston_combos_random: bool = False
+
+
+def set_piston_combos_random(val: bool) -> None:
+    """Called by fill.py assumed_fill/validate_fill when piston_combos=random."""
+    global _piston_combos_random
+    _piston_combos_random = val
 
 
 def set_gate_remap(gate_remap: dict[str, int]) -> None:
@@ -96,7 +107,7 @@ GATE_DEPENDENCIES: dict[str, object] = {
 
 # ── Soul helpers ──────────────────────────────────────────────────────────────
 
-_SOUL_THRESHOLDS: dict[int, int] = {
+VANILLA_SOUL_THRESHOLDS: dict[int, int] = {
     0:   0,
     1:   1,
     2:   3,
@@ -110,13 +121,25 @@ _SOUL_THRESHOLDS: dict[int, int] = {
     10: 120,
 }
 
+# Active SL→soul-count mapping. Matches vanilla until set_soul_thresholds() is called.
+_current_soul_thresholds: dict[int, int] = dict(VANILLA_SOUL_THRESHOLDS)
+
+
+def set_soul_thresholds(thresholds: dict[int, int] | None) -> None:
+    """
+    Called by fill.py (assumed_fill / validate_fill) and patcher.py when
+    soul thresholds are randomized.  Pass None to reset to vanilla.
+    """
+    global _current_soul_thresholds
+    _current_soul_thresholds = dict(thresholds) if thresholds is not None else dict(VANILLA_SOUL_THRESHOLDS)
+
 
 def _count_souls(state, player) -> int:
     return state.count("_souls", player)
 
 
 def _soul_level(state: CollectionState, player: int, level: int) -> bool:
-    threshold = _SOUL_THRESHOLDS[level]
+    threshold = _current_soul_thresholds[level]
     return True if threshold == 0 else _count_souls(state, player) >= threshold
 
 
@@ -262,6 +285,10 @@ class _Rules:
                 and state.count("_retractors", player) >= 5
         )
 
+    def schematic(self, state, player) -> bool:
+        """Player has Jack's Schematic (required to know dark engine combinations)."""
+        return state.has(_SCHEMATIC, player)
+
     def pistons(self, state, player) -> bool:
         # These must match the level_region column in your CSV exactly
         sections = [
@@ -271,6 +298,10 @@ class _Rules:
             "Asylum: Engine Block - Queens",
             "Asylum: Engine Block - Florida"
         ]
+        # When piston combinations are randomized the schematic journal is
+        # the only way to learn the new combinations — treat it as required.
+        if _piston_combos_random and not self.schematic(state, player):
+            return False
         return all(state.can_reach(s, "Region", player) for s in sections)
 
     # ── Soul level methods ────────────────────────────────────────────────────

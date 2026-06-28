@@ -147,6 +147,7 @@ def patch_loc_english_for_tracker(
     *,
     shuffle_gad_temples=False,
     obscure_hints=False,
+    starting_item_bundles=None,
 ):
     """
     High-level entry point called from patcher.py step 4d.
@@ -163,13 +164,8 @@ def patch_loc_english_for_tracker(
     overrides = {}
 
     # Always: label items whose tracker hints are known not to clear.
-    # Retractor and accumulator clearance mechanics are not yet understood;
     # Violator (VIO_PLINTH) is never triggered in a randomised run.
     overrides["m_obj_violator"]      = VIOLATOR_PLINTH_LABEL
-    overrides["m_obj_retractor"]     = "Retractor (won't clear)"
-    overrides["m_obj_retractors"]    = "Retractors (won't clear)"
-    overrides["m_obj_accumulator"]   = "Accumulator (won't clear)"
-    overrides["m_obj_accumulators"]  = "Accumulators (won't clear)"
 
     # Always: replace loading screen tips with randomizer-specific content.
     overrides["m_loadtip00"] = "Legion has scattered the relics across Deadside. Nettie believes in you. Jaunty does not."
@@ -185,7 +181,7 @@ def patch_loc_english_for_tracker(
     overrides["m_loadtip10"] = "Revisit areas after acquiring new abilities — a relic may have been waiting for you the whole time."
     overrides["m_loadtip11"] = "If a portal leads somewhere unexpected, that's the entrance randomizer at work. Explore before assuming you're lost."
     overrides["m_loadtip12"] = "A glowing voodoo marker near a Dark Soul or Cadeaux spot means a key relic is hidden there instead."
-    overrides["m_loadtip13"] = "If your tracker badge for a Retractor, Accumulator, Gad Power, or Violator refuses to clear — that's a feature. The game has strong feelings about those."
+    overrides["m_loadtip13"] = "Gad Power tracker badges clear when you exit the level. Violator badges won't clear at all — that one's on the game."
     overrides["m_loadtip14"] = "Gad Powers have been pulled from their temples and hidden as physical pickups. The map tracker will point you to them."
     overrides["m_loadtip15"] = "To reach Legion you must access all five Engine Block sections in the Asylum: London, Prison, Salvage, Queens, and Florida. Nettie left this part out of the orientation."
     overrides["m_loadtip16"] = "All three Eclipser pieces are needed before nightfall. Without them, Liveside enemies won't appear after dark."
@@ -193,7 +189,20 @@ def patch_loc_english_for_tracker(
     overrides["m_loadtip18"] = "Use the Enseigne to shield yourself from deadly attacks that may not be avoidable."
     overrides["m_loadtip19"] = "Jaunty knows exactly where everything ended up. He has chosen not to share this information with you."
 
-    # 1. GAD collapse -- prevent misleading specific-power labels
+    # 1b. Starting bundle overrides -- items in bundles are at swampday, not vanilla spots
+    if starting_item_bundles:
+        if "all_retractors" in starting_item_bundles:
+            overrides["m_obj_retractor"]    = "Retractor (starting area)"
+            overrides["m_obj_retractors"]   = "Retractors (starting area)"
+        if "all_accumulators" in starting_item_bundles:
+            overrides["m_obj_accumulator"]  = "Accumulator (starting area)"
+            overrides["m_obj_accumulators"] = "Accumulators (starting area)"
+        if "all_gad_pickups" in starting_item_bundles:
+            overrides["m_obj_touchgad"] = "Gad: Touch (Louisiana Swampland)"
+            overrides["m_obj_walkgad"]  = "Gad: Walk (Louisiana Swampland)"
+            overrides["m_obj_swimgad"]  = "Gad: Swim (Louisiana Swampland)"
+
+    # 2. GAD collapse -- prevent misleading specific-power labels
     if shuffle_gad_temples:
         for key in GAD_KEYS:
             overrides[key] = GAD_LABEL
@@ -202,7 +211,7 @@ def patch_loc_english_for_tracker(
         overrides["m_obj_prophecy"] = "Book of Gad"
         overrides["i_prophecy"] = "Book of Gad"
 
-    # 2. Obscure hints -- DEACTIVATED
+    # 3. Obscure hints -- DEACTIVATED
     #    Obscuring items without vanilla m_obj_* keys requires overriding i_*
     #    inventory names, which also changes the inventory screen display.
     #    Re-enable once a cleaner solution is found.

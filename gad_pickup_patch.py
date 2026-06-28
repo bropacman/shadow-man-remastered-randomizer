@@ -10,7 +10,7 @@ Six patches total, no .data writes:
   1. String "RSC_X_GAD_PICKUP" -> .rdata at 0x1406A711F
   2. Overwrite RSC_X_FBIFILE dispatch table entry (index 32):
        string ptr -> 0x1406A711F, param1 -> TYPE_ID (default 0x16, Prophecy book)
-  3. Write two 22-byte stubs into code cave at 0x14064A3D3:
+  3. Write two 22-byte stubs into code cave at 0x14064A354:
        Stub1 (+1): ADD [gad_level],1 + MOV RCX,RDI + XOR EDX,EDX
                    + CALL FUN_140459d50 + JMP common_tail
        Stub2 (+4): same but ADD 4
@@ -167,6 +167,8 @@ ENTRY_PARAM1_OFF      = ENTRY_FILE_OFF + 0x08
 ENTRY_VANILLA_STR_PTR = 0x1407013C8
 ENTRY_VANILLA_PARAM1  = 0x0
 
+# Patch 3: code cave — expanded to cover stubs + both tails
+#
 # Patch 3: code cave — expanded to cover stubs + both tails
 CAVE_VA       = 0x14064A354
 CAVE_FILE_OFF = 0x649754
@@ -433,6 +435,7 @@ def patch_gad_pickup(
     struct.pack_into('<Q', data, ENTRY_PARAM1_OFF,  type_id)
     print(f"  [gad_pickup] Entry 32 -> RSC_X_GAD_PICKUP / type_id 0x{type_id:X}")
 
+    # 3. Cave stubs (stub1 -> gad tail, stub2 -> poigne tail)
     # 3. Cave stubs (stub1 -> gad tail, stub2 -> poigne tail)
     cave = _build_stub(CAVE_VA, 1, TAIL_VA) + _build_stub(CAVE_VA + 22, 4, POIGNE_TAIL_VA)
     data[CAVE_FILE_OFF : CAVE_FILE_OFF + len(cave)] = cave

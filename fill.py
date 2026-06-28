@@ -60,8 +60,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
-from access_rules import R, GATE_VANILLA_SL
-from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER
+from access_rules import R, GATE_VANILLA_SL, set_piston_combos_random, set_soul_thresholds, VANILLA_SOUL_THRESHOLDS
+from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER, STARTING_ITEM_BUNDLES
 import regions as _regions
 
 # ── Player constant ────────────────────────────────────────────────────────────
@@ -301,10 +301,6 @@ VANILLA_GAD_REGIONS: list[str] = [
     "Temple of Blood (Nager)",
 ]
 
-_SOUL_THRESHOLDS: dict[int, int] = {
-    0:0, 1:1, 2:3, 3:7, 4:15, 5:23, 6:35, 7:51, 8:71, 9:95, 10:120,
-}
-
 # ── Gate shuffle ───────────────────────────────────────────────────────────────
 
 def _shuffle_gates(
@@ -426,7 +422,10 @@ _PROBE_ITEMS: dict[str, int] = {
 }
 
 
-def _build_region_depth_map(level_rules: dict) -> dict[str, int]:
+def _build_region_depth_map(
+    level_rules: dict,
+    soul_thresholds: dict[int, int] | None = None,
+) -> dict[str, int]:
     """
     Probe each entry in level_rules to find the minimum SL at which that
     region becomes reachable by a maximally-equipped player.
@@ -434,14 +433,17 @@ def _build_region_depth_map(level_rules: dict) -> dict[str, int]:
     Returns region_name -> SL int (0–10). Used by _weight() so that
     progression-balancing depth scores are correct in entrance-shuffle mode,
     where REGION_GATES no longer reflects actual access order.
+
+    soul_thresholds: randomized SL→soul-count map, or None for vanilla.
     """
+    effective = soul_thresholds if soul_thresholds is not None else VANILLA_SOUL_THRESHOLDS
     all_regions = set(level_rules.keys())
     depth_map: dict[str, int] = {}
     for region, rule in level_rules.items():
         for sl in range(11):
             probe = FakeState(
                 inv=_PROBE_ITEMS,
-                soul_count=_SOUL_THRESHOLDS[sl],
+                soul_count=effective[sl],
                 retractor_count=10,
                 cadeaux_count=666,
                 reached_regions=all_regions,
@@ -519,6 +521,7 @@ GATE_KEY: dict[str, str] = {
     "r.flambeau(":        "RSC_X_FLAMBEAU",
     "r.marteau(":         "RSC_X_MARTEAU",
     "r.poigne(":          "RSC_X_POIGNE",
+    "r.schematic(":       "RSC_X_JACKS_SCHEMATIC",
 }
 
 GATE_GROUP: dict[str, frozenset] = {
@@ -573,17 +576,12 @@ def build_item_pool(
     shuffle_weapons: bool = True,
     shuffle_lore: bool = True,
     shuffle_bonus: bool = False,
-    shuffle_retractors: bool = True,
-    shuffle_accumulators: bool = True,
-    shuffle_eclipsers: bool = True,
     shuffle_prisms: bool = False,
     shuffle_gad_temples: bool = False,
 ) -> list:
     """
     Build the item pool for placement. Always includes all logic-critical items
-    (souls, progression, gad). Retractors, accumulators, and eclipsers are included
-    by default but can be excluded when their shuffle flags are False (they then
-    stay vanilla and are credited to the player via baseline counts in the fill).
+    (souls, progression, retractors, accumulators, eclipsers, gad).
     Weapons/lore/bonus/prisms included based on their respective shuffle flags.
 
     When shuffle_gad_temples is True, RSC_X_PROPHECY is excluded from the pool.
@@ -592,10 +590,7 @@ def build_item_pool(
     Book of Prophecy lore item would look like a 4th gad power pickup in-game.
     Its location slot remains in the candidate pool and receives a different item.
     """
-    include_cats = {"soul", "progression", "gad"}
-    if shuffle_retractors:   include_cats.add("retractor")
-    if shuffle_accumulators: include_cats.add("accumulator")
-    if shuffle_eclipsers:    include_cats.add("eclipser")
+    include_cats = {"soul", "gad", "progression", "retractor", "accumulator", "eclipser"}
     if shuffle_weapons:      include_cats.add("weapon")
     if shuffle_lore:         include_cats.add("lore")
     if shuffle_bonus:        include_cats.add("bonus")
@@ -610,15 +605,9 @@ def build_item_pool(
     if shuffle_gad_temples:
         pool = [loc for loc in pool if loc.object != "RSC_X_PROPHECY"]
 
-    # Uniqueness audit — skip items that are intentionally excluded from the pool
-    # (e.g. eclipser parts when shuffle_eclipsers=False).
-    intentionally_excluded: set[str] = set()
-    if not shuffle_eclipsers:
-        intentionally_excluded |= ECLIPSER_ITEMS
+    # Uniqueness audit
     non_soul_counts = Counter(loc.object for loc in pool if loc.category != "soul")
     for item in ALL_UNIQUES:
-        if item in intentionally_excluded:
-            continue
         count = non_soul_counts.get(item, 0)
         if count > 1:
             raise ValueError(f"DATA BUG: '{item}' exists {count} times in CSV!")
@@ -639,8 +628,8 @@ def simulate_playthrough(
     placement, locations, level_rules,
     debug=False, collect_spheres=False, shuffle_gad_temples=False,
     item_category=None,
-    baseline_retractor_count: int = 0,
-    baseline_inv: dict | None = None,
+    starting_item_bundles=None,
+    soul_thresholds: dict[int, int] | None = None,
 ):
     """
     Simulate a full playthrough of the given placement.
@@ -648,15 +637,23 @@ def simulate_playthrough(
     item_category: pre-built {object: category} dict. Pass this in from
     assumed_fill to avoid rebuilding it on every iteration of the sweep (~130x).
     If None, it is built internally — used by validate_fill and patcher.
-
-    baseline_retractor_count: retractors the player has from vanilla (unshuffled)
-    positions. Used when shuffle_retractors=False so gate checks work correctly.
-    baseline_inv: additional pre-credited items (e.g. accumulators, eclipser parts)
-    for categories that are not being shuffled.
     """
-    inv: dict[str, int] = dict(baseline_inv) if baseline_inv else {}
+    inv: dict[str, int] = {}
     soul_count = cadeaux_count = 0
-    retractor_count = baseline_retractor_count
+    retractor_count = 0
+
+    # Pre-populate inventory from starting bundles.
+    # Count from CHECKABLE_LOCS so we grant the exact number of each item
+    # that exists in the game (e.g. 3 accumulators, 5 retractors, 3 gad).
+    if starting_item_bundles:
+        _all_bundled = {r for bk in starting_item_bundles for r in STARTING_ITEM_BUNDLES.get(bk, [])}
+        for _loc in CHECKABLE_LOCS:
+            if getattr(_loc, "object", None) not in _all_bundled:
+                continue
+            if _loc.category == "retractor":
+                retractor_count += 1
+            else:
+                inv[_loc.object] = inv.get(_loc.object, 0) + 1
     reached_keys: set[str] = set()
     reached_regions: set[str] = set()
     fixed_keys = {l.loc_key for l in locations if l.category in ("boss", "true_form")}
@@ -696,8 +693,9 @@ def simulate_playthrough(
                     inv["RSC_X_GAD_PICKUP"] = current_gad + 1
                     progress = True
 
+        _eff_thresholds = soul_thresholds if soul_thresholds is not None else VANILLA_SOUL_THRESHOLDS
         current_sl = next(
-            (sl for sl, th in sorted(_SOUL_THRESHOLDS.items(), reverse=True) if soul_count >= th), 0
+            (sl for sl, th in sorted(_eff_thresholds.items(), reverse=True) if soul_count >= th), 0
         )
 
         for loc in locations:
@@ -790,20 +788,29 @@ def assumed_fill(
     shuffle_weapons: bool = True,
     shuffle_lore: bool = True,
     shuffle_bonus: bool = False,
-    shuffle_retractors: bool = True,
-    shuffle_accumulators: bool = True,
-    shuffle_eclipsers: bool = True,
     shuffle_prisms: bool = False,
     shuffle_gad_temples: bool = False,
     starting_item: str | None = None,
+    starting_item_bundles: list | None = None,
     true_form_loc_remap: dict[str, str] | None = None,
     entrance_shuffle=None,   # UnifiedShuffle | None
+    piston_combos: str = "off",
+    soul_thresholds: dict[int, int] | None = None,
 ) -> tuple[dict[str, str], dict[str, int]]:
+
+    # ── Piston combinations flag ───────────────────────────────────────────────
+    _pc_random = str(piston_combos) == "random"
+    set_piston_combos_random(_pc_random)
+
+    # ── Soul threshold override ────────────────────────────────────────────────
+    set_soul_thresholds(soul_thresholds)
 
     # ── Step 1: Gates ─────────────────────────────────────────────────────────
     # Add starting item to inventory so logic system knows player already has it
     if starting_item:
         STARTING_ITEMS.add(starting_item)
+
+    _bundle_inv_set: set[str] = set()  # kept for cleanup block; no longer adds to STARTING_ITEMS
 
     if shuffle_gates:
         gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe)
@@ -824,13 +831,13 @@ def assumed_fill(
 
     level_rules = _regions.build_level_rules(gate_remap, entrance_shuffle)
 
-    region_depth_map = _build_region_depth_map(level_rules)
+    region_depth_map = _build_region_depth_map(level_rules, soul_thresholds=soul_thresholds)
 
     if verbose:
         print("\n── GATE THRESHOLDS ──────────────────────────────────")
         for gate_id in sorted(gate_remap):
             sl = gate_remap[gate_id]
-            souls = _SOUL_THRESHOLDS[sl]
+            souls = (soul_thresholds or VANILLA_SOUL_THRESHOLDS)[sl]
             vanilla_sl = GATE_VANILLA_SL.get(gate_id, sl)
             changed = " ←" if sl != vanilla_sl else ""
             locked = " (locked)" if sl == 10 else " (open)" if sl == 0 else ""
@@ -839,32 +846,18 @@ def assumed_fill(
 
     active_fixed_soul_locs = apply_true_form_remap(true_form_loc_remap)
 
-    # ── Baseline counts for unshuffled categories ─────────────────────────────
-    # When a category is not shuffled, its items stay vanilla. The simulation
-    # must credit the player with those items so gate checks work correctly.
-    _bl_retractor = 0 if shuffle_retractors else 5
-    _bl_inv: dict[str, int] = {}
-    if not shuffle_accumulators:
-        _bl_inv["RSC_X_ACCUMULATOR"] = 3
-    if not shuffle_eclipsers:
-        _bl_inv.update({
-            "RSC_X_ECLIPSER_PART1": 1,
-            "RSC_X_ECLIPSER_PART2": 1,
-            "RSC_X_ECLIPSER_PART3": 1,
-        })
-
     # ── Step 2: Build candidate pool ──────────────────────────────────────────
     active_slot_cats = set(SLOT_ACCEPTS.keys())
     if not shuffle_gad_temples:
         active_slot_cats.discard("gad")
-    if not shuffle_retractors:
-        active_slot_cats.discard("retractor")
-    if not shuffle_accumulators:
-        active_slot_cats.discard("accumulator")
-    if not shuffle_eclipsers:
-        active_slot_cats.discard("eclipser")
     if not shuffle_prisms:
         active_slot_cats.discard("prism")
+    if not shuffle_weapons:
+        active_slot_cats.discard("weapon")
+    if not shuffle_lore:
+        active_slot_cats.discard("lore")
+    if not shuffle_bonus:
+        active_slot_cats.discard("bonus")
 
     if insanity >= 3:
         candidate_pool = [
@@ -899,10 +892,7 @@ def assumed_fill(
         shuffle_weapons=shuffle_weapons,
         shuffle_lore=shuffle_lore,
         shuffle_bonus=shuffle_bonus,
-        shuffle_retractors=shuffle_retractors,
-        shuffle_accumulators=shuffle_accumulators,
         shuffle_gad_temples=shuffle_gad_temples,
-        shuffle_eclipsers=shuffle_eclipsers,
         shuffle_prisms=shuffle_prisms,
     )
     rng.shuffle(item_pool)
@@ -917,6 +907,10 @@ def assumed_fill(
     # Souls share the lower half of the band with progression so they claim
     # reachable slots before weapons crowd them out, reducing soulswap fallbacks.
     def _placement_priority(item) -> float:
+        # When dark engine combinations are randomized, Jack's Schematic is
+        # treated as a progression item — place it early alongside key items.
+        if _pc_random and item.object == "RSC_X_JACKS_SCHEMATIC":
+            return rng.uniform(0.1, 1.0)
         if item.category in {"soul"}:
             return rng.uniform(0.0, 1.5)
         if item.category in {"progression", "gad"}:
@@ -942,6 +936,18 @@ def assumed_fill(
         else:
             print(f"  WARNING: starting item {starting_item!r} not found in pool")
 
+    # ── Remove bundled items from pool (player already starts with them) ───
+    if starting_item_bundles:
+        all_bundled = set(
+            r for bk in starting_item_bundles
+            for r in STARTING_ITEM_BUNDLES.get(bk, [])
+        )
+        before = len(item_pool)
+        item_pool = [loc for loc in item_pool if loc.object not in all_bundled]
+        removed = before - len(item_pool)
+        if removed:
+            print(f"  Starting bundles: removed {removed} item(s) from pool")
+
     if verbose:
         item_cat_counts = Counter(item.category for item in item_pool)
         print(f"  Item pool: {len(item_pool)} total")
@@ -956,13 +962,14 @@ def assumed_fill(
         for p in build_item_pool(
             [l for l in candidate_pool if l.category not in FILLER_SLOT_CATS],
             shuffle_weapons=True, shuffle_lore=True, shuffle_bonus=False,
-            shuffle_retractors=shuffle_retractors,
-            shuffle_accumulators=shuffle_accumulators,
-            shuffle_eclipsers=shuffle_eclipsers,
             shuffle_prisms=shuffle_prisms,
             shuffle_gad_temples=shuffle_gad_temples,
         )
     }
+    # When dark engine combinations are randomized, Jack's Schematic becomes a
+    # required progression item (the player needs it to know the combinations).
+    if _pc_random:
+        item_category["RSC_X_JACKS_SCHEMATIC"] = "progression"
 
     # ── Step 5: Weighted slot choice ──────────────────────────────────────────
     exponent = progression_balancing / 50.0
@@ -1114,8 +1121,7 @@ def assumed_fill(
             level_rules,
             shuffle_gad_temples=shuffle_gad_temples,
             item_category=item_category,
-            baseline_retractor_count=_bl_retractor,
-            baseline_inv=_bl_inv or None,
+            starting_item_bundles=starting_item_bundles,
         )
 
         def _slot_ok(loc) -> bool:
@@ -1183,7 +1189,8 @@ def assumed_fill(
 
         if verbose:
             tag = "[S]" if item.category == "soul" else "[P]"
-            print(f"{i + 1:3d}. {tag} {item.object:25} -> "
+            item_label = item.friendly_name or item.object
+            print(f"{i + 1:3d}. {tag} {item_label:25} -> "
                   f"{chosen.level_region:25} | "
                   f"Req: {chosen.gate_raw or 'free':20} | "
                   f"Souls: {st.soul_count}")
@@ -1214,10 +1221,7 @@ def assumed_fill(
     # candidate_pool) to ensure complete coverage of all levels including
     # liveside, which phase 1 may have excluded from its candidate set.
 
-    include_cats = {"soul", "progression", "gad"}
-    if shuffle_retractors:   include_cats.add("retractor")
-    if shuffle_accumulators: include_cats.add("accumulator")
-    if shuffle_eclipsers:    include_cats.add("eclipser")
+    include_cats = {"soul", "gad", "progression", "retractor", "accumulator", "eclipser"}
     if shuffle_weapons:      include_cats.add("weapon")
     if shuffle_lore:         include_cats.add("lore")
     if shuffle_bonus:        include_cats.add("bonus")
@@ -1246,10 +1250,10 @@ def assumed_fill(
         if loc.loc_key not in placement
         and loc.level_id not in EXCLUDED_LEVELS
         and (shuffle_gad_temples  or loc.category != "gad")
-        and (shuffle_retractors   or loc.category != "retractor")
-        and (shuffle_accumulators or loc.category != "accumulator")
-        and (shuffle_eclipsers    or loc.category != "eclipser")
         and (shuffle_prisms       or loc.category != "prism")
+        and (shuffle_weapons      or loc.category != "weapon")
+        and (shuffle_lore         or loc.category != "lore")
+        and (shuffle_bonus        or loc.category != "bonus")
     ]
     rng.shuffle(remaining_locs)
 
@@ -1263,9 +1267,15 @@ def assumed_fill(
         else:
             placement[loc_key] = _plain_barrel(rng)
 
-    # Clean up starting item from STARTING_ITEMS so it doesn't persist between calls
+    # Clean up starting item and bundles from STARTING_ITEMS so they don't persist between calls
     if starting_item:
         STARTING_ITEMS.discard(starting_item)
+    for _rsc in _bundle_inv_set:
+        STARTING_ITEMS.discard(_rsc)
+
+    # Reset dark engine flag and soul thresholds so they don't bleed into subsequent calls
+    set_piston_combos_random(False)
+    set_soul_thresholds(None)
 
     return placement, gate_remap
 
@@ -1276,35 +1286,30 @@ def validate_fill(
     verbose: bool = False,
     gate_remap: dict[str, int] | None = None,
     shuffle_gad_temples: bool = False,
-    shuffle_retractors: bool = True,
-    shuffle_accumulators: bool = True,
-    shuffle_eclipsers: bool = True,
+    shuffle_weapons: bool = True,
+    shuffle_lore: bool = True,
+    shuffle_bonus: bool = False,
     starting_item: str | None = None,
+    starting_item_bundles: list | None = None,
     true_form_loc_remap: dict[str, str] | None = None,
     entrance_shuffle=None,
+    piston_combos: str = "off",
+    soul_thresholds: dict[int, int] | None = None,
 ) -> tuple[bool, str]:
+
+    _pc_random = str(piston_combos) == "random"
+    set_piston_combos_random(_pc_random)
+    set_soul_thresholds(soul_thresholds)
 
     if starting_item:
         STARTING_ITEMS.add(starting_item)
+    _val_bundle_set: set[str] = set()  # kept for cleanup block
 
     placed_objects = [v.object if hasattr(v, "object") else v for v in placement.values()]
     for item_name in ALL_UNIQUES:
-        if not shuffle_eclipsers and item_name in ECLIPSER_ITEMS:
-            continue  # eclipsers intentionally stay vanilla
         count = placed_objects.count(item_name)
         if count > 1:
             print(f"⚠️ LOGIC WARNING: {item_name} placed {count} times!")
-
-    _bl_retractor = 0 if shuffle_retractors else 5
-    _bl_inv: dict[str, int] = {}
-    if not shuffle_accumulators:
-        _bl_inv["RSC_X_ACCUMULATOR"] = 3
-    if not shuffle_eclipsers:
-        _bl_inv.update({
-            "RSC_X_ECLIPSER_PART1": 1,
-            "RSC_X_ECLIPSER_PART2": 1,
-            "RSC_X_ECLIPSER_PART3": 1,
-        })
 
     active_fixed_soul_locs = apply_true_form_remap(true_form_loc_remap)
     reached_keys, final_state, _ = simulate_playthrough(
@@ -1313,8 +1318,8 @@ def validate_fill(
         level_rules=_regions.build_level_rules(gate_remap, entrance_shuffle),
         debug=verbose,
         shuffle_gad_temples=False,
-        baseline_retractor_count=_bl_retractor,
-        baseline_inv=_bl_inv or None,
+        starting_item_bundles=starting_item_bundles,
+        soul_thresholds=soul_thresholds,
     )
 
     _loc_by_key_all = {**LOCATION_TABLE, **{l.loc_key: l for l in active_fixed_soul_locs}}
@@ -1328,9 +1333,9 @@ def validate_fill(
     checkable_locs = [
         l for l in CHECKABLE_LOCS
         if (shuffle_gad_temples  or l.category != "gad")
-           and (shuffle_retractors   or l.category != "retractor")
-           and (shuffle_accumulators or l.category != "accumulator")
-           and (shuffle_eclipsers    or l.category != "eclipser")
+           and (shuffle_weapons      or l.category != "weapon")
+           and (shuffle_lore         or l.category != "lore")
+           and (shuffle_bonus        or l.category != "bonus")
            and l.category not in FILLER_SLOT_CATS
     ]
     total_checkable = len(checkable_locs)
@@ -1356,7 +1361,10 @@ def validate_fill(
 
         if not goal_met:
             lines.append("  Missing for PISTONS:")
-            for label, met in [
+            _schematic_checks = (
+                [("Jacks Schematic", R.schematic(final_state, PLAYER))] if _pc_random else []
+            )
+            for label, met in _schematic_checks + [
                 ("NIGHT (3 eclipsers)", R.night(final_state, PLAYER)),
                 ("Poigne",              R.poigne(final_state, PLAYER)),
                 ("Prison Key Card",     R.prison_key_card(final_state, PLAYER)),
@@ -1371,6 +1379,11 @@ def validate_fill(
 
     if starting_item:
         STARTING_ITEMS.discard(starting_item)
+    for _rsc in _val_bundle_set:
+        STARTING_ITEMS.discard(_rsc)
+
+    set_piston_combos_random(False)
+    set_soul_thresholds(None)
 
     return ok, "\n".join(lines)
 

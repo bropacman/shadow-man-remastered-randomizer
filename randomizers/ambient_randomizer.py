@@ -104,7 +104,7 @@ def randomize_ambients(
 def ambient_spoiler_section(
     patches_by_folder: dict[tuple[str, str], dict[int, dict]],
 ) -> list[str]:
-    from extracted_enemy_locations import ENEMY_TABLE
+    from extracted_enemy_locations import ENEMY_TABLE, ENEMY_LOCATIONS
 
     LEVEL_NAMES = {
         "swampday":  "Louisiana Swamp",
@@ -117,6 +117,11 @@ def ambient_spoiler_section(
         "wastland":  "Wasteland",
     }
 
+    rsc_to_friendly: dict[str, str] = {}
+    for el in ENEMY_LOCATIONS:
+        if el.object not in rsc_to_friendly and el.friendly_name:
+            rsc_to_friendly[el.object] = el.friendly_name
+
     lines = ["", "── AMBIENT SHUFFLE ─────────────────────────────────────", ""]
     for (folder, source_file), patches in sorted(patches_by_folder.items()):
         if not patches:
@@ -124,10 +129,13 @@ def ambient_spoiler_section(
         level_name = LEVEL_NAMES.get(folder, folder)
         lines.append(f"  {level_name} [{source_file}]  ({len(patches)} changes)")
         for offset, pd in sorted(patches.items()):
-            loc_key  = f"{folder}:{source_file}:0x{offset:04X}"
-            original = ENEMY_TABLE.get(loc_key)
-            orig_name = original.object if original else "???"
-            lines.append(f"    0x{offset:04X}  {orig_name:<35} -> {pd['name']}")
+            loc_key   = f"{folder}:{source_file}:0x{offset:04X}"
+            original  = ENEMY_TABLE.get(loc_key)
+            orig_label = (original.friendly_name if original and original.friendly_name
+                          else rsc_to_friendly.get(original.object, original.object) if original
+                          else "???")
+            new_label  = rsc_to_friendly.get(pd["name"], pd["name"])
+            lines.append(f"    0x{offset:04X}  {orig_label:<30} -> {new_label}")
         lines.append("")
 
     total = sum(len(p) for p in patches_by_folder.values())
@@ -142,6 +150,8 @@ def _print_summary(
     mode: str,
 ) -> None:
     from collections import Counter
+    from extracted_enemy_locations import ENEMY_LOCATIONS
+    rsc_to_friendly = {el.object: el.friendly_name for el in ENEMY_LOCATIONS if el.friendly_name}
     type_counter: Counter = Counter()
     for patches in patches_by_folder.values():
         for pd in patches.values():
@@ -153,4 +163,4 @@ def _print_summary(
     if type_counter:
         top = type_counter.most_common(5)
         print(f"  Top placements: "
-              + "  ".join(f"{n}x {t.replace('RSC_','')}" for t, n in top))
+              + "  ".join(f"{n}x {rsc_to_friendly.get(t, t)}" for t, n in top))

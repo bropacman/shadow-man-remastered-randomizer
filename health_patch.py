@@ -36,12 +36,12 @@ HEALTH_STEP                = 1000
 HEALTH_CAP                 = 10000
 
 
-def _scale_to_health(scale: int) -> int:
-    return max(HEALTH_STEP, min(HEALTH_CAP, scale * HEALTH_STEP))
+def _scale_to_health(scale: float) -> int:
+    return max(HEALTH_STEP // 2, min(HEALTH_CAP, round(scale * HEALTH_STEP)))
 
 
-def _health_to_scale(health: int) -> int:
-    return max(1, min(10, health // HEALTH_STEP))
+def _health_to_scale(health: int) -> float:
+    return max(0.5, min(10.0, health / HEALTH_STEP))
 
 
 def apply_health_patch(
@@ -55,12 +55,12 @@ def apply_health_patch(
     Patch starting max health and altar health grant.
 
     Config keys:
-        starting_health            int 1–10, or "random" (default: 5)
-        starting_health_min        int, lower bound for random (default: 1)
-        starting_health_max        int, upper bound for random (default: 10)
-        altar_health_grant         int 1–10, or "random" (default: 1)
-        altar_health_grant_min     int, lower bound for random (default: 1)
-        altar_health_grant_max     int, upper bound for random (default: 5)
+        starting_health            float 0.5–10, or "random" (default: 5)
+        starting_health_min        float, lower bound for random (default: 0.5)
+        starting_health_max        float, upper bound for random (default: 10)
+        altar_health_grant         float 0.5–10, or "random" (default: 1)
+        altar_health_grant_min     float, lower bound for random (default: 0.5)
+        altar_health_grant_max     float, upper bound for random (default: 5)
 
     Returns dict with applied values for spoiler log.
     """
@@ -75,10 +75,10 @@ def apply_health_patch(
     # ── Starting max health ───────────────────────────────────────────────────
     scale = config.get("starting_health", 5)
     if scale == "random":
-        lo = int(config.get("starting_health_min", 1))
-        hi = int(config.get("starting_health_max", 10))
-        scale = rng.randint(lo, hi)
-    scale = max(1, min(10, int(scale)))
+        lo = float(config.get("starting_health_min", 0.5))
+        hi = float(config.get("starting_health_max", 10))
+        scale = round(rng.uniform(lo, hi) * 2) / 2  # snap to nearest 0.5
+    scale = max(0.5, min(10.0, float(scale)))
     health = _scale_to_health(scale)
 
     actual = struct.unpack_from("<I", data, MAX_HEALTH_OFFSET)[0]
@@ -102,10 +102,10 @@ def apply_health_patch(
     # ── Altar health grant ────────────────────────────────────────────────────
     grant_scale = config.get("altar_health_grant", 1)
     if grant_scale == "random":
-        lo = int(config.get("altar_health_grant_min", 1))
-        hi = int(config.get("altar_health_grant_max", 5))
-        grant_scale = rng.randint(lo, hi)
-    grant_scale = max(1, min(10, int(grant_scale)))
+        lo = float(config.get("altar_health_grant_min", 0.5))
+        hi = float(config.get("altar_health_grant_max", 5))
+        grant_scale = round(rng.uniform(lo, hi) * 2) / 2  # snap to nearest 0.5
+    grant_scale = max(0.5, min(10.0, float(grant_scale)))
     grant = _scale_to_health(grant_scale)
 
     # Warn if starting health + 5 altars exceeds cap
