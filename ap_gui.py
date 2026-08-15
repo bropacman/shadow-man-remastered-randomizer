@@ -90,10 +90,77 @@ PREFS_FILE   = SCRIPT_DIR / "gui_prefs.json"   # shared with gui.py — same gam
 # see CLAUDE.md's "streamlining apply -> launch -> connect" writeup) — a
 # SEPARATE path from DEFAULT_GAME_DIR above (that one's the actual Shadow Man
 # Remastered install; this is the Python/Archipelago source checkout this
-# world's client.py lives in). No UI field for this yet — overridable via a
-# plain "ap_dir" key in gui_prefs.json if this ever needs to point somewhere
-# else, same storage _load_prefs()/_save_prefs() already use for game_dir.
+# world's client.py lives in). Stored in gui_prefs.json's "ap_dir" key, set
+# via the "Archipelago Checkout" field on the Apply AP Seed tab (added
+# 2026-08-15 after this hardcoded fallback -- Jon's own dev-machine path --
+# turned out to be the actual reason both "Launch Client Only" and the
+# combined "Launch Game + Client" button silently failed to start the
+# client on a genuinely different machine, with zero way to point this tool
+# somewhere else short of hand-editing gui_prefs.json). This constant is now
+# only a last-resort fallback for anyone who saved a pref before that field
+# existed; _get_ap_dir() always prefers the saved pref when present.
 DEFAULT_AP_DIR = Path(r"C:\Users\jonat\Documents\Archipelago-0.6.7")
+
+# The component name registered by worlds/shadowman/__init__.py — passed
+# as a positional arg to either Launcher.py or ArchipelagoLauncher.exe to
+# launch the client directly, bypassing the Launcher's own GUI list. Both
+# accept it the same way: ArchipelagoLauncher.exe IS Launcher.py, frozen
+# to an exe by ArchipelagoMW/Archipelago's own setup.py (cx_Freeze,
+# script_name "Launcher" -> frozen_name "ArchipelagoLauncher") with the
+# same argparse positional "Patch|Game|Component|url" argument and the
+# same identify()/run_component() name-matching logic underneath.
+_AP_CLIENT_COMPONENT = "Shadow Man Remastered Client"
+
+
+def _resolve_ap_launch_cmd(ap_dir: "Path") -> "list[str] | None":
+    """
+    Argv to launch the AP client from a given Archipelago folder, or None
+    if ap_dir doesn't look like either supported layout. Two layouts,
+    checked in this order:
+
+    1. Officially-installed Archipelago (2026-08-15 addition) — a
+       compiled ArchipelagoLauncher.exe sitting directly in ap_dir, no
+       Python or venv anywhere. This is what every real player actually
+       has (the official Windows installer's default target,
+       %PROGRAMDATA%\\Archipelago per its own inno_setup.iss) — the
+       original from-source-only assumption below meant this tool's
+       launch buttons literally could not work for anyone except Jon's
+       own dev checkout. Invoked directly: no python.exe middleman needed
+       since it's already a standalone exe.
+    2. From-source checkout — Launcher.py + a .venv with its own
+       python.exe, e.g. Jon's own dev setup. Invoked via that venv's
+       python.exe, same as before this function existed.
+
+    Checked in this order (compiled first) since it's the far more common
+    case among real players and is a strictly cheaper check (one file vs.
+    two) to fail fast on.
+    """
+    launcher_exe = ap_dir / "ArchipelagoLauncher.exe"
+    if launcher_exe.exists():
+        return [str(launcher_exe), _AP_CLIENT_COMPONENT]
+
+    python_exe = ap_dir / ".venv" / "Scripts" / "python.exe"
+    launcher_py = ap_dir / "Launcher.py"
+    if python_exe.exists() and launcher_py.exists():
+        return [str(python_exe), str(launcher_py), _AP_CLIENT_COMPONENT]
+
+    return None
+
+
+def _autodetect_ap_dir() -> "Path | None":
+    """The official Windows installer's default install location
+    (%PROGRAMDATA%\\Archipelago, per ArchipelagoMW/Archipelago's own
+    inno_setup.iss DefaultDirName) — checked automatically so a normal
+    player who just ran that installer never has to fill in the
+    Archipelago Checkout field by hand at all. Silently finds nothing on
+    non-Windows or a non-default install location; the field still works
+    manually via Browse either way."""
+    programdata = os.environ.get("PROGRAMDATA")
+    if not programdata:
+        return None
+    candidate = Path(programdata) / "Archipelago"
+    return candidate if (candidate / "ArchipelagoLauncher.exe").exists() else None
+
 
 # Separate, independent version track from the standalone (gui.py's HTML
 # header) -- the two ship on different schedules to different audiences,
@@ -778,6 +845,16 @@ _HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-title">Archipelago Checkout
+      <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Folder containing your Archipelago install's Launcher.py (e.g. Archipelago-0.6.7). Only needed for the launch buttons below, so this tool can start the Shadow Man client for you — not required just to apply a seed.</span></span>
+    </div>
+    <div class="row">
+      <input type="text" id="apDirInput" class="dir-input" placeholder="Path to your Archipelago folder (contains Launcher.py)…">
+      <button class="btn-ghost" onclick="browseApDir()">Browse…</button>
+    </div>
+  </div>
+
   <div class="actions">
     <button class="btn-run" id="applyBtn" onclick="applySeed()">Apply Seed</button>
     <span class="status" id="applyStatus"></span>
@@ -789,10 +866,13 @@ _HTML = r"""<!DOCTYPE html>
        seed first, so they double as a quick "just start my game/client"
        shortcut using whatever game dir is already filled in above. -->
   <div class="post-run visible" id="applyPostRun">
-    <button class="btn-launch" onclick="launchGame()">▶ Launch Game + Client</button>
+    <button class="btn-launch" id="btnLaunchGameClient" onclick="launchGame()" disabled style="opacity:0.4;cursor:not-allowed" title="Couldn't find your Archipelago install. Set the Archipelago Checkout folder above.">▶ Launch Game + Client</button>
     <button class="btn-ghost" onclick="launchGameOnly()">Launch Game Only</button>
-    <button class="btn-ghost" onclick="launchClientOnly()">Launch Client Only</button>
+    <button class="btn-ghost" id="btnLaunchClientOnly" onclick="launchClientOnly()" disabled style="opacity:0.4;cursor:not-allowed" title="Couldn't find your Archipelago install. Set the Archipelago Checkout folder above.">Launch Client Only</button>
     <button class="btn-ghost" onclick="openFolder()">Open Game Folder</button>
+  </div>
+  <div class="hint" id="apDirHint" style="font-size:11px;color:var(--muted);margin-top:4px">
+    These auto-detect a normal Archipelago install and should just work. If they're greyed out, set the Archipelago Checkout folder above to wherever Archipelago lives on this PC (works for both a normal install and a from-source checkout) — or just use your installed Archipelago's own Launcher and click "Shadow Man Remastered Client" there instead.
   </div>
 
 </div>
@@ -1397,6 +1477,34 @@ async function browseApplyGameDir() {
   if (result) document.getElementById('applyGameDir').value = result;
 }
 
+async function browseApDir() {
+  const current = document.getElementById('apDirInput').value.trim();
+  const result = await window.pywebview.api.browse_ap_dir(current);
+  if (result) document.getElementById('apDirInput').value = result;
+  await updateLaunchButtonsState();
+}
+
+// Gates the two client-launching buttons on having a real from-source
+// Archipelago checkout set (Launcher.py + .venv\Scripts\python.exe) --
+// added 2026-08-15 after finding these buttons don't work at all for a
+// normal player using the official Archipelago installer (a compiled
+// ArchipelagoLauncher app with no such folder anywhere), only for a dev
+// checkout. Rather than leave them clickable-but-silently-broken, they
+// stay disabled (with an explanatory title) until this field actually
+// points at something real. "Launch Game Only" and "Open Game Folder"
+// are unaffected -- they never touch ap_dir at all.
+async function updateLaunchButtonsState() {
+  const apDir = document.getElementById('apDirInput').value.trim();
+  const valid = apDir ? await window.pywebview.api.validate_ap_dir(apDir) : false;
+  for (const id of ['btnLaunchGameClient', 'btnLaunchClientOnly']) {
+    const btn = document.getElementById(id);
+    btn.disabled = !valid;
+    btn.style.opacity = valid ? '' : '0.4';
+    btn.style.cursor = valid ? '' : 'not-allowed';
+    btn.title = valid ? '' : "Couldn't find your Archipelago install. Set the Archipelago Checkout folder above.";
+  }
+}
+
 function appendApplyOutput(txt) {
   const el = document.getElementById('applyOutput');
   el.textContent += txt;
@@ -1439,10 +1547,11 @@ function onApplyError(msg) {
   appendApplyOutput('[Error: ' + msg + ']\n');
   setApplyStatus('Error launching apply_ap_seed.', 'err');
 }
-function launchGame() {
+async function launchGame() {
   const gameDir = document.getElementById('applyGameDir').value.trim();
   if (!gameDir) { appendApplyOutput('⚠ Select your Shadow Man Remastered game directory above first.\n'); return; }
-  window.pywebview.api.launch_game(gameDir);
+  const clientOk = await window.pywebview.api.launch_game(gameDir);
+  if (!clientOk) appendApplyOutput("⚠ Launched the game, but couldn't start the client — set the Archipelago Checkout folder above, then use \"Launch Client Only.\"\n");
 }
 async function launchGameOnly() {
   const gameDir = document.getElementById('applyGameDir').value.trim();
@@ -1452,7 +1561,7 @@ async function launchGameOnly() {
 }
 async function launchClientOnly() {
   const ok = await window.pywebview.api.launch_client_only();
-  if (!ok) appendApplyOutput("⚠ Couldn't find the Archipelago checkout/venv to start the client from. Check the ap_dir setting.\n");
+  if (!ok) appendApplyOutput("⚠ Couldn't find your Archipelago install to start the client from. Set the Archipelago Checkout folder above.\n");
 }
 function openFolder() {
   const gameDir = document.getElementById('applyGameDir').value.trim();
@@ -1463,6 +1572,11 @@ function openFolder() {
 window.addEventListener('pywebviewready', async () => {
   const dir = await window.pywebview.api.get_default_dir();
   if (dir) document.getElementById('applyGameDir').value = dir;
+  const apDir = await window.pywebview.api.get_ap_dir();
+  if (apDir) document.getElementById('apDirInput').value = apDir;
+  document.getElementById('apDirInput').addEventListener('change', updateLaunchButtonsState);
+  document.getElementById('apDirInput').addEventListener('blur', updateLaunchButtonsState);
+  await updateLaunchButtonsState();
   onGatePresetChange();
   onEnemiesChange();
   syncCadeauxGatedDependency();
@@ -1582,11 +1696,57 @@ class _Api:
         )
         return result[0] if result else None
 
-    def _get_ap_dir(self) -> Path:
+    def _get_ap_dir(self) -> "Path | None":
         saved = _load_prefs().get("ap_dir", "")
-        if saved and (Path(saved) / "Launcher.py").exists():
+        if saved and _resolve_ap_launch_cmd(Path(saved)) is not None:
             return Path(saved)
-        return DEFAULT_AP_DIR
+        auto = _autodetect_ap_dir()
+        if auto is not None:
+            return auto
+        if _resolve_ap_launch_cmd(DEFAULT_AP_DIR) is not None:
+            return DEFAULT_AP_DIR
+        return None
+
+    def get_ap_dir(self) -> str:
+        """Saved "ap_dir" pref, else an auto-detected install, used to
+        prefill the Archipelago Checkout field on load. Deliberately never
+        falls back to DEFAULT_AP_DIR here (that's Jon's own dev-machine
+        path — showing it to every other user as if it were their setting
+        would be wrong), but the auto-detected common install path IS
+        safe to show, since it's genuinely computed from this machine."""
+        saved = _load_prefs().get("ap_dir", "")
+        if saved:
+            return saved
+        auto = _autodetect_ap_dir()
+        return str(auto) if auto is not None else ""
+
+    def browse_ap_dir(self, current: str) -> "str | None":
+        """Folder picker for the Archipelago Checkout field. Saves
+        immediately on selection (unlike game_dir, which only saves after
+        a successful apply) since there's no other natural "success" point
+        to hang the save off of here — this field isn't used by apply_seed
+        at all, only by the launch buttons below it."""
+        assert self._window is not None
+        result = self._window.create_file_dialog(
+            webview.FileDialog.FOLDER,
+            directory=current or str(Path.home()),
+        )
+        if not result:
+            return None
+        chosen = result[0]
+        prefs = _load_prefs()
+        prefs["ap_dir"] = chosen
+        _save_prefs(prefs)
+        return chosen
+
+    def validate_ap_dir(self, ap_dir: str) -> bool:
+        """Whether ap_dir is something the launch buttons can actually
+        use -- either layout _resolve_ap_launch_cmd() recognizes. Drives
+        the JS side's enable/disable state for "Launch Game + Client" /
+        "Launch Client Only"."""
+        if not ap_dir:
+            return False
+        return _resolve_ap_launch_cmd(Path(ap_dir)) is not None
 
     def _launch_ap_client(self) -> bool:
         """
@@ -1630,29 +1790,51 @@ class _Api:
         degrades silently (never block launching the game itself over
         this), same "degrade gracefully" convention client.py's own
         overlay-DLL injection already follows.
+
+        Supports two Archipelago layouts via _resolve_ap_launch_cmd()
+        (2026-08-15): a from-source checkout (Launcher.py + .venv, what
+        this originally assumed -- only true for Jon's own dev setup) and
+        the officially-installed ArchipelagoLauncher.exe (what every real
+        player actually has -- confirmed via ArchipelagoMW/Archipelago's
+        own setup.py/inno_setup.iss: it's Launcher.py itself frozen to an
+        exe with the same "pass a component's display name as an
+        argument" behavior, installed to %PROGRAMDATA%\\Archipelago by
+        default). _autodetect_ap_dir() finds that default location
+        automatically, so most players never have to touch the
+        Archipelago Checkout field at all.
         """
         ap_dir = self._get_ap_dir()
-        python_exe = ap_dir / ".venv" / "Scripts" / "python.exe"
-        launcher = ap_dir / "Launcher.py"
-        if not python_exe.exists() or not launcher.exists():
+        if ap_dir is None:
+            return False
+        cmd = _resolve_ap_launch_cmd(ap_dir)
+        if cmd is None:
             return False
         try:
-            subprocess.Popen(
-                [str(python_exe), str(launcher), "Shadow Man Remastered Client"],
-                cwd=str(ap_dir),
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-            )
+            # CREATE_NEW_CONSOLE only for the source/python.exe path, where
+            # it's specifically so you can see the client's live log output
+            # -- kept off for the compiled ArchipelagoLauncher.exe path
+            # since it's an unknown-to-us GUI-subsystem build and there's
+            # no reason to risk an extra console flag on it.
+            flags = subprocess.CREATE_NEW_CONSOLE if cmd[0].lower().endswith("python.exe") else 0
+            subprocess.Popen(cmd, cwd=str(ap_dir), creationflags=flags)
             return True
         except OSError:
             return False
 
-    def launch_game(self, game_dir: str) -> None:
+    def launch_game(self, game_dir: str) -> bool:
+        """Returns whether the client launch half succeeded, so the JS
+        side can show a soft warning -- the game itself still launches
+        either way (2026-08-15: this used to swallow that result
+        entirely, which is exactly how a broken ap_dir on a fresh machine
+        went unnoticed -- the game would start fine and there'd be no
+        client and no error)."""
         exe = Path(game_dir) / "thoth_x64_patched.exe"
+        client_ok = self._launch_ap_client()
         if exe.exists():
-            self._launch_ap_client()
             subprocess.Popen([str(exe)], cwd=game_dir)
         else:
             self.open_folder(game_dir)
+        return client_ok
 
     def launch_game_only(self, game_dir: str) -> bool:
         """Game only, no client — e.g. testing the standalone (non-AP)
