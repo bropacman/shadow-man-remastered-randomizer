@@ -4,7 +4,7 @@
 
 </div>
 
-**Version: v1.1.7**
+**Version: v1.2.0**
 
 A standalone randomizer for **Shadow Man Remastered** (Nightdive Studios, 2021).
 Randomizes key items, souls, weapons, gad powers, coffin gate thresholds, entrances,
@@ -39,7 +39,11 @@ enemies, music, and SFX using a custom assumed-fill algorithm.
 - **Starting max health** — player max health at game start on a 0.5–10 scale in 0.5 steps (vanilla: 5)
 - **Life altar health grant** — health restored per altar interaction on the same 0.5–10 scale (vanilla: 1)
 - **Death penalty** — reduces max health by a configurable step (0.5–10, in 0.5 increments) on each death, floored so the player always retains at least one step; 0 = disabled
+- **Shift-sprint** — hold Shift to move at a configurable multiple of normal speed, on both land and in water, on a 1.0–5.0 scale; 0 = disabled (vanilla movement)
 - **Insanity** — allows progression items to be placed in normally-excluded slots; tier 1 = soul/govi slots, tier 2 = +cadeaux, tier 3 = all slots
+
+### Secrets
+- **Force "I Like Dead Side Guns"** — forces the vanilla secret that lets Deadside weapons work on Liveside and vice versa, without needing to find its hidden in-world unlock trigger (requires having launched the game at least once already)
 
 > **Note:** Cadeaux counting is not yet fully reliable — some cadeaux may not register correctly in-game. Consider lowering the altar cost and Fogometers door values from their defaults until this is resolved.
 
@@ -72,6 +76,7 @@ enemies, music, and SFX using a custom assumed-fill algorithm.
 - Patches are packed into a single `shadowman_randomizer_<seed>.kpf` mod file — the seed number is part of the filename
 - Installed to the game's `mods/` folder — no original files are modified
 - Delete the KPF (or run `--restore`) to instantly return to vanilla
+- **Dedicated save files** — randomizer playthroughs save to their own `rando/` folder instead of the vanilla `saves/` folder, so randomizer and vanilla saves never collide; launching unpatched `thoth_x64.exe` still reads/writes vanilla saves untouched, no manual toggling required
 
 ---
 
@@ -175,6 +180,10 @@ Several of the options below accept `random` in place of a number — when passe
 | `--altar-health-grant N` | `1` | Health granted per life altar interaction on a 0.5–10 scale in 0.5 steps (vanilla: 1). Note: starting health + 5 × grant should not exceed the cap of 10. Accepts `random`. |
 | `--death-penalty N` | `0` | Reduce max health by N steps on each death, floored at N steps. 0 = disabled. Accepts decimals in 0.5 steps (e.g. `0.5` = −500/death, `1.0` = −1000/death). |
 | `--death-penalty-random` | off | Choose a random death-penalty step (0.5–10.0) per-seed rather than disabling it. Reproducible for a given seed. |
+| `--sprint-multiplier N` | `0` | Hold Shift to move at this multiple of normal speed, on both land and in water, on a 1.0–5.0 scale. 0 = disabled (vanilla movement, no Shift-sprint). |
+| `--sprint-multiplier-random` | off | Choose a random sprint multiplier (1.5x–4.0x) per-seed rather than disabling it. Reproducible for a given seed. |
+| `--deadside-guns` | off | Force the "I Like Dead Side Guns" secret on (Deadside weapons work on Liveside and vice versa) without needing to find its hidden in-world unlock trigger. Edits `kexengine.cfg` at patch time — requires having launched the game at least once already. |
+| `--deadside-guns-random` | off | Randomly decide per-seed whether to force the Deadside Guns secret on. |
 
 
 ### Map tracker (Teddy Bear hints)
