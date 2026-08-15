@@ -76,6 +76,37 @@ def randomize_enemies(
         SLOTS_BY_CONTEXT, SLOTS_BY_MOVEMENT,
         AMBIENT_BY_CONTEXT, AMBIENT_BY_MOVEMENT,
     )
+
+    # True Form slots (RSC_X_TRUE_FORM) are boss-tier (difficulty tier 0 —
+    # "never placed by difficulty mode", per the module docstring) and must
+    # never be swept into the GENERAL enemy shuffle's candidate pool. The
+    # only mechanism allowed to touch them is the dedicated
+    # randomize_true_forms(), gated behind its own shuffle_true_forms
+    # toggle. Previously the only protection was the occupied_keys check
+    # below, which is populated from true_form_patches — but that's only
+    # non-empty when shuffle_true_forms was ALSO enabled (see ap_patcher.py/
+    # patcher.py's call site: tf_patches defaults to {} when the toggle is
+    # off). With shuffle_true_forms off, true_form_patches={} meant
+    # occupied_keys was empty too, so true form slots (category=="enemy",
+    # same as everything else) were shuffled right along with regular
+    # enemies — confirmed live 2026-07-26 (Jon's YAML had shuffle_enemies:
+    # true, shuffle_true_forms: false, and true forms still relocated).
+    # Fixed with an unconditional, structural exclusion here (checked
+    # against each record's own vanilla object) that applies regardless of
+    # the toggle or whether true_form_patches was passed — this also
+    # incidentally covers a minor pre-existing gap in the occupied_keys
+    # mechanism itself (a true form that self-mapped to its own slot inside
+    # randomize_true_forms() produces no patch entry, so occupied_keys
+    # wouldn't have protected it either, even with shuffle_true_forms on).
+    SLOTS_BY_CONTEXT = {
+        key: [r for r in slots if r.object != "RSC_X_TRUE_FORM"]
+        for key, slots in SLOTS_BY_CONTEXT.items()
+    }
+    SLOTS_BY_MOVEMENT = {
+        key: [r for r in slots if r.object != "RSC_X_TRUE_FORM"]
+        for key, slots in SLOTS_BY_MOVEMENT.items()
+    }
+
     mode         = config.get("enemy_mode", "difficulty")
     mix_movement = config.get("enemy_mix_movement", False)
     uncap_counts = config.get("enemy_uncap_counts", False)

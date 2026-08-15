@@ -145,12 +145,20 @@ def apply_dark_engine_patch(
     table: dict[int, tuple[int, int, int]],
     *,
     dry_run: bool = False,
+    verbose: bool = False,
 ) -> None:
     """
     Write combination values to thoth_x64.exe.
 
     table: dict returned by randomize_dark_engine() — keys 1–6 (table piston_id).
     Each value is (bar0, bar1, bar2) with each bar in range 1–5.
+
+    verbose defaults to False (2026-07-21) so the actual vanilla→new
+    combination values aren't echoed to a live console someone might be
+    watching/streaming — the same values already go into the spoiler log
+    via _spoiler_piston_combos_section()/write_spoiler_log(), so nothing is
+    lost by staying quiet here. Pass verbose=True for the __main__
+    diagnostic CLI below, where seeing the values is the whole point.
     """
     if not Path(exe_path).exists():
         print(f"  [dark_engine] EXE not found: {exe_path} — skipping")
@@ -171,6 +179,7 @@ def apply_dark_engine_patch(
     vanilla = VANILLA_TABLE
 
     changed = False
+    changed_count = 0
     for pid in range(1, 7):
         cur = current[pid]
         new = table[pid]
@@ -179,15 +188,25 @@ def apply_dark_engine_patch(
         if new != van:
             tag = f"{van[0]}-{van[1]}-{van[2]} → {new[0]}-{new[1]}-{new[2]}"
             changed = True
+            changed_count += 1
         else:
             tag = f"{van[0]}-{van[1]}-{van[2]} (unchanged)"
-        print(f"  [dark_engine] {label}: {tag}")
+        if verbose:
+            print(f"  [dark_engine] {label}: {tag}")
+
+    if not verbose:
+        if changed:
+            print(f"  [dark_engine] {changed_count} piston combination(s) "
+                  f"randomized (see spoiler log for values)")
+        else:
+            print("  [dark_engine] All combinations unchanged (vanilla)")
 
     if changed and not dry_run:
         _write_table(data, offset, table)
         Path(exe_path).write_bytes(data)
-        print(f"  [dark_engine] Written to {Path(exe_path).name}")
-    elif not changed:
+        if verbose:
+            print(f"  [dark_engine] Written to {Path(exe_path).name}")
+    elif not changed and verbose:
         print("  [dark_engine] All combinations unchanged (vanilla)")
 
 
@@ -261,10 +280,17 @@ def extract_and_patch_journal(
     kpf_files: list[str],
     table: dict[int, tuple[int, int, int]],
     tmp_dir: str,
+    *,
+    verbose: bool = False,
 ) -> str | None:
     """
     Extract journal/11.MUp from the base KPFs, patch it, write to tmp_dir.
     Returns the local path of the patched file, or None if not found.
+
+    verbose defaults to False (2026-07-21) — same reasoning as
+    apply_dark_engine_patch(): the journal combination values are exactly
+    what the puzzle asks the player to solve, and they're already in the
+    spoiler log, so the live console stays quiet about them by default.
     """
     from kpf_handler import extract_file_from_kpf, build_kpf_index, find_file_in_kpf
 
@@ -289,13 +315,20 @@ def extract_and_patch_journal(
     Path(tmp_path).write_bytes(patched)
 
     vanilla = VANILLA_TABLE
+    changed_count = 0
     for pid in range(1, 7):
         van = vanilla[pid]
         new = table[pid]
         van_str = f"{van[0]}{van[1]}{van[2]}"
         new_str = f"{new[0]}{new[1]}{new[2]}"
         if new_str != van_str:
-            print(f"  [dark_engine] Journal {PISTON_NAMES[pid]}: {van_str} → {new_str}")
+            changed_count += 1
+            if verbose:
+                print(f"  [dark_engine] Journal {PISTON_NAMES[pid]}: {van_str} → {new_str}")
+
+    if not verbose and changed_count:
+        print(f"  [dark_engine] Journal updated — {changed_count} combination(s) "
+              f"randomized (see spoiler log for values)")
 
     return tmp_path
 
@@ -336,9 +369,9 @@ if __name__ == "__main__":
     if args.test_444:
         test_table = dict(VANILLA_TABLE)
         test_table[1] = (4, 4, 4)
-        apply_dark_engine_patch(args.exe, test_table)
+        apply_dark_engine_patch(args.exe, test_table, verbose=True)
         print("\nTest patch applied: piston_id=1 → 4-4-4")
 
     if args.restore:
-        apply_dark_engine_patch(args.exe, dict(VANILLA_TABLE))
+        apply_dark_engine_patch(args.exe, dict(VANILLA_TABLE), verbose=True)
         print("\nRestored to vanilla.")

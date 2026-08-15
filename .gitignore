@@ -67,6 +67,7 @@ reference/data/
 
 # ── Local data / scratch ─────────────────────────────────────────
 data/locations_backup_*.csv
+data/locations_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].csv
 data/fix.log
 salvage_rsc_dump.csv
 new_ambients.csv
@@ -78,3 +79,9 @@ gui_prefs.json
 
 # ── AI assistant instructions (local only) ───────────────────────
 CLAUDE.md
+
+# ── Extracted game reference assets (huge; never commit) ──
+reference/
+
+# ── overlay_dll build output (CMake/MSVC artifacts, deps, IDE cache) ──
+overlay_dll/build/

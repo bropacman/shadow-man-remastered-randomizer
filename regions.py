@@ -41,7 +41,7 @@ from extracted_locations import (
     GATED_LOCATIONS,
     GATES_BY_REGION,
 )
-from access_rules import R, set_gate_remap, R as _R, _gate_sl_only
+from access_rules import R, set_gate_remap, R as _R, _gate_sl_only, CAGEWAYS_ROUTES, PLAYROOMS_ROUTES
 from locations import ShadowManLocation   # AP Location subclass — defined in locations.py
 
 
@@ -123,6 +123,30 @@ def _connect(
     source.connect(target, rule=rule)
 
 
+def _eval_routes(routes: list, state, player: int) -> bool:
+    """
+    Evaluate a route list (OR of AND-token-routes — same shape as
+    access_rules._LOWER_DEADSIDE_ROUTES / CAGEWAYS_ROUTES / PLAYROOMS_ROUTES)
+    against a CollectionState. Used for Cageways/Playrooms, which — unlike
+    every gate in GATE_DEPENDENCIES — have a backtrack route that bypasses
+    their own gate's SL entirely (confirmed live by Jon 2026-08-03), so
+    they can't be expressed as a single R.gate() call the way every other
+    region connection here is. Small, independent copy of the same
+    tokenizer already duplicated in R.gate()'s step-1 check and this file's
+    own entrance-shuffle _make_routes_rule — matches this codebase's
+    existing pattern of small, separately-verified duplicates.
+    """
+    def _token(t: str) -> bool:
+        if t.startswith("GATE_"):
+            return R.gate(t, state, player)
+        if t == "BATON":
+            return R.baton(state, player)
+        if t == "GAD2_WALK":
+            return R.gad2_walk(state, player)
+        return False
+    return any(all(_token(t) for t in route) for route in routes)
+
+
 # ── Sub-region builder ────────────────────────────────────────────────────────
 
 def _build_sub_regions(
@@ -201,17 +225,29 @@ def create_regions(multiworld: MultiWorld, player: int) -> None:
     # Liveside levels use vanilla R.sl2() — their SL2 check is EXE-hardcoded
     # and is never affected by gate shuffling.
     #
-    # Temple of Prophecy has two independent routes:
+    # Temple of Prophecy has three independent routes (third added
+    # 2026-07-26 — Jon confirmed live in-game reaching it via Route C while
+    # this only modeled A/B, matching the same Asylum+Baton+Gad2 shortcut
+    # _LOWER_DEADSIDE_ROUTES already grants Lavaducts/La Lame/Blood/
+    # Fogometers):
     #   Route A: GATE_DEADSIDE_PATH_7 alone
     #   Route B: GATE_DEADSIDE_CAGEWAYS + GATE_DEADSIDE_PLAYROOMS + GATE_DEADSIDE_PATH_6
+    #   Route C: GATE_DEADSIDE_ASYLUM + Baton + Gad 2 (walk on lava)
+    #
+    # Cageways and Playrooms (2026-08-03 — Jon confirmed live): also each
+    # reachable via Route B (Path 7 alone) or Route C (Asylum+Baton+Gad2),
+    # on top of their own front door — backtracking from the lower Deadside
+    # cluster bypasses that gate's own SL entirely, not just its ancestor
+    # chain, so this can't be R.gate("GATE_DEADSIDE_CAGEWAYS"/"...PLAYROOMS")
+    # alone anymore. See CAGEWAYS_ROUTES/PLAYROOMS_ROUTES in access_rules.py.
 
     connections: list[tuple[str, object]] = [
         # Coffin gate regions
         (DEADSIDE_WASTELAND, lambda state: R.gate("GATE_DEADSIDE_WASTELAND", state, player)),
         (ASYLUM_GATEWAYS, lambda state: R.gate("GATE_DEADSIDE_ASYLUM", state, player)),
         (TEMPLE_FIRE, lambda state: R.gate("GATE_DEADSIDE_PATH_3", state, player)),
-        (ASYLUM_CAGEWAYS, lambda state: R.gate("GATE_DEADSIDE_CAGEWAYS", state, player)),
-        (ASYLUM_PLAYROOMS, lambda state: R.gate("GATE_DEADSIDE_PLAYROOMS", state, player)),
+        (ASYLUM_CAGEWAYS, lambda state: _eval_routes(CAGEWAYS_ROUTES, state, player)),
+        (ASYLUM_PLAYROOMS, lambda state: _eval_routes(PLAYROOMS_ROUTES, state, player)),
         (ASYLUM_LAVADUCTS, lambda state: R.gate("GATE_DEADSIDE_LAVADUCTS", state, player)),
         (TEMPLE_BLOOD, lambda state: R.gate("GATE_DEADSIDE_BLOOD", state, player)),
         (ASYLUM_FOGOMETERS, lambda state: R.gate("GATE_DEADSIDE_FOGOMETERS", state, player)),
@@ -219,7 +255,10 @@ def create_regions(multiworld: MultiWorld, player: int) -> None:
                 R.gate("GATE_DEADSIDE_PATH_7", state, player) or
                 (R.gate("GATE_DEADSIDE_CAGEWAYS", state, player) and
                  R.gate("GATE_DEADSIDE_PLAYROOMS", state, player) and
-                 R.gate("GATE_DEADSIDE_PATH_6", state, player))
+                 R.gate("GATE_DEADSIDE_PATH_6", state, player)) or
+                (R.gate("GATE_DEADSIDE_ASYLUM", state, player) and
+                 R.baton(state, player) and
+                 R.gad2_walk(state, player))
         ))
     ]
 
@@ -227,9 +266,24 @@ def create_regions(multiworld: MultiWorld, player: int) -> None:
         # Use 'marrow' as the source instead of 'menu'
         _connect(marrow, regions[region_name], rule=rule)
 
-    _connect(regions[ASYLUM_GATEWAYS], regions[ASYLUM_CATHEDRAL], rule=lambda state: R.eng_key(state, player))
-    _connect(regions[ASYLUM_GATEWAYS], regions[ASYLUM_EXPERIMENTATION], rule=lambda state: R.eng_key(state, player))
-    _connect(regions[ASYLUM_CAGEWAYS], regions[ASYLUM_ENGINE_BLOCK], None)
+    # Eng Key OR Gad 2 (walk on lava) — confirmed live by Jon 2026-08-03:
+    # Gad 2's lava-walk lets you bypass the Eng Key-locked door into
+    # Cathedral of Pain / Experimentation Rooms entirely, same "physical
+    # shortcut around a locked door" shape as the Cageways/Playrooms
+    # backtrack above (just OR'd directly here rather than needing a
+    # separate route-list constant, since there's no own-gate-SL
+    # complication — Cathedral/Experimentation have no coffin gate of
+    # their own, only the eng_key item check).
+    _connect(regions[ASYLUM_GATEWAYS], regions[ASYLUM_CATHEDRAL], rule=lambda state: R.eng_key(state, player) or R.gad2_walk(state, player))
+    _connect(regions[ASYLUM_GATEWAYS], regions[ASYLUM_EXPERIMENTATION], rule=lambda state: R.eng_key(state, player) or R.gad2_walk(state, player))
+    # Cageways → Engine Block hub (2026-08-06 fix, Jon confirmed live: this
+    # was modeled as a free connection once Cageways is reached -- WRONG,
+    # reaching Engine Block from Cageways requires the Engineers Key, same
+    # as the Gateways -> Cathedral/Experimentation path just above. Found
+    # via a real AP-side UT false-positive report ("Asylum: Engine Block -
+    # Barrel - Asylum 14" showing in-logic without eng_key), ported here
+    # for parity per this file's own cross-repo drift warning.
+    _connect(regions[ASYLUM_CAGEWAYS], regions[ASYLUM_ENGINE_BLOCK], rule=lambda state: R.eng_key(state, player))
 
     # 1. Define Level -> (Engine Section, Completion Rule)
     # Note: 'None' for London/Florida if they only require Night
@@ -298,8 +352,11 @@ def build_level_rules(
             (DEADSIDE_WASTELAND, lambda state: _R.gate("GATE_DEADSIDE_WASTELAND", state, 1)),
             (ASYLUM_GATEWAYS,    lambda state: _R.gate("GATE_DEADSIDE_ASYLUM",    state, 1)),
             (TEMPLE_FIRE,        lambda state: _R.gate("GATE_DEADSIDE_PATH_3",    state, 1)),
-            (ASYLUM_CAGEWAYS,    lambda state: _R.gate("GATE_DEADSIDE_CAGEWAYS",  state, 1)),
-            (ASYLUM_PLAYROOMS,   lambda state: _R.gate("GATE_DEADSIDE_PLAYROOMS", state, 1)),
+            # Cageways/Playrooms (2026-08-03): front door OR the same lower-
+            # Deadside backtrack routes as Temple of Prophecy — see
+            # CAGEWAYS_ROUTES/PLAYROOMS_ROUTES comment in access_rules.py.
+            (ASYLUM_CAGEWAYS,    lambda state: _eval_routes(CAGEWAYS_ROUTES, state, 1)),
+            (ASYLUM_PLAYROOMS,   lambda state: _eval_routes(PLAYROOMS_ROUTES, state, 1)),
             (ASYLUM_LAVADUCTS,   lambda state: _R.gate("GATE_DEADSIDE_LAVADUCTS", state, 1)),
             (TEMPLE_BLOOD,       lambda state: _R.gate("GATE_DEADSIDE_BLOOD",     state, 1)),
             (ASYLUM_FOGOMETERS,  lambda state: _R.gate("GATE_DEADSIDE_FOGOMETERS",state, 1)),
@@ -308,6 +365,10 @@ def build_level_rules(
                     _R.gate("GATE_DEADSIDE_CAGEWAYS",  state, 1) and
                     _R.gate("GATE_DEADSIDE_PLAYROOMS", state, 1) and
                     _R.gate("GATE_DEADSIDE_PATH_6",    state, 1)
+                ) or (
+                    _R.gate("GATE_DEADSIDE_ASYLUM", state, 1) and
+                    _R.baton(state, 1) and
+                    _R.gad2_walk(state, 1)
                 )
             )),
         ]
@@ -323,10 +384,15 @@ def build_level_rules(
         )
         from randomizers.entrance_randomizer import _TRANSITION_BY_PORTAL_ID
 
+        # Fixed 2026-07-21 (see DEADSIDE_PORTAL_GATE's comment block in
+        # access_rules.py): uses R.gate() now, not _gate_sl_only — the
+        # ancestor-gate chain (GATE_DEPENDENCIES) models the physical walk
+        # to a portal's own location in Marrow Gates and must be walked
+        # regardless of where the portal's cutscene has been shuffled to.
         def _make_routes_rule(routes: list) -> callable:
             def rule(state) -> bool:
                 def _token(t: str) -> bool:
-                    if t.startswith("GATE_"): return _gate_sl_only(t, state, 1)
+                    if t.startswith("GATE_"): return _R.gate(t, state, 1)
                     if t == "BATON":          return _R.baton(state, 1)
                     if t == "GAD2_WALK":      return _R.gad2_walk(state, 1)
                     return False
@@ -342,7 +408,7 @@ def build_level_rules(
                 gate = DEADSIDE_PORTAL_GATE[portal_file]
                 if isinstance(gate, str):
                     gid = gate
-                    portal_rule = lambda state, g=gid: _gate_sl_only(g, state, 1)
+                    portal_rule = lambda state, g=gid: _R.gate(g, state, 1)
                 else:
                     portal_rule = _make_routes_rule(gate)
             else:
@@ -377,15 +443,22 @@ def build_level_rules(
 
     # ── Internal sub-regions — identical for both paths ───────────────────────
 
-    # Asylum: Cathedral + Experimentation require Gateways + Eng Key
+    # Asylum: Cathedral + Experimentation require Gateways + (Eng Key OR
+    # Gad 2 walk-on-lava bypass — confirmed live by Jon 2026-08-03, mirrors
+    # create_regions()'s matching connection comment above).
     if ASYLUM_GATEWAYS in rules:
         gw = rules[ASYLUM_GATEWAYS]
-        rules[ASYLUM_CATHEDRAL]     = lambda state, p=gw: p(state) and _R.eng_key(state, 1)
-        rules[ASYLUM_EXPERIMENTATION] = lambda state, p=gw: p(state) and _R.eng_key(state, 1)
+        rules[ASYLUM_CATHEDRAL]     = lambda state, p=gw: p(state) and (_R.eng_key(state, 1) or _R.gad2_walk(state, 1))
+        rules[ASYLUM_EXPERIMENTATION] = lambda state, p=gw: p(state) and (_R.eng_key(state, 1) or _R.gad2_walk(state, 1))
 
-    # Asylum: Engine Block — free once Cageways reached
+    # Asylum: Engine Block — requires Cageways AND the Engineers Key
+    # (2026-08-06 fix, Jon confirmed live: this used to just alias
+    # Cageways' own rule directly, treating Engine Block as free once
+    # Cageways is reached -- wrong, see create_regions()'s matching
+    # connection comment above for the full writeup).
     if ASYLUM_CAGEWAYS in rules:
-        rules[ASYLUM_ENGINE_BLOCK] = rules[ASYLUM_CAGEWAYS]
+        cw = rules[ASYLUM_CAGEWAYS]
+        rules[ASYLUM_ENGINE_BLOCK] = lambda state, p=cw: p(state) and _R.eng_key(state, 1)
 
     # Liveside levels — Cathedral + retractors
     # If Cathedral is unreachable (e.g. Asylum assigned to a soul gate and

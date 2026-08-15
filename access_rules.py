@@ -52,6 +52,51 @@ def set_piston_combos_random(val: bool) -> None:
     _piston_combos_random = val
 
 
+# Set to True when the "Unique Retractor Keys" option is on. When enabled,
+# each of the 5 liveside levels requires its own specific retractor (a
+# per-seed randomized 1:1 assignment computed in fill.py) instead of the
+# vanilla shared "any 5 retractors" gate. Populated at generation time by
+# set_unique_retractor_keys(), called from fill.py's assumed_fill()/
+# validate_fill() (same pattern as set_piston_combos_random/
+# set_soul_thresholds — reset to False at the end of each call so it never
+# bleeds into a subsequent, unrelated generation).
+#
+# This module only needs the boolean toggle, not the actual loc_key->region
+# assignment map — that mapping is only needed where a retractor is
+# physically COLLECTED (fill.py's simulate_playthrough, to know which
+# virtual "_retractor_key:<region>" flag to set), whereas the rules below
+# only ever need to ask "do I already have THIS region's key" using a
+# region name that's already hardcoded per rule (see _LIVESIDE_* below).
+_unique_retractor_keys: bool = False
+
+
+def set_unique_retractor_keys(val: bool) -> None:
+    """Called by fill.py assumed_fill/validate_fill when unique_retractor_keys is on."""
+    global _unique_retractor_keys
+    _unique_retractor_keys = val
+
+
+# Liveside region friendly names — must exactly match regions.py's
+# LIVESIDE_LONDON/LIVESIDE_PRISON/LIVESIDE_SALVAGE/LIVESIDE_QUEENS/
+# LIVESIDE_FLORIDA constants. Duplicated here (not imported) because
+# regions.py imports R from this module — importing regions.py back would
+# be circular. Matches this file's existing convention of hardcoding item
+# name strings locally (_BATON, _CALABASH, etc.) rather than importing them.
+_LIVESIDE_LONDON  = "Down Street Station, London"
+_LIVESIDE_PRISON  = "Gardelle County Jail, Texas"
+_LIVESIDE_FLORIDA = "Summer Camp, Florida"
+_LIVESIDE_SALVAGE = "Salvage Yard, Mojave Desert"
+_LIVESIDE_QUEENS  = "Mordant Street, Queens, NY"
+
+
+def _retractor_key_item(region: str) -> str:
+    """Virtual (non-RSC) item name used to track a per-level retractor key
+    in FakeState/CollectionState's inventory. Must match the key fill.py's
+    simulate_playthrough() writes when a retractor assigned to `region` is
+    collected."""
+    return f"_retractor_key:{region}"
+
+
 def set_gate_remap(gate_remap: dict[str, int]) -> None:
     """
     Called once by patcher.py after randomize_gate_sl_links() runs.
@@ -102,6 +147,23 @@ GATE_DEPENDENCIES: dict[str, object] = {
     # GATE_DEADSIDE_MARROW   — no dependency, freely reachable
     # GATE_DEADSIDE_MYSTERY  — locked SL10, dependency irrelevant
     # Non-deadside gates     — region dependency only, handled in fill.py
+    #
+    # NOTE: GATE_DEADSIDE_CAGEWAYS / GATE_DEADSIDE_PLAYROOMS deliberately
+    # stay single-string (front-door-only) entries here. They ALSO have two
+    # backtrack routes (confirmed live by Jon 2026-08-03: reaching the lower
+    # Deadside cluster via Route B or Route C lets you walk back UP into
+    # Cageways/Playrooms from behind, bypassing that gate's own SL entirely
+    # — not just its ancestor chain). That can't be modeled here, because
+    # R.gate() always re-enforces a gate's OWN soul threshold (step 2) on
+    # top of GATE_DEPENDENCIES (step 1) regardless of which route satisfied
+    # step 1 — correct for the four _LOWER_DEADSIDE_ROUTES destinations
+    # above (their own door genuinely still needs to be opened no matter
+    # which path you took to reach it), but wrong for Cageways/Playrooms,
+    # where the backtrack walks around the door, not just around the
+    # ancestor chain leading up to it. Modeled instead as a hand-built OR at
+    # the region-connection level — see CAGEWAYS_ROUTES / PLAYROOMS_ROUTES
+    # below, and their use in regions.py (mirrors how Temple of Prophecy has
+    # no single "own gate" of its own either).
 }
 
 
@@ -151,8 +213,20 @@ def _night(state: CollectionState, player: int) -> bool:
     )
 
 def _gate_sl_only(gate_id: str, state, player: int) -> bool:
-    """Check only the soul threshold for a gate — no dependency chain.
-    Used by entrance shuffle logic where portals bypass physical Deadside traversal."""
+    """
+    Check only the soul threshold for a gate — no dependency chain.
+
+    NOT USED by regions.py's entrance-shuffle portal rules as of the
+    2026-07-21 fix (kept defined for reference/manual debugging only). It
+    used to be, on the theory that portals "bypass physical Deadside
+    traversal" once shuffled — wrong: the ancestor-gate chain models the
+    physical walk to a portal's own location in Marrow Gates, which is
+    unaffected by where its cutscene points afterward, and still needs
+    walking every time. See DEADSIDE_PORTAL_GATE's comment block below for
+    the full story. regions.py now uses R.gate() for portal rules instead,
+    matching how the vanilla (unshuffled) _spoke_connections list already
+    evaluates these same gate ids.
+    """
     sl = _current_gate_sl.get(gate_id, GATE_VANILLA_SL.get(gate_id, 0))
     return _soul_level(state, player, sl)
 
@@ -202,13 +276,24 @@ class _Rules:
     # ── Shadow weapons / abilities ────────────────────────────────────────────
 
     def flambeau(self, state: CollectionState, player: int) -> bool:
-        return state.has(_FLAMBEAU, player)
+        # BUG FIX (2026-08-09, Jon's report): Flambeau doesn't actually
+        # work in-game until the player has Voodoo Power (SL1) — physically
+        # holding the item isn't enough, same real requirement as Calabash
+        # below. Ported from the AP world's identical fix the same day —
+        # see that repo's access_rules.py for the full writeup.
+        # _soul_level() here always reads the module-level
+        # _current_soul_thresholds (set via set_soul_thresholds()), so this
+        # automatically respects whatever this seed's soul_threshold_mode
+        # resolved, same as every other gate check in this file.
+        return state.has(_FLAMBEAU, player) and _soul_level(state, player, 1)
 
     def baton(self, state: CollectionState, player: int) -> bool:
         return state.has(_BATON, player)
 
     def calabash(self, state: CollectionState, player: int) -> bool:
-        return state.has(_CALABASH, player)
+        """See flambeau() above — same SL1/Voodoo Power requirement, same
+        fix, same date."""
+        return state.has(_CALABASH, player) and _soul_level(state, player, 1)
 
     def marteau(self, state: CollectionState, player: int) -> bool:
         return state.has(_MARTEAU, player)
@@ -254,35 +339,45 @@ class _Rules:
     # ── Liveside level entry ────────────────────────────────────────────
 
     def can_reach_liveside(self, state, player, current_region) -> bool:
+        if _unique_retractor_keys:
+            return state.has(_retractor_key_item(current_region), player)
+        return state.count("_retractors", player) >= 5
+
+    def _retractors_ok(self, state, player, region: str) -> bool:
+        """Shared retractor-gate check for the 5 completion rules below —
+        either this region's own key (unique_retractor_keys mode) or the
+        vanilla shared 5-count (default)."""
+        if _unique_retractor_keys:
+            return state.has(_retractor_key_item(region), player)
         return state.count("_retractors", player) >= 5
 
     # ── Liveside level completions ────────────────────────────────────────────
 
     def florida(self, state: CollectionState, player: int) -> bool:
-        return _night(state, player) and state.count("_retractors", player) >= 5
+        return _night(state, player) and self._retractors_ok(state, player, _LIVESIDE_FLORIDA)
 
     def london(self, state: CollectionState, player: int) -> bool:
-        return _night(state, player) and state.count("_retractors", player) >= 5
+        return _night(state, player) and self._retractors_ok(state, player, _LIVESIDE_LONDON)
 
     def queens(self, state: CollectionState, player: int) -> bool:
         return (
                 _night(state, player)
                 and state.has(_POIGNE, player)
-                and state.count("_retractors", player) >= 5
+                and self._retractors_ok(state, player, _LIVESIDE_QUEENS)
         )
 
     def prison(self, state: CollectionState, player: int) -> bool:
         return (
                 _night(state, player)
                 and state.has(_PRISON_KEY_CARD, player)
-                and state.count("_retractors", player) >= 5
+                and self._retractors_ok(state, player, _LIVESIDE_PRISON)
         )
 
     def salvage(self, state: CollectionState, player: int) -> bool:
         return (
                 _night(state, player)
                 and self.gad3_swim(state, player)
-                and state.count("_retractors", player) >= 5
+                and self._retractors_ok(state, player, _LIVESIDE_SALVAGE)
         )
 
     def schematic(self, state, player) -> bool:
@@ -349,18 +444,70 @@ R = _Rules()
 # ── Entrance randomization support ───────────────────────────────────────────
 # Defined after R so completion-rule lambdas can close over it.
 
+# Cageways and Playrooms are each reachable a second/third way, alongside
+# their own front door: once you land in the lower Deadside cluster via
+# Route B (Path 7) or Route C (Asylum + Baton + Gad2 lava walk), you can
+# freely backtrack UP into Cageways and Playrooms from behind, bypassing
+# that gate's own soul-level requirement entirely — confirmed live by Jon
+# 2026-08-03. Route A (Path 6) is deliberately NOT included: reaching
+# Path 6 already requires having passed through Cageways/Playrooms on the
+# way there, so adding it back as an alternate route into either of them
+# would be circular. Used by DEADSIDE_PORTAL_GATE below (entrance-shuffle
+# portal rules) and by regions.py's hand-built OR connection rules for
+# ASYLUM_CAGEWAYS/ASYLUM_PLAYROOMS (vanilla) — see that file's matching
+# comment. Also reused by fill.py's REGION_GATES heuristic table.
+CAGEWAYS_ROUTES: list[list[str]] = [
+    ["GATE_DEADSIDE_CAGEWAYS"],                        # front door — own SL still enforced
+    ["GATE_DEADSIDE_PATH_7"],                           # Route B backtrack
+    ["GATE_DEADSIDE_ASYLUM", "BATON", "GAD2_WALK"],     # Route C backtrack
+]
+PLAYROOMS_ROUTES: list[list[str]] = [
+    ["GATE_DEADSIDE_PLAYROOMS"],                        # front door — own SL still enforced
+    ["GATE_DEADSIDE_PATH_7"],                           # Route B backtrack
+    ["GATE_DEADSIDE_ASYLUM", "BATON", "GAD2_WALK"],     # Route C backtrack
+]
+
 # Which coffin gate in the Marrow Gates hub physically guards each portal?
-# Fixed game geography — does not change with entrance randomization.
+# BUG FIX (2026-07-21, caught in the AP world via a real seed, then found to
+# be identical here): this table used to be built on a "physical position,
+# independent of destination" theory, and regions.py's portal-rule builder
+# used _gate_sl_only (soul threshold only, no GATE_DEPENDENCIES ancestor
+# chain) on the reasoning that the chain only matters for reaching a
+# portal's VANILLA destination. Wrong — the chain models the physical walk
+# through Marrow Gates to reach a portal's own location, which doesn't
+# change just because its cutscene now points somewhere else. Fixed by
+# mapping each portal to the exact same gate id the vanilla
+# _spoke_connections list above already uses for that portal's destination
+# (proven-correct, unaffected by entrance shuffle either way), and by
+# switching regions.py's portal-rule construction from _gate_sl_only to
+# R.gate() so the ancestor chain gets walked. Temple of Prophecy (LE_Gad2.cut)
+# needs the route-list form: its vanilla connection isn't a single named
+# gate, it's "PATH_7, or (CAGEWAYS and PLAYROOMS and PATH_6), or (ASYLUM and
+# BATON and GAD2_WALK)". Third route added 2026-07-26 (Jon, confirmed live
+# in-game — reached Temple of Prophecy via the Asylum SL gate + Baton + Gad2
+# walk-on-lava shortcut while this table only modeled the first two routes,
+# missing the same shortcut _LOWER_DEADSIDE_ROUTES already grants
+# Lavaducts/La Lame/Blood/Fogometers). LE_Cage.cut/LE_Play.cut switched to
+# the route-list form too on 2026-08-03 — see CAGEWAYS_ROUTES/PLAYROOMS_ROUTES
+# above; unlike Temple of Prophecy their front door is a real named gate
+# with its own SL, so route 1 of each list is that single gate (full R.gate()
+# check, own SL enforced) and routes 2/3 are the backtrack bypass. Mirrored
+# into the AP world's copy of this same table — see that file's matching
+# comment.
 DEADSIDE_PORTAL_GATE: dict[str, str | list] = {
-    "LE_Wast.cut": "GATE_DEADSIDE_MARROW",
-    "LE_Asy1.cut": "GATE_DEADSIDE_WASTELAND",
+    "LE_Wast.cut": "GATE_DEADSIDE_WASTELAND",
+    "LE_Asy1.cut": "GATE_DEADSIDE_ASYLUM",
     "LE_Gad1.cut": "GATE_DEADSIDE_PATH_3",
-    "LE_Cage.cut": "GATE_DEADSIDE_PATH_3",
-    "LE_Play.cut": "GATE_DEADSIDE_CAGEWAYS",
-    "LE_Lava.cut": _LOWER_DEADSIDE_ROUTES,
-    "LE_Fog.cut":  _LOWER_DEADSIDE_ROUTES,
-    "LE_Gad2.cut": _LOWER_DEADSIDE_ROUTES,
-    "LE_Gad3.cut": _LOWER_DEADSIDE_ROUTES,
+    "LE_Cage.cut": CAGEWAYS_ROUTES,
+    "LE_Play.cut": PLAYROOMS_ROUTES,
+    "LE_Lava.cut": "GATE_DEADSIDE_LAVADUCTS",
+    "LE_Fog.cut":  "GATE_DEADSIDE_FOGOMETERS",
+    "LE_Gad2.cut": [
+        ["GATE_DEADSIDE_PATH_7"],
+        ["GATE_DEADSIDE_CAGEWAYS", "GATE_DEADSIDE_PLAYROOMS", "GATE_DEADSIDE_PATH_6"],
+        ["GATE_DEADSIDE_ASYLUM", "BATON", "GAD2_WALK"],
+    ],
+    "LE_Gad3.cut": "GATE_DEADSIDE_BLOOD",
 }
 
 # Spoke folder → the primary region connected directly from Deadside Marrow Gates.

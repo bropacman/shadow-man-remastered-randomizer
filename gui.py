@@ -345,6 +345,12 @@ _HTML = r"""<!DOCTYPE html>
         <button class="rng-btn" id="pistonCombosRng" onclick="event.preventDefault();toggleRng('pistonCombos')" title="Randomize per seed">&#127922;</button>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes the 6 dark engine piston combination values (each bar 1&ndash;5). The new combinations are written into the in-game journal page &mdash; Jack&rsquo;s Schematic becomes a required progression item to read them.</span></span>
       </label>
+      <label class="check-label" style="grid-column:1/-1">
+        <input type="checkbox" id="uniqueRetractorKeys" onchange="">
+        Unique Retractor Keys
+        <button class="rng-btn" id="uniqueRetractorKeysRng" onclick="event.preventDefault();toggleRng('uniqueRetractorKeys')" title="Randomize per seed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Converts the 5 fungible Retractors into unique per-level keys &mdash; each physical Retractor is randomly assigned (per seed) to unlock exactly one liveside level (Florida/Salvage/London/Prison/Queens), instead of the vanilla "any 5 retractors opens all 5 levels" shared gate. Lets liveside levels open independently and much earlier. The assignment is documented in the spoiler log &mdash; there's no in-game text that reveals it yet.</span></span>
+      </label>
     </div>
     <hr class="divider">
     <div class="card-title" style="margin-bottom:8px">Starting Item</div>
@@ -553,6 +559,26 @@ _HTML = r"""<!DOCTYPE html>
       <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by step&times;1000 on each death, floored at that amount. Supports half-steps (e.g. 0.5 = &minus;500/death). <b>Off</b> disables the penalty. Applied as a direct EXE patch.</span></span>
     </div>
     <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 0.5&ndash;10 = &minus;½ to &minus;10 health bars/death</div>
+    <div class="row" style="margin-bottom:4px">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">Shift-sprint:</span>
+      <input type="range" id="sprintMultiplier" min="0" max="5" step="0.1" value="0"
+             oninput="refreshSprintMultiplierLabel()">
+      <span class="slider-val" id="sprintMultiplierVal">Off</span>
+      <button class="rng-btn" id="sprintMultiplierRng" onclick="toggleRng('sprintMultiplier');refreshSprintMultiplierLabel()" title="Randomize per seed">&#127922;</button>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Hold Shift to move at this multiple of normal speed, on both land and in water. <b>Off</b> disables Shift-sprint entirely (vanilla movement). Applied as a direct EXE patch.</span></span>
+    </div>
+    <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 1.0&ndash;5.0 = 1x&ndash;5x speed while Shift is held</div>
+
+    <hr class="divider">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Secrets</div>
+    <div class="check-grid" style="margin-bottom:6px">
+      <label class="check-label">
+        <input type="checkbox" id="deadsideGuns">
+        Force "I Like Dead Side Guns"
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the vanilla secret that lets Deadside weapons work on Liveside and vice versa, without needing to find its hidden in-world unlock trigger. Edits kexengine.cfg at patch time &mdash; requires having launched the game at least once already.</span></span>
+        <button class="rng-btn" id="deadsideGunsRng" onclick="event.preventDefault();toggleRng('deadsideGuns')" title="Randomize per seed">&#127922;</button>
+      </label>
+    </div>
 
     <hr class="divider">
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px">Cadeaux
@@ -826,6 +852,15 @@ function refreshDeathPenaltyLabel() {
     document.getElementById('deathPenaltyVal').textContent = '−' + parseFloat(v.toFixed(1));
   }
 }
+function refreshSprintMultiplierLabel() {
+  if (isRng('sprintMultiplier')) return;
+  const v = parseFloat(document.getElementById('sprintMultiplier').value);
+  if (v === 0) {
+    document.getElementById('sprintMultiplierVal').textContent = 'Off';
+  } else {
+    document.getElementById('sprintMultiplierVal').textContent = parseFloat(v.toFixed(1)) + 'x';
+  }
+}
 function randomizeSeed() {
   document.getElementById('seed').value = Math.floor(Math.random() * 9000000000) + 1000000000;
 }
@@ -848,6 +883,7 @@ function getConfig() {
     startBundleGad:            document.getElementById('startBundleGad').checked,
     startBundlePrisms:         document.getElementById('startBundlePrisms').checked,
     shuffleEnemies:   isRng('shuffleEnemies') ? 'random' : document.getElementById('shuffleEnemies').checked,
+    deadsideGuns:     isRng('deadsideGuns') ? 'random' : document.getElementById('deadsideGuns').checked,
     shuffleTrueforms: isRng('shuffleTrueforms') ? 'random' : document.getElementById('shuffleTrueforms').checked,
     shuffleMusic:     document.getElementById('shuffleMusic').checked,
     shuffleVoices:    document.getElementById('shuffleVoices').checked,
@@ -855,6 +891,7 @@ function getConfig() {
     shuffleEnemiesSfx:document.getElementById('shuffleEnemiesSfx').checked,
     shuffleSky:       document.getElementById('shuffleSky').checked,
     patchTracker:        document.getElementById('patchTracker').checked,
+    uniqueRetractorKeys: isRng('uniqueRetractorKeys') ? 'random' : document.getElementById('uniqueRetractorKeys').checked,
     openGatesN:          document.getElementById('openGatesN').value,
     insanity:         document.getElementById('insanity').value,
     shuffleLightSoul: isRng('shuffleLightSoul') ? 'random' : document.getElementById('shuffleLightSoul').checked,
@@ -873,6 +910,7 @@ function getConfig() {
     altarHealthGrant:          isRng('altarHealthGrant') ? 'random' : document.getElementById('altarHealthGrant').value,
     randomizeSoulThresholds:   isRng('randomizeSoulThresholds') ? 'random' : document.getElementById('randomizeSoulThresholds').value,
     deathPenalty:              isRng('deathPenalty') ? 'random' : document.getElementById('deathPenalty').value,
+    sprintMultiplier:          isRng('sprintMultiplier') ? 'random' : document.getElementById('sprintMultiplier').value,
     pistonCombos:    isRng('pistonCombos') ? 'random' : (document.getElementById('pistonCombos').checked ? 'on' : 'off'),
   };
 }
@@ -892,6 +930,7 @@ const FIELD_SHORT = {
   startBundleGad:            'bG',
   startBundlePrisms:         'bP',
   shuffleEnemies:            'sE',
+  deadsideGuns:              'dG',
   shuffleTrueforms:          'sT',
   shuffleMusic:              'sm',
   shuffleVoices:             'sV',
@@ -899,6 +938,7 @@ const FIELD_SHORT = {
   shuffleEnemiesSfx:         'eS',
   shuffleSky:                'sk',
   patchTracker:              'pT',
+  uniqueRetractorKeys:       'uK',
   openGatesN:                'oG',
   insanity:                  'in',
   shuffleLightSoul:          'sL',
@@ -916,6 +956,7 @@ const FIELD_SHORT = {
   altarHealthGrant:          'aH',
   randomizeSoulThresholds:   'rST',
   deathPenalty:              'dP',
+  sprintMultiplier:          'spM',
   shufflePrisms:             'sPr',
   pistonCombos:    'pC',
 };
@@ -933,6 +974,7 @@ const FIELD_DEFAULTS = {
   startBundleGad:            false,
   startBundlePrisms:         false,
   shuffleEnemies:            false,
+  deadsideGuns:              false,
   shuffleTrueforms:          false,
   shuffleMusic:              false,
   shuffleVoices:             false,
@@ -940,6 +982,7 @@ const FIELD_DEFAULTS = {
   shuffleEnemiesSfx:         false,
   shuffleSky:                false,
   patchTracker:              true,
+  uniqueRetractorKeys:       false,
   openGatesN:                '',
   insanity:                  '0',
   shuffleLightSoul:          false,
@@ -957,6 +1000,7 @@ const FIELD_DEFAULTS = {
   altarHealthGrant:          '1',
   randomizeSoulThresholds:   'off',
   deathPenalty:              '0',
+  sprintMultiplier:          '0',
   shufflePrisms:             false,
   pistonCombos:   'off',
 };
@@ -1085,6 +1129,10 @@ function applyConfig(cfg) {
     if (cfg.shuffleEnemies === 'random') { applyRng('shuffleEnemies', 'random'); }
     else { applyRng('shuffleEnemies', cfg.shuffleEnemies); set('shuffleEnemies', cfg.shuffleEnemies); }
   }
+  if (cfg.deadsideGuns !== undefined) {
+    if (cfg.deadsideGuns === 'random') { applyRng('deadsideGuns', 'random'); }
+    else { applyRng('deadsideGuns', cfg.deadsideGuns); set('deadsideGuns', cfg.deadsideGuns); }
+  }
   if (cfg.shuffleTrueforms !== undefined) {
     if (cfg.shuffleTrueforms === 'random') { applyRng('shuffleTrueforms', 'random'); }
     else { applyRng('shuffleTrueforms', cfg.shuffleTrueforms); set('shuffleTrueforms', cfg.shuffleTrueforms); }
@@ -1095,6 +1143,10 @@ function applyConfig(cfg) {
   set('shuffleEnemiesSfx',        cfg.shuffleEnemiesSfx);
   set('shuffleSky',               cfg.shuffleSky);
   set('patchTracker',             cfg.patchTracker);
+  if (cfg.uniqueRetractorKeys !== undefined) {
+    if (cfg.uniqueRetractorKeys === 'random') { applyRng('uniqueRetractorKeys', 'random'); }
+    else { applyRng('uniqueRetractorKeys', cfg.uniqueRetractorKeys); set('uniqueRetractorKeys', cfg.uniqueRetractorKeys); }
+  }
   set('openGatesN',               cfg.openGatesN);
   set('insanity',                 cfg.insanity);
   if (cfg.shuffleLightSoul !== undefined) {
@@ -1151,6 +1203,10 @@ function applyConfig(cfg) {
   if (cfg.deathPenalty !== undefined) {
     if (String(cfg.deathPenalty) === 'random') { applyRng('deathPenalty', 'random'); }
     else { applyRng('deathPenalty', cfg.deathPenalty); set('deathPenalty', String(cfg.deathPenalty)); refreshDeathPenaltyLabel(); }
+  }
+  if (cfg.sprintMultiplier !== undefined) {
+    if (String(cfg.sprintMultiplier) === 'random') { applyRng('sprintMultiplier', 'random'); }
+    else { applyRng('sprintMultiplier', cfg.sprintMultiplier); set('sprintMultiplier', String(cfg.sprintMultiplier)); refreshSprintMultiplierLabel(); }
   }
   if (cfg.pistonCombos !== undefined) {
     if (cfg.pistonCombos === 'random') { applyRng('pistonCombos', 'random'); }
@@ -1401,6 +1457,13 @@ class _Api:
         elif death_penalty and death_penalty != "0":
             cmd += ["--death-penalty", death_penalty]
 
+        # Handle sprint multiplier with random support
+        sprint_multiplier = str(config.get("sprintMultiplier", "0")).strip()
+        if sprint_multiplier == "random":
+            cmd.append("--sprint-multiplier-random")
+        elif sprint_multiplier and sprint_multiplier != "0":
+            cmd += ["--sprint-multiplier", sprint_multiplier]
+
         # Handle shuffle-enemies with random support
         enemies_val = config.get("shuffleEnemies")
         if enemies_val == 'random':
@@ -1408,12 +1471,26 @@ class _Api:
         elif enemies_val:
             cmd.append("--shuffle-enemies")
 
+        # Handle Deadside Guns secret force-on with random support
+        deadside_guns_val = config.get("deadsideGuns")
+        if deadside_guns_val == 'random':
+            cmd.append("--deadside-guns-random")
+        elif deadside_guns_val:
+            cmd.append("--deadside-guns")
+
         # Handle shuffle-true-forms with random support
         trueforms_val = config.get("shuffleTrueforms")
         if trueforms_val == 'random':
             cmd.append("--shuffle-true-forms-random")
         elif trueforms_val:
             cmd.append("--shuffle-true-forms")
+
+        # Handle Unique Retractor Keys with random support
+        unique_retractor_keys_val = config.get("uniqueRetractorKeys")
+        if unique_retractor_keys_val == 'random':
+            cmd.append("--unique-retractor-keys-random")
+        elif unique_retractor_keys_val:
+            cmd.append("--unique-retractor-keys")
 
         starting_item = config.get("startingItem", "")
         if starting_item == "random":

@@ -168,8 +168,6 @@ ENTRY_VANILLA_STR_PTR = 0x1407013C8
 ENTRY_VANILLA_PARAM1  = 0x0
 
 # Patch 3: code cave — expanded to cover stubs + both tails
-#
-# Patch 3: code cave — expanded to cover stubs + both tails
 CAVE_VA       = 0x14064A354
 CAVE_FILE_OFF = 0x649754
 CAVE_VANILLA  = bytes(78)  # all zeros, covers stubs + both tails

@@ -129,14 +129,94 @@ GAD_ASSET_OVERRIDES: list[tuple[str, str]] = [
     (r"assets\book_of_gad.tga", r"newitems\tga\085.tga"),
 ]
 
+# Applied unconditionally by ap_patcher.py (every run of that tool is an AP
+# seed) — re-skins the vanilla RSC_X_BOOK_OF_SHADOWS inventory icon that AP's
+# foreign-item marker mechanism relies on, so it reads as an Archipelago item
+# rather than the vanilla Book of Shadows. Moved out of GAD_ASSET_OVERRIDES
+# (2026-07-20) — it was previously only applied when shuffle_gad_temples was
+# also on, which meant AP seeds without Gad shuffle kept the vanilla icon.
+# Not referenced by the standalone's own (non-AP) patcher.py.
+AP_ASSET_OVERRIDES: list[tuple[str, str]] = [
+    (r"assets\book_of_ap.png", r"hdtextures\invitems\BOOKOFSHADOWS.PNG"),
+    (r"assets\book_of_ap.tga", r"hdtextures\newitems\tga\079.tga"),
+]
+
 # ── MSH overrides ────────────────────────────────────────────────────────────
 # (kpf_internal_path, scale, local_src_or_None)
 # local_src: path relative to randomizer root — used instead of extracting from KPF.
 #            Set to None to scale the vanilla KPF file in-place.
 # Note: entries here take precedence over ASSET_OVERRIDES for the same kpf path.
+#
+# 2x scale for unique inventory-slot items (2026-08-03, Jon's request): ANY
+# unique item that fills an inventory slot gets scaled up to be easier to
+# spot in-world — weapons, lore, key items — EXCEPT Cadeaux/Govi/Dark Soul,
+# which stay vanilla-sized (generic/repeated pickups, not "find me" unique
+# items). Paths below confirmed against Jon's real extracted newitems/
+# reference folder (`reference/newitems/<item>/`), not guessed — case
+# preserved exactly as extracted (e.g. `EngineersKey.msh`, `LaLune.msh`)
+# since find_file_in_kpf() only case-insensitively LOCATES the source file,
+# but apply_msh_overrides() writes the mod KPF's override entry under the
+# literal kpf_path string here — a case mismatch against the real archive
+# entry could make the override silently fail to shadow the vanilla file.
 MSH_OVERRIDES: list[tuple[str, float, str | None]] = [
     (r"levels/uground/objects/crate.msh", 2, r"assets/pot1.msh"),
+    (r"newitems/bookofshadows/bookofshadows.msh", 2, None),
+
+    # Key items (10)
+    (r"newitems/baton/baton.msh", 2, None),
+    (r"newitems/flambeau/flambeau.msh", 2, None),
+    (r"newitems/marteau/marteau.msh", 2, None),
+    (r"newitems/calabash/calabash.msh", 2, None),
+    (r"newitems/poigne/poigne.msh", 2, None),
+    (r"newitems/engineerskey/EngineersKey.msh", 2, None),
+    (r"newitems/prisoncard/prisoncard.msh", 2, None),
+    (r"newitems/lalune/LaLune.msh", 2, None),
+    (r"newitems/soleil/soleil.msh", 2, None),
+    (r"newitems/lalame/lalame.msh", 2, None),
+
+    # Stackable progression (2)
+    (r"newitems/retractor/retractor.msh", 2, None),
+    (r"newitems/accumulator/accumulator.msh", 2, None),
+
+    # Weapons (6 of 8 — MP-909/RSC_X_MP5 and Desert Eagle intentionally
+    # missing, see note below)
+    (r"newitems/asson/Asson.msh", 2, None),
+    (r"newitems/shotgun/shotgun.msh", 2, None),
+    (r"newitems/sshotgun/sshotgun.msh", 2, None),
+    (r"newitems/enseigne/enseigne.msh", 2, None),
+    (r"newitems/tetedemort/tetedemort.msh", 2, None),
+    (r"newitems/violator/violator.msh", 2, None),
+    (r"newitems/flashlight/flashlight.msh", 2, None),
+
+    # Lore
+    (r"newitems/schematic/Schematic.msh", 2, None),
 ]
+# NOT yet added, needs Jon's input before guessing further:
+#   - MP-909 (RSC_X_MP5): no "mp909"/"mp5"/"hkmp5" folder exists under
+#     newitems/. `newitems/shadowgun/Shadowgun.msh` looked like a plausible
+#     match by proximity but is very likely a DIFFERENT weapon — loc_english.txt
+#     has i_shadowgun = "Shadowgun" as a separate string from i_mp909 =
+#     "MP-909", and reference/cutscene/.../trans0259.cut's CS_HOLD_SHADOWGUN
+#     ties "Shadowgun" to the Deadside Kore Engine reward cutscene, not the
+#     Prison MP-909 pickup. reference/scripts/gunscripts/hkmp5.gsc reads
+#     MESHFRAME("wepgen_hkmp5", ...) instead, suggesting MP-909's real mesh
+#     lives under a different top-level KPF folder entirely (weapons/?),
+#     not newitems/ like the other 6 weapons — worth Jon checking there
+#     rather than assuming shadowgun.msh is a safe substitute.
+#   - Light Soul: no obvious candidate — `newitems/health/health.msh` is a
+#     generic health pickup, not Light Soul specifically (permanent
+#     invincibility). Unclear whether Light Soul even has its own distinct
+#     pickup mesh vs. a particle/lighting effect.
+#   - Desert Eagle: has a real mesh (`newitems/deserteagle/` and a second
+#     `deserteagle2/`) but items.py excludes RSC_X_DESERTEAGLE from the
+#     placeable pool entirely (is_verified=False, no physical pickup slot)
+#     — scaling an un-placeable item's mesh would be a no-op, skipped.
+#   - Gad Power: has no mesh of its own — reuses RSC_X_PROPHECY's model
+#     (`newitems/prophecy/Prophecy.msh`) via gad_pickup_patch.py's
+#     dispatch-table redirect, so scaling it means scaling the real Book
+#     of Prophecy model too (currently unplaced, but not guaranteed to
+#     stay that way). Left out per the 2026-08-03 discussion — revisit if
+#     Book of Prophecy is ever reintroduced to the pool.
 
 # ── Gate constants ────────────────────────────────────────────────────────────
 
@@ -550,6 +630,13 @@ DAY_NIGHT_MIRRORS: dict[str, str] = {
 # None as old_name means "applies regardless of what was there before"
 ITEM_Y_ADJUST: dict[tuple[str, str | None], float] = {
     ("RSC_X_CALABASH",   None): 0.0,
+    # Book of Shadows/AP-marker rotation fix (2026-07-25, Jon) — CONFIRMED
+    # LIVE final state: rotation_a=90 + rotation_b=180 (see make_patch()'s
+    # RSC_X_BOOK_OF_SHADOWS rotation override in both patcher.py and
+    # ap_patcher.py) stands the book upright, facing the viewer, right-side
+    # up. rotation_a=90 alone sits lower/clips at the slot's native height,
+    # hence +30 here.
+    ("RSC_X_BOOK_OF_SHADOWS", None): 30.0,
 }
 
 # Enemy difficulty tiers: 1 (easiest) → 5 (hardest)

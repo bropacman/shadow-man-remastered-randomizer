@@ -19,6 +19,7 @@ curious players, or future maintainers.
 9. [Spoiler Log](#9-spoiler-log)
 10. [Recent Changes](#10-recent-changes)
 11. [RSC File Format Reference](#11-rsc-file-format-reference)
+12. [Code Cave Allocations](#12-code-cave-allocations)
 
 ---
 
@@ -856,5 +857,175 @@ detection because those files may carry TrackType flags unrelated to
 collectibility. The `RSC_EXPLOSIVE_BARREL` type is not persistent (`0x0020` not
 set) and is therefore not counted.
 
-The canonical implementation is `scan_rsc()` in `tools/count_cadeaux.py`.
-`tools/dump_rsc.py` provides a full per-record CSV dump for investigation.
+---
+
+## 12. Code Cave Allocations
+
+Several `*_patch.py` modules write small assembly stubs into unused space in
+`thoth_x64_patched.exe`'s `.text` section — 16-byte-aligned function padding
+(`0xCC` filler, found via `tools/find_cave.py`) mostly caps out at 16 bytes per
+gap, with one larger always-free region at the very tail of `.text`
+(`0x14064A354`–`0x14064A3FF`). Because every EXE patch writes directly to
+fixed virtual addresses with no reservation mechanism between modules, two
+patches choosing the same gap will silently corrupt each other unless someone
+manually cross-references every patch file's source. That happened once
+already this session (nearly reusing `deadside_guns_patch.py`'s fragments
+for an unrelated patch) — this table exists so it doesn't need to happen
+again by grepping four files by hand.
+
+**Before hardcoding a new fragment address in any patch module: check this
+table first, and add your new addresses to it once chosen.** Re-run
+`tools/find_cave.py` to confirm a candidate gap is still free in the current
+`thoth_x64_patched.exe` build — this table records what's *intended* to be
+free, not a live scan.
+
+### 12.1 The always-free `.text` tail (`0x14064A354`–`0x14064A3FF`, 171 bytes)
+
+Fully allocated, in order, no gaps remaining:
+
+| VA range | Size | Owner | Purpose |
+|---|---|---|---|
+| `0x14064A354`–`0x14064A3A2` | 78 | `gad_pickup_patch.py` | Two dispatch stubs (+1 / +4 gad-level) |
+| `0x14064A3A2`–`0x14064A3D5` | 51 | `death_penalty_patch.py` | Reserved gap + death-penalty cave |
+| `0x14064A3D5`–`0x14064A3FF` | 43 (34 used) | `sprint_patch.py` | Swim-speed cave + shared multiplier constant |
+
+### 12.2 16-byte CC-padding fragments elsewhere in `.text`
+
+| VA | Owner | Status | Purpose |
+|---|---|---|---|
+| `0x1401841C0` | `sprint_patch.py` | active | Land fragment 3 (multiply + jump back) |
+| `0x14014DFE0` | `sprint_patch.py` | active | Land fragment 2 (original load + shift test) |
+| `0x1405FF881` | `sprint_patch.py` | active | Land fragment 1 (save RCX, call IsShiftHeld) |
+| `0x1401A10B0` | `deadside_guns_patch.py` | **reverted/shelved** | FRAG_A — superseded by the `kexengine.cfg` fix; check and `--revert` if still applied |
+| `0x1401C2F80` | `deadside_guns_patch.py` | **reverted/shelved** | FRAG_FORCE |
+| `0x1401D6430` | `deadside_guns_patch.py` | **reverted/shelved** | FRAG_C |
+| `0x1401F2560` … `0x1404BE1B0` (22 gaps, full list in either module's source) | `dogmode_live_patch.py` / `secret_mode_live_patch.py` | **superseded, do not use or extend** | Earlier live-apply design for secret-mode cvars. Never live-tested — replaced 2026-07-31 by `secret_mode_section_patch.py` (see §12.4) before either file was ever applied to a real exe, after two real bugs were found by generalizing past 1 entry: the table-entry fragments aren't contiguous (so `ADD reg,N` array-walking over them doesn't reach the right entry), and `LAST_KNOWN` tracking state lived in `.text`, which is Read+Execute only — a runtime write there would have faulted. Both root causes are structural to the "chain scattered 16-byte gaps" approach, not fixable by picking better addresses, hence the new design rather than a patch. These 22 gaps are free again; safe to reuse for unrelated future patches. |
+
+Deadside Guns' three fragments (`0x1401A10B0`/`0x1401C2F80`/`0x1401D6430`)
+are left listed as reverted rather than free, since the module still exists
+and could in principle be reapplied — new patches should avoid them even
+though a fresh `find_cave.py` scan currently shows them as `0xCC`.
+
+### 12.3 The per-frame hook site — resolved, now owned by `secret_mode_section_patch.py`
+
+**Revised 2026-07-31 — do not reuse the addresses this section
+originally documented.** The first version of this hook used two
+separate splice points, `0x14046B2CC` (land movement update,
+`FUN_14046b2c0`) and `0x14046B977` (swim movement update, `FUN_14046b590`)
+— land worked, swim crashed on every water entry (see §12.4 for the
+full diagnosis: `FUN_14046b590` turned out to use a non-standard
+internal calling convention, and no amount of stack-reorder tuning
+inside it fixed the crash).
+
+**The actual, working hook site is `0x14045DA0D`** (`DISPATCH_MERGE_VA`,
+inside `FUN_14045d7f0` — the single per-frame player tick function that
+dispatches to land or swim update via an if/else and then continues into
+shared per-frame work either way). This is the exact point where both
+branches merge back together, so it fires unconditionally every frame
+regardless of player state, in the dispatcher's own completely ordinary
+calling convention (`RDI` = player pointer, no stack tricks nearby) —
+confirmed live 2026-07-31 working identically on land and in water.
+`0x14046B2CC`/`0x14046B977` are free again; nothing currently claims
+them (this repo's `sprint_patch.py` still owns its own, different hook
+bytes at similarly-named but distinct `LAND_HOOK_VA`/`SWIM_HOOK_VA`
+constants inside those same two functions — don't confuse the two when
+reading old code).
+
+This single site now carries exactly one small edit — a 5-byte
+`jmp rel32` (+ NOP padding to fill the rest of the overwritten 7-byte
+vanilla instruction) into `secret_mode_section_patch.py`'s own code
+section — and nothing else may touch this address. The dispatch loop,
+entry table, and all tracking state live entirely outside `.text` (see
+§12.4), so this is "the hook site unconditionally redirects into a
+dispatcher that already knows how to hold many entries," not "one
+effect family owns the hook site."
+
+**Adding a new effect (another secret cvar, or eventually a different
+effect family like add-health) means adding an entry to §12.4's data
+section and, if the callback shape differs, a small addition to the code
+section — never touching this `.text` address again.**
+
+### 12.4 New PE sections: `.apcode` / `.apdata` (`secret_mode_section_patch.py`)
+
+Rather than reusing existing bytes in `.text`/`.rdata`/`.data` at all
+(§12.1–12.3's approach, and the abandoned idea of scavenging "probably
+dead" zero-runs in `.rdata`/`.data` — rejected because large zero-runs in
+a writable section are much more likely to be live runtime buffers than
+genuine dead space, and there's no way to fully rule that out by
+inspecting the file alone), `secret_mode_section_patch.py` appends two
+brand-new sections to `thoth_x64_patched.exe`. Feasibility (header slack
+for new section-table entries, alignment, EOF) is checked read-only by
+`tools/check_pe_headers.py` before ever touching the real file.
+
+| Section | VA | Characteristics | Contents |
+|---|---|---|---|
+| `.apcode` | `0x14102B000` | R+X | `tick_entry` (full register+XMM save, forced 16-byte stack alignment around the inner call, re-executes the vanilla instruction the hook overwrote, jumps back) and `check_secret` (reads the cvar's live cached-value byte, compares to `LAST_KNOWN`, calls the cvar's real on-change callback and updates `LAST_KNOWN` if it changed) |
+| `.apdata` | `0x14102C000` | R+W | `ALIGN_SLOT` (qword, scratch for the caller's `rsp` across the aligned call) + `LAST_KNOWN` (byte per tracked cvar, `0xFF` sentinel = "never checked yet") |
+
+Both sections are single-page allocations; as long as neither section's
+actual content exceeds 4KB (true here by a wide margin — under 400 bytes
+of code, 16 bytes of data as of the first entry), `.apdata`'s VA is
+always exactly `.apcode`'s VA + `0x1000`, regardless of the real content
+length, which keeps the constants simple.
+
+**Hook site, revised 2026-07-31 (do not reuse the original two-hook
+design):** the very first version hooked `FUN_14046b2c0` (land movement
+update) and `FUN_14046b590` (swim movement update) directly, each with
+its own `land_entry`/`swim_entry` stub. Land worked immediately. Swim
+crashed the game on every water entry, reproduced even on a freshly
+reverted-to-vanilla exe with only this patch applied. Root cause,
+found by pulling raw Ghidra xrefs: both leaf functions share the same
+two callers, 7 bytes apart at each call site — the signature of a
+single dispatcher, `FUN_14045d7f0`, calling one or the other via an
+if/else and then continuing into a long tail of per-frame work either
+way. `FUN_14046b590` is called with **no visible argument** in Ghidra's
+decompile (unlike `FUN_14046b2c0(param_1)`, standard RCX argument),
+meaning it uses a non-standard internal calling convention — its
+`mov rsp,r13` / R11-based access pattern is part of that same custom
+ABI, not an isolated quirk, which is why no amount of stack-reorder
+tuning inside that leaf function actually fixed the crash (one such
+attempt was tried and live-tested; it didn't help).
+
+**Fix: hook `FUN_14045d7f0` itself, at `LAB_14045da0d` — the exact
+point where the land/swim if/else branches merge back together** (`CALL
+FUN_14046b590` falls through a `JMP` to this label; `CALL
+FUN_14046b2c0` falls straight into it). At that address execution is
+back in the dispatcher's own completely ordinary calling convention —
+`RDI` holds the player pointer, no stack manipulation nearby, vanilla
+instruction being replaced is a plain 7-byte
+`CMP byte ptr [RDI+0x1d65d],R14B` (`DISPATCH_MERGE_VA = 0x14045DA0D`,
+vanilla bytes `4438b75dd60100`). One `.text` edit instead of two, and it
+runs exactly once per frame regardless of which branch executed — this
+also settled an earlier theory that land/swim ran on separate threads
+(a plausible read on the original crash, given this project's history
+with genuine cross-thread races): since both leaf functions are called
+from this one single-threaded dispatcher, they were never on separate
+threads to begin with.
+
+Assembled with Keystone (`pip install keystone-engine`), independently
+re-verified with Capstone before any bytes are trusted (real operand
+types — `X86_OP_MEM`/`X86_OP_IMM`/`X86_OP_REG` — not `op_str` string
+matching, which doesn't reliably distinguish a `movups` store from a load).
+Before ever running against the real exe, the whole apply→byte-diff→
+re-disassemble-from-file→revert cycle was validated against a synthetic
+PE built to match Jon's real header layout exactly — this caught a real
+bug (the section-header insertion used a zero-length slice assignment,
+which Python treats as an *insert*, silently shifting every subsequent
+byte in the file and invalidating every previously-computed `RawPtr`;
+fixed to an in-place overwrite of the existing header slack instead).
+
+**Confirmed working live 2026-07-31, both land and water, zero issues:**
+`g_dogmode` toggled via `client.py` (`write_cvar_bool()`, which writes
+the exact same cvar cache slot `check_secret` polls) applied instantly
+in every player state tested — standing still, walking, swimming — no
+level transition needed, no crash.
+
+**Scope as of 2026-07-31: one entry only (`g_dogmode`).** Adding more
+secret cvars requires, for each one: (1) its cvar object handle — the
+addresses in the earlier CE capture CSV need to be redone with the
+"Run till return" methodology (the first attempt read `RAX` at function
+entry instead of after return, producing mostly-stale/duplicate values),
+and (2) its own `[handle+0x48]` on-change callback read live and
+confirmed — do not assume it's the same `0x140458EF0` `g_dogmode` uses
+just because `FUN_140459250` checks 8 cvars together; only `g_dogmode`'s
+callback has actually been verified.

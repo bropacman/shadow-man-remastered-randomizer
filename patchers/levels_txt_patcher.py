@@ -581,6 +581,19 @@ def patch_levels_txt(
     if not true_form_loc_remap:
         preserve_ids.update(TRUE_FORM_SOUL_IDS)
 
+    # NOTE (2026-07-21): this used to also track every stripped line so an
+    # orphaned soul ID (one AP never re-wrote — e.g. its item went to another
+    # player's game, or its slot received a foreign item instead) could have
+    # its original vanilla line restored, purely to keep the file's global
+    # $darksoul count pinned at 120 for a launch-time EXE validator. That
+    # validator is now disabled directly (see cadeaux_patch.py's
+    # patch_levels_txt_launch_validator() — confirmed via Ghidra + a real
+    # crash dialog the same day: "Total Dark Souls in levels is not 120").
+    # Restoring a stale vanilla line was itself misleading — it points the
+    # tracker at a soul that no longer physically exists in this player's
+    # world — so now that nothing enforces the total, orphaned IDs are
+    # simply left out entirely: the file only ever describes souls that are
+    # actually real in this seed.
     _darksoul_id_re = re.compile(r'^\s*\$darksoul\s+(\d+)\b', re.IGNORECASE)
     for b in blocks:
         kept = []

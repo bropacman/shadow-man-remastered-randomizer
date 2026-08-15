@@ -60,7 +60,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
-from access_rules import R, GATE_VANILLA_SL, set_piston_combos_random, set_soul_thresholds, VANILLA_SOUL_THRESHOLDS
+from access_rules import R, GATE_VANILLA_SL, set_piston_combos_random, set_soul_thresholds, set_unique_retractor_keys, VANILLA_SOUL_THRESHOLDS, CAGEWAYS_ROUTES, PLAYROOMS_ROUTES
 from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER, STARTING_ITEM_BUNDLES
 import regions as _regions
 
@@ -92,6 +92,15 @@ EXCLUDED_LEVELS: frozenset[str] = frozenset({
 FIXED_SOUL_LOCS: list = [
     loc for loc in RAW_LOCATIONS
     if loc.category in ("boss", "true_form")
+    # Bug found 2026-07-24 (AP side): this had no is_verified filter, unlike
+    # CHECKABLE_LOCS below, so confirmed-phantom boss/true_form rows (e.g.
+    # tenement:enemies.rsc:0x00BC, RSC_X_AVERY_MARX, is_verified=FALSE) leaked
+    # through. Harmless here in the standalone (nothing crashes on an extra
+    # fixed-soul entry that just never gets touched), but the AP world's
+    # pre_fill() calls get_location() on every FIXED_SOUL_LOCS entry and that
+    # raises KeyError for anything never registered as a real Location --
+    # ported the same exclusion CHECKABLE_LOCS already applies.
+    and loc.is_verified is not False
 ]
 
 # Barrel and crate RSC names used when the cadeaux pool is exhausted and
@@ -236,6 +245,22 @@ UNVERIFIED_LOCS: frozenset[str] = frozenset(
     if l.is_verified is False
 )
 
+# NOTE (2026-07-21): a blanket "exclude is_tracked=False like UNVERIFIED_LOCS"
+# filter was tried here and reverted the same day. is_tracked=False turns out
+# to span 2423 of 3055 CSV rows (79%) — 2215 barrel (already excluded via
+# _ALWAYS_EXCLUDE regardless) but also 161 cadeaux and 37 real
+# weapon/progression/accumulator/retractor/lore/eclipser/gad/bonus rows.
+# is_tracked is evidently a general "does the engine persist this record's
+# collected state" flag (see track_type's 0x0002 persistent / 0x0020+
+# volatile-barrel comment above), not a per-row "this specific offset is
+# unverified/unreliable" signal the way is_verified is — treating it as
+# such would have silently pulled 37+161 currently-working, real locations
+# out of CHECKABLE_LOCS. The narrow problem it was meant to fix (4 salvage
+# cadeaux rows at 0x552A/0x5602/0x5692/0x56DA with a literal "coords need
+# verification" note, failing to patch) was instead fixed directly in the
+# data: those 4 rows now have is_verified=FALSE in data/locations.csv, so
+# UNVERIFIED_LOCS above already covers them with zero blast radius.
+
 CHECKABLE_LOCS: list = [
     l for l in AP_LOCATIONS
     if l.loc_key not in EXCLUDED_LOCS
@@ -270,12 +295,23 @@ REGION_GATES: dict[str, object] = {
     "Asylum: Cathedral of Pain"    : "GATE_DEADSIDE_ASYLUM",
     "Asylum: Experimentation Rooms": "GATE_DEADSIDE_ASYLUM",
     "Temple of Fire (Toucher)"     : "GATE_DEADSIDE_PATH_3",
-    "Asylum: Cageways"             : "GATE_DEADSIDE_CAGEWAYS",
-    "Asylum: Engine Block"         : "GATE_DEADSIDE_CAGEWAYS",
-    "Asylum: Playrooms"            : "GATE_DEADSIDE_PLAYROOMS",
+    # Route-list form since 2026-08-03: Cageways/Playrooms are each also
+    # reachable via the lower-Deadside backtrack (Path 7 alone, or
+    # Asylum+Baton+Gad2), bypassing their own gate's SL entirely — no
+    # longer "a single gate" the way this table otherwise assumes. See
+    # CAGEWAYS_ROUTES/PLAYROOMS_ROUTES in access_rules.py. Engine Block
+    # mirrors Cageways (same region cluster, free connection from it).
+    "Asylum: Cageways"             : CAGEWAYS_ROUTES,
+    "Asylum: Engine Block"         : CAGEWAYS_ROUTES,
+    "Asylum: Playrooms"            : PLAYROOMS_ROUTES,
     "Temple of Prophecy (Marcher)" : [
         ["GATE_DEADSIDE_PATH_7"],
         ["GATE_DEADSIDE_CAGEWAYS", "GATE_DEADSIDE_PLAYROOMS", "GATE_DEADSIDE_PATH_6"],
+        # Route C, added 2026-07-26 to access_rules.py/regions.py but never
+        # ported to this heuristic table until 2026-08-03 (found while
+        # investigating the Cageways/Playrooms backtrack fix — same class of
+        # drift this file's own docs warn about).
+        ["GATE_DEADSIDE_ASYLUM", "BATON", "GAD2_WALK"],
     ],
     "Asylum: Lavaducts"            : "GATE_DEADSIDE_LAVADUCTS",
     "Temple of Blood (Nager)"      : "GATE_DEADSIDE_BLOOD",
@@ -630,6 +666,7 @@ def simulate_playthrough(
     item_category=None,
     starting_item_bundles=None,
     soul_thresholds: dict[int, int] | None = None,
+    retractor_level_assignment: dict[str, str] | None = None,
 ):
     """
     Simulate a full playthrough of the given placement.
@@ -637,6 +674,14 @@ def simulate_playthrough(
     item_category: pre-built {object: category} dict. Pass this in from
     assumed_fill to avoid rebuilding it on every iteration of the sweep (~130x).
     If None, it is built internally — used by validate_fill and patcher.
+
+    retractor_level_assignment: {native retractor loc_key: liveside region
+    name}, only used when the "Unique Retractor Keys" option is on (see
+    access_rules.set_unique_retractor_keys()). Computed once in assumed_fill
+    and threaded through unchanged to every simulate_playthrough() call for
+    the same seed, so the assignment never drifts mid-generation. None/empty
+    means the option is off — retractors fall back to the vanilla shared
+    counter.
     """
     inv: dict[str, int] = {}
     soul_count = cadeaux_count = 0
@@ -730,7 +775,18 @@ def simulate_playthrough(
                         reached_keys.discard(loc.loc_key)  # don't mark as reached yet
                         continue
                 soul_count += 1
-            elif category == "retractor":   retractor_count += 1
+            elif category == "retractor":
+                # Always keep the vanilla aggregate count too, even in
+                # unique_retractor_keys mode — cheap, keeps back-compat with
+                # anything reading "_retractors" (e.g. validate_fill's own
+                # diagnostic "5x Retractor" report line), and matters not at
+                # all to access_rules.py's rules, which ignore it once the
+                # option's own per-region check takes over.
+                retractor_count += 1
+                if retractor_level_assignment:
+                    target_region = retractor_level_assignment.get(source_loc.loc_key)
+                    if target_region:
+                        inv[f"_retractor_key:{target_region}"] = 1
             elif category == "cadeaux":     cadeaux_count += 1
             elif category == "accumulator": inv[placed_object] = inv.get(placed_object, 0) + 1
             else:                           inv[placed_object] = inv.get(placed_object, 0) + 1
@@ -796,7 +852,8 @@ def assumed_fill(
     entrance_shuffle=None,   # UnifiedShuffle | None
     piston_combos: str = "off",
     soul_thresholds: dict[int, int] | None = None,
-) -> tuple[dict[str, str], dict[str, int]]:
+    unique_retractor_keys: bool = False,
+) -> tuple[dict[str, str], dict[str, int], dict[str, str]]:
 
     # ── Piston combinations flag ───────────────────────────────────────────────
     _pc_random = str(piston_combos) == "random"
@@ -804,6 +861,9 @@ def assumed_fill(
 
     # ── Soul threshold override ────────────────────────────────────────────────
     set_soul_thresholds(soul_thresholds)
+
+    # ── Unique Retractor Keys flag ─────────────────────────────────────────────
+    set_unique_retractor_keys(unique_retractor_keys)
 
     # ── Step 1: Gates ─────────────────────────────────────────────────────────
     # Add starting item to inventory so logic system knows player already has it
@@ -895,6 +955,42 @@ def assumed_fill(
         shuffle_gad_temples=shuffle_gad_temples,
         shuffle_prisms=shuffle_prisms,
     )
+
+    # ── Unique Retractor Keys (optional) ───────────────────────────────────────
+    # When enabled, converts the 5 fungible Retractor pickups into unique
+    # per-liveside-level keys: each of the 5 native Retractor locations is
+    # randomly assigned (per seed, via this call's own rng) to exactly one
+    # liveside level (Florida, Salvage, London, Prison, Queens) instead of
+    # the vanilla shared "any 5 retractors" gate. See access_rules.py's
+    # set_unique_retractor_keys()/can_reach_liveside() for the logic side,
+    # and this function's simulate_playthrough() call below for where a
+    # collected retractor gets translated into its assigned region's virtual
+    # key. Computed once here (before the placement sweep) so it stays fixed
+    # for the rest of THIS assumed_fill() call, and returned to the caller
+    # (patcher.py's run_assumed_fill) so validate_fill() and the spoiler log
+    # reuse the exact same assignment rather than risking a second, different
+    # random draw that could disagree with what was actually simulated here.
+    retractor_level_assignment: dict[str, str] = {}
+    if unique_retractor_keys:
+        _retractor_items = [it for it in item_pool if it.category == "retractor"]
+        _liveside_targets = [
+            _regions.LIVESIDE_LONDON, _regions.LIVESIDE_PRISON,
+            _regions.LIVESIDE_SALVAGE, _regions.LIVESIDE_QUEENS,
+            _regions.LIVESIDE_FLORIDA,
+        ]
+        if len(_retractor_items) != len(_liveside_targets):
+            raise ValueError(
+                f"unique_retractor_keys requires exactly {len(_liveside_targets)} "
+                f"Retractor items (one per liveside level) — found "
+                f"{len(_retractor_items)} in the item pool. Refusing to "
+                f"generate a seed that could permanently lock a liveside level."
+            )
+        _shuffled_targets = list(_liveside_targets)
+        rng.shuffle(_shuffled_targets)
+        retractor_level_assignment = {
+            it.loc_key: region for it, region in zip(_retractor_items, _shuffled_targets)
+        }
+
     rng.shuffle(item_pool)
 
     # ── Item placement order ───────────────────────────────────────────────────
@@ -1122,6 +1218,7 @@ def assumed_fill(
             shuffle_gad_temples=shuffle_gad_temples,
             item_category=item_category,
             starting_item_bundles=starting_item_bundles,
+            retractor_level_assignment=retractor_level_assignment,
         )
 
         def _slot_ok(loc) -> bool:
@@ -1273,11 +1370,13 @@ def assumed_fill(
     for _rsc in _bundle_inv_set:
         STARTING_ITEMS.discard(_rsc)
 
-    # Reset dark engine flag and soul thresholds so they don't bleed into subsequent calls
+    # Reset dark engine flag, soul thresholds, and unique-retractor-keys flag
+    # so they don't bleed into subsequent calls
     set_piston_combos_random(False)
     set_soul_thresholds(None)
+    set_unique_retractor_keys(False)
 
-    return placement, gate_remap
+    return placement, gate_remap, retractor_level_assignment
 
 # ── Validation ─────────────────────────────────────────────────────────────────
 
@@ -1295,11 +1394,14 @@ def validate_fill(
     entrance_shuffle=None,
     piston_combos: str = "off",
     soul_thresholds: dict[int, int] | None = None,
+    unique_retractor_keys: bool = False,
+    retractor_level_assignment: dict[str, str] | None = None,
 ) -> tuple[bool, str]:
 
     _pc_random = str(piston_combos) == "random"
     set_piston_combos_random(_pc_random)
     set_soul_thresholds(soul_thresholds)
+    set_unique_retractor_keys(unique_retractor_keys)
 
     if starting_item:
         STARTING_ITEMS.add(starting_item)
@@ -1320,6 +1422,7 @@ def validate_fill(
         shuffle_gad_temples=False,
         starting_item_bundles=starting_item_bundles,
         soul_thresholds=soul_thresholds,
+        retractor_level_assignment=retractor_level_assignment,
     )
 
     _loc_by_key_all = {**LOCATION_TABLE, **{l.loc_key: l for l in active_fixed_soul_locs}}
@@ -1384,6 +1487,7 @@ def validate_fill(
 
     set_piston_combos_random(False)
     set_soul_thresholds(None)
+    set_unique_retractor_keys(False)
 
     return ok, "\n".join(lines)
 
@@ -1441,7 +1545,7 @@ if __name__ == "__main__":
                 print()
                 print(unified_spoiler_section(entrance_shuffle))
                 print()
-        placement, gate_remap = assumed_fill(
+        placement, gate_remap, retractor_level_assignment = assumed_fill(
             rng,
             verbose=(args.verbose and len(seeds) == 1),
             shuffle_gates=p.get("shuffle_gates", False),

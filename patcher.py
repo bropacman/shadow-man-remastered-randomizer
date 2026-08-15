@@ -70,9 +70,12 @@ from randomizers.music_randomizer import shuffle_music
 from randomizers.sfx_randomizer import shuffle_sfx, sfx_spoiler_section
 from randomizers.sky_randomizer import shuffle_sky, sky_spoiler_section
 from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
+from save_path_patch import apply_save_path_patch
 from cadeaux_patch import apply_cadeau_step_patch
 from health_patch import apply_health_patch
 from death_penalty_patch import apply_death_penalty_patch
+from sprint_patch import apply_sprint_patch
+from kexengine_cfg_patch import apply_deadside_guns_toggle
 from dark_engine_patch import (
     apply_dark_engine_patch, randomize_dark_engine, extract_and_patch_journal,
     JOURNAL_MUP_PATH,
@@ -109,6 +112,11 @@ ZONE_OFF     = 0x11  # zone/cluster group this record belongs to — read-only, 
 SAVE_IDX_OFF = 0x1E  # save-game ID — 4-byte big-endian; NAME_OFF - SAVE_IDX_OFF = 4
 INSTANCE_OFF = 0x21  # last byte of SAVE_IDX (kept for reference; use SAVE_IDX_OFF for reads/writes)
 XYZ_OFF      = 0x04  # start of the three little-endian floats for world position (X, Y, Z)
+# Rotation fields (TECHNICAL.md §10.2) — see ap_patcher.py's matching
+# constants for the full derivation. Big-endian despite the record
+# otherwise being little-endian (same exception as SAVE_IDX_OFF).
+ROTATION_A_OFF = 0x14  # 2-byte big-endian signed int16
+ROTATION_B_OFF = 0x16  # 4-byte big-endian signed int32
 
 _RSC_TO_FRIENDLY = {v: k for k, v in STARTING_ITEM_POOL.items()}
 # Supplement with friendly_name entries from extracted_locations (non-null only)
@@ -164,6 +172,9 @@ def _resolve_random_config(config: dict, rng: random.Random) -> None:
     if str(config.get("shuffle_enemies", False)) == "random":
         config["shuffle_enemies"] = rng.choice([True, False])
         print(f"  [random] shuffle_enemies → {config['shuffle_enemies']}")
+    if str(config.get("deadside_guns", False)) == "random":
+        config["deadside_guns"] = rng.choice([True, False])
+        print(f"  [random] deadside_guns → {config['deadside_guns']}")
     if str(config.get("shuffle_true_forms", False)) == "random":
         config["shuffle_true_forms"] = rng.choice([True, False])
         print(f"  [random] shuffle_true_forms → {config['shuffle_true_forms']}")
@@ -179,10 +190,18 @@ def _resolve_random_config(config: dict, rng: random.Random) -> None:
     if str(config.get("soul_threshold_mode", "off")) == "random":
         config["soul_threshold_mode"] = rng.choice(list(SOUL_THRESHOLD_MODES))
         print(f"  [random] soul_threshold_mode → {config['soul_threshold_mode']}")
+    if str(config.get("unique_retractor_keys", False)) == "random":
+        config["unique_retractor_keys"] = rng.choice([True, False])
+        print(f"  [random] unique_retractor_keys → {config['unique_retractor_keys']}")
     if str(config.get("death_penalty", 0)) == "random":
         config["death_penalty"] = round(rng.uniform(0.5, 10.0), 1)
         penalty = round(config["death_penalty"] * 1000)
         print(f"  [random] death_penalty → step {config['death_penalty']} (-{penalty}/death)")
+    if str(config.get("sprint_multiplier", 0)) == "random":
+        lo = float(config.get("sprint_multiplier_min", 1.5))
+        hi = float(config.get("sprint_multiplier_max", 4.0))
+        config["sprint_multiplier"] = round(rng.uniform(lo, hi), 2)
+        print(f"  [random] sprint_multiplier → {config['sprint_multiplier']}x")
     if str(config.get("shuffle_weapons", True)) == "random":
         config["shuffle_weapons"] = rng.choice([True, False])
         print(f"  [random] shuffle_weapons → {config['shuffle_weapons']}")
@@ -493,6 +512,21 @@ def patch_rsc_file(filepath: str, patches: dict, record_templates: dict = None) 
             y_off = rec_start + XYZ_OFF + 4
             current_y = struct.unpack_from("<f", data, y_off)[0]
             struct.pack_into("<f", data, y_off, current_y + y_adjust)
+
+        # Rotation override (2026-07-25, ported from ap_patcher.py — Jon's
+        # request to make the Book of Shadows model, see MSH_OVERRIDES'
+        # bookofshadows.msh -> sworm.msh swap, stand upright regardless of
+        # what slot it lands in). rotation_a/rotation_b are set to 0
+        # specifically for RSC_X_BOOK_OF_SHADOWS in make_patch() below —
+        # see ap_patcher.py's matching comment for the "0/0 is a best
+        # guess, not yet confirmed live" caveat; same custom mesh, same
+        # caveat applies here.
+        rotation_a = p.get('rotation_a')
+        if rotation_a is not None:
+            struct.pack_into(">h", data, rec_start + ROTATION_A_OFF, rotation_a)
+        rotation_b = p.get('rotation_b')
+        if rotation_b is not None:
+            struct.pack_into(">i", data, rec_start + ROTATION_B_OFF, rotation_b)
 
     if len(data) != size_before:
         print(f"  ERROR: patch_rsc_file changed file size from {size_before} to {len(data)}!")
@@ -992,7 +1026,8 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
         }
 
     _pc_combo = config.get("piston_combos", "off")
-    placement, gate_remap = assumed_fill(
+    _unique_retractor_keys = bool(config.get("unique_retractor_keys", False))
+    placement, gate_remap, retractor_level_assignment = assumed_fill(
         rng,
         progression_balancing=config.get("progression_balancing", 50),
         shuffle_gad_temples=config.get("shuffle_gad_temples", False),
@@ -1006,6 +1041,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
         starting_item_bundles=config.get("starting_item_bundles", []),
         piston_combos=_pc_combo,
         soul_thresholds=soul_thresholds,
+        unique_retractor_keys=_unique_retractor_keys,
         **gate_kwargs,
     )
 
@@ -1015,7 +1051,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
         retry_rng = random.Random(retry_seed)
         if attempt > 0:
             print(f"  ⚠️  Seed failed validation — retry {attempt}/{MAX_RETRIES - 1}...")
-            placement, gate_remap = assumed_fill(
+            placement, gate_remap, retractor_level_assignment = assumed_fill(
                 retry_rng,
                 progression_balancing=config.get("progression_balancing", 50),
                 shuffle_gad_temples=config.get("shuffle_gad_temples", False),
@@ -1029,6 +1065,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
                 starting_item_bundles=config.get("starting_item_bundles", []),
                 piston_combos=_pc_combo,
                 soul_thresholds=soul_thresholds,
+                unique_retractor_keys=_unique_retractor_keys,
                 **gate_kwargs,
             )
         ok, report = validate_fill(
@@ -1043,6 +1080,8 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
             entrance_shuffle=entrance_shuffle,
             piston_combos=_pc_combo,
             soul_thresholds=soul_thresholds,
+            unique_retractor_keys=_unique_retractor_keys,
+            retractor_level_assignment=retractor_level_assignment,
         )
         if ok:
             break
@@ -1066,7 +1105,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
     if n:
         print(f"  First {n} gate(s) forced open (SL0)")
 
-    return placement, gate_remap
+    return placement, gate_remap, retractor_level_assignment
 
 # ── RSC item randomization ────────────────────────────────────────────────────
 
@@ -1119,8 +1158,38 @@ def write_placement_patches(
         else:
             y_adj = 0.0
         y_adj += ITEM_Y_ADJUST.get((new_name, rec.source_file), ITEM_Y_ADJUST.get((new_name, None), 0.0))
-        return {"name": new_name, "reward": save_idx,
-                "logic": rec.zone, "y_adjust": y_adj, "source_file": rec.source_file}
+        patch = {"name": new_name, "reward": save_idx,
+                 "logic": rec.zone, "y_adjust": y_adj, "source_file": rec.source_file}
+        # Force the Book of Shadows model to a fixed upright rotation
+        # instead of inheriting whatever rotation the original slot's
+        # object had. CONFIRMED LIVE (2026-07-25, Jon, via ap_patcher.py's
+        # identical code path): ROTATION_A_OFF ("likely pitch/roll" per
+        # TECHNICAL.md) is the right axis for tipping the book upright.
+        # Tried rotation_a=270 (clean tip, no clipping) paired with
+        # rotation_b (yaw) at 180/90/0 to fix facing direction —
+        # ROTATION_B_OFF turned out NOT to control facing at all; the book
+        # faced away from the viewer identically regardless of its value.
+        # Reverted to rotation_a=90, which WAS confirmed to face the
+        # correct direction on its own — the tradeoff is it sits
+        # lower/clips slightly at the slot's native height, compensated via
+        # ITEM_Y_ADJUST's ("RSC_X_BOOK_OF_SHADOWS", None) entry in
+        # constants.py. rotation_b left at 0 (no confirmed effect either
+        # way).
+        if new_name == "RSC_X_BOOK_OF_SHADOWS":
+            # CONFIRMED LIVE (2026-07-25, Jon, via ap_patcher.py's identical
+            # code path) — final combination, standing upright, facing the
+            # viewer, right-side up: rotation_a=90 (pitch, gets the facing
+            # direction right) + rotation_b=180 (yaw, flips it right-side up
+            # -- despite rotation_b appearing to have no effect on facing
+            # when tested earlier alongside rotation_a=270; the two fields
+            # don't compose the same way from a different starting pitch).
+            # Y-height compensated separately via ITEM_Y_ADJUST's
+            # ("RSC_X_BOOK_OF_SHADOWS", None) entry in constants.py
+            # (rotation_a=90 sits lower/clips at the slot's native height
+            # without it).
+            patch["rotation_a"] = 90
+            patch["rotation_b"] = 180
+        return patch
 
     patches_by_folder: dict = {}
     marker_sites: list = []  # (folder, x, y, z, zone) for SOUL_SLOT_MARKER_FX injection
@@ -1154,12 +1223,24 @@ def write_placement_patches(
         rsc_name = BARREL_RSC_SUBSTITUTIONS.get(rsc_name, rsc_name)
 
         # When a cadeaux-carrying barrel (category="cadeaux", object=RSC_X_BARREL_*)
-        # is placed into a different level, normalize its RSC name to RSC_X_CADEAUX.
-        # This guarantees the cadeaux registers correctly regardless of whether the
-        # destination slot's track_type matches the source barrel's original level.
+        # is placed ANYWHERE, normalize its RSC name to RSC_X_CADEAUX. Used to only
+        # normalize the CROSS-level case (source_loc.level_id != rec.folder), on the
+        # assumption that a same-level reuse of a barrel-shaped cadeaux donor's
+        # identity was safe to leave alone. FIXED 2026-08-02, ported from the
+        # identical fix in ap_patcher.py (Jon's report + in-game verification on a
+        # real AP seed — three locations that reused a SAME-level barrel-shaped
+        # cadeaux donor all showed up in-game as empty, non-functional barrels).
+        # Per Jon: "barrel cadeaux aren't as consistent when moving location so
+        # its safer to just turn them into a cadeaux item" — dropped the level_id
+        # comparison entirely so this now fires unconditionally for any barrel-
+        # typed cadeaux-category placement, same-level or cross-level. Detection
+        # for cadeaux is a save-file position/coordinate scan against
+        # locations.csv, not object-name dependent, so forcing a clean
+        # RSC_X_CADEAUX here doesn't change how the pickup is tracked — only
+        # that it's now guaranteed to be a real, functional cadeaux pickup
+        # rather than whatever the donor's own object happened to be.
         if (rsc_name in BARREL_TYPES
-                and hasattr(source_loc, "category") and source_loc.category == "cadeaux"
-                and hasattr(source_loc, "level_id") and source_loc.level_id != rec.folder):
+                and hasattr(source_loc, "category") and source_loc.category == "cadeaux"):
             rsc_name = "RSC_X_CADEAUX"
 
         save_idx = source_loc.save_idx
@@ -1254,7 +1335,8 @@ def inject_special_item_fx(marker_sites: list, levels_path) -> int:
 def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
                       records_by_folder, config, spheres=None,
                       entrance_shuffle=None, soul_thresholds=None,
-                      piston_combo_table=None) -> None:
+                      piston_combo_table=None,
+                      retractor_level_assignment=None) -> None:
     starting_rsc = config.get('starting_item', None)
     starting_friendly = _RSC_TO_FRIENDLY.get(starting_rsc, starting_rsc) if starting_rsc else 'none'
 
@@ -1264,6 +1346,22 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
 
     settings_str = config.get('settings_string')
     yn = lambda v: 'yes' if v else 'no'
+
+    # Unique Retractor Keys — which physical retractor unlocks which liveside
+    # level this seed. This is currently the ONLY place a player can learn
+    # the mapping: the in-game map tracker and pickup captions are both
+    # keyed by item TYPE (one shared "Retractor" label for all 5 instances),
+    # not by individual instance, so there's no in-game text mechanism to
+    # show this today — see the 2026-08-05 session notes for the full story.
+    _retractor_section_lines: list[str] = []
+    if config.get('unique_retractor_keys', False) and retractor_level_assignment:
+        from extracted_locations import LOCATION_TABLE as _RETRACTOR_LOC_TABLE
+        _retractor_section_lines.append("── RETRACTOR KEYS ──────────────────────────────────────")
+        for _rk_loc_key, _rk_region in sorted(retractor_level_assignment.items(), key=lambda kv: kv[1]):
+            _rk_loc = _RETRACTOR_LOC_TABLE.get(_rk_loc_key)
+            _rk_label = (_rk_loc.friendly_name or _rk_loc_key) if _rk_loc else _rk_loc_key
+            _retractor_section_lines.append(f"  {_rk_label:<28} unlocks -> {_rk_region}")
+        _retractor_section_lines.append("")
 
     lines = [
         "=" * 60,
@@ -1283,6 +1381,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"  Starting item:         {starting_friendly}",
         f"  Starting bundles:      {', '.join(config.get('starting_item_bundles', [])) or 'none'}",
         f"  Patch tracker:         {yn(config.get('patch_tracker', False))}",
+        f"  Unique retractor keys: {yn(config.get('unique_retractor_keys', False))}",
         "",
         "── COFFIN GATES ────────────────────────────────────────",
         f"  Gate preset:           {config.get('gate_preset', 'none')}",
@@ -1293,6 +1392,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         "── ENTRANCE RANDOMIZER ─────────────────────────────────",
         f"  Entrance mode:         {config.get('entrance_mode', 'off')}",
         "",
+        *_retractor_section_lines,
         "── GAMEPLAY TUNING ─────────────────────────────────────",
         f"  Starting health:       {config.get('starting_health', 5)}/10",
         f"  Altar health grant:    {config.get('altar_health_grant', 1)}/10",
@@ -1301,6 +1401,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"  Insanity tier:         {insanity if insanity else 'off'}",
         f"  Progression balancing: {config.get('progression_balancing', 50)}/100",
         f"  Death penalty:         {config.get('death_penalty', 0) or 'off'}/10",
+        f"  Shift-sprint:          {(str(config.get('sprint_multiplier', 0)) + 'x') if config.get('sprint_multiplier', 0) else 'off'}",
         "",
         "── ENEMIES ─────────────────────────────────────────────",
         f"  Shuffle enemies:       {yn(config.get('shuffle_enemies', False))}",
@@ -1732,7 +1833,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
 
     # ── Step 2: Run assumed fill (includes gate shuffle) ─────────────────────
     print("\nLegion's chaos reshapes the world — scattering the relics...")
-    progression_placement, gate_remap = run_assumed_fill(rng, config, entrance_shuffle=entrance_shuffle, soul_thresholds=sl_thresholds_result)
+    progression_placement, gate_remap, retractor_level_assignment = run_assumed_fill(rng, config, entrance_shuffle=entrance_shuffle, soul_thresholds=sl_thresholds_result)
 
     # Compute true form remap now (needs gate_remap) so simulate_playthrough
     # uses correct fixed soul positions for sphere log
@@ -2056,7 +2157,9 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                 print(f"  WARNING: {_rsc_kpf_rel} not found in KPF -- schism byte patch will fail")
 
         # Shuffle already built in Step 1b — just apply it to disk
-        apply_unified_shuffle(entrance_shuffle, scripts_dir, verbose=True)
+        apply_unified_shuffle(entrance_shuffle, scripts_dir, verbose=False)
+        print(f"  {len(entrance_shuffle.outbound)} outbound + {len(entrance_shuffle.inbound)} return "
+              f"route(s) patched (see spoiler log for the mapping)")
 
         for _t in UNIFIED_TRANSITIONS:
             _rels = [f"{CUT_PREFIX}/{_t.spoke_folder}/{_t.spoke_exit_file}"]
@@ -2118,6 +2221,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
         entrance_shuffle=entrance_shuffle,
         soul_thresholds=sl_thresholds_result,
         piston_combo_table=piston_combo_table,
+        retractor_level_assignment=retractor_level_assignment,
     )
 
     if dry_run:
@@ -2261,6 +2365,14 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             # Always: prison key card render fix
             apply_prison_keycard_patch(str(patched), dry_run=dry_run)
 
+            # Always: redirect save folder (saves/ -> rando/, this module's
+            # default leaf) so randomizer playthroughs never share slots
+            # with vanilla saves. Only the patched exe is affected — vanilla
+            # thoth_x64.exe still reads/writes the original folder
+            # untouched. ap_patcher.py (Archipelago seeds) passes
+            # leaf="ap/" explicitly instead — see save_path_patch.py.
+            apply_save_path_patch(str(patched), dry_run=dry_run)
+
             # Cadeaux interaction threshold/cost patch
             cadeau_result = apply_cadeau_step_patch(
                 str(patched), rng, config, dry_run=dry_run
@@ -2274,6 +2386,10 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             # Death penalty patch
             if config.get("death_penalty", 0):
                 apply_death_penalty_patch(str(patched), step=config["death_penalty"], dry_run=dry_run)
+
+            # Shift-sprint speed patch (land + water) -- opt-in, 0 = disabled
+            if config.get("sprint_multiplier", 0):
+                apply_sprint_patch(str(patched), rng, config, dry_run=dry_run)
 
             # Soul threshold patch
             if sl_thresholds_result is not None:
@@ -2303,6 +2419,14 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             )
     else:
         print("\nWARNING: thoth_x64.exe not found - EXE patches skipped")
+
+    # Deadside Guns secret force-on -- NOT an EXE patch: edits kexengine.cfg,
+    # a separate per-user config file outside game_dir entirely, so it's
+    # unconditional here rather than nested inside the thoth_x64.exe-gated
+    # block above (it should still apply even if the exe patch step failed
+    # or the exe wasn't found).
+    if config.get("deadside_guns", False):
+        apply_deadside_guns_toggle(True, dry_run=dry_run)
 
     # ── Step 8: Gate remap JSON ───────────────────────────────────────────────
     threshold_json = out_path / "soul_thresholds.json"
@@ -2497,6 +2621,13 @@ if __name__ == "__main__":
                         help="Shuffle true form enemy positions with regular enemies")
     parser.add_argument("--shuffle-enemies-random", action="store_true",
                         help="Randomly decide per-seed whether to shuffle enemies")
+    parser.add_argument("--deadside-guns", action="store_true",
+                        help="Force the 'I like Dead Side Guns' secret on (Deadside weapons work on "
+                             "Liveside and vice versa) without needing to find its hidden in-world "
+                             "unlock trigger. Edits kexengine.cfg at patch time -- requires having "
+                             "launched the game at least once already.")
+    parser.add_argument("--deadside-guns-random", action="store_true",
+                        help="Randomly decide per-seed whether to force the Deadside Guns secret on")
     parser.add_argument("--shuffle-true-forms-random", action="store_true",
                         help="Randomly decide per-seed whether to shuffle true forms")
     parser.add_argument("--enemy-mix-movement-random", action="store_true",
@@ -2532,6 +2663,15 @@ if __name__ == "__main__":
     parser.add_argument("--patch-tracker", action=argparse.BooleanOptionalAction, default=True,
                         help="Rewrite levels.txt map badges to reflect randomized item locations "
                              "(default: on). Use --no-patch-tracker to strip all item badges.")
+    parser.add_argument("--unique-retractor-keys", action="store_true",
+                        help="Convert the 5 fungible Retractors into unique per-level keys — each "
+                             "physical Retractor is randomly assigned (per seed) to unlock exactly "
+                             "one liveside level (Florida/Salvage/London/Prison/Queens), instead of "
+                             "the vanilla 'any 5 retractors opens all 5 levels' shared gate. The "
+                             "assignment is documented in the spoiler log (no in-game text mechanism "
+                             "shows it yet).")
+    parser.add_argument("--unique-retractor-keys-random", action="store_true",
+                        help="Randomly decide per-seed whether to use unique retractor keys.")
     parser.add_argument("--altar-cadeaux-required", type=_int_or_random, default=None,
                         help="Cadeaux required and spent per altar/door interaction (1-133, vanilla: 100). Pass 'random' to randomize per-seed.")
     parser.add_argument("--fogometers-cadeaux-required", type=_int_or_random, default=None,
@@ -2554,6 +2694,11 @@ if __name__ == "__main__":
                              "E.g. --death-penalty 0.5 gives -500/death, 1.0 gives -1000/death.")
     parser.add_argument("--death-penalty-random", action="store_true",
                         help="Randomly pick a death-penalty step (0.5–10.0) per seed.")
+    parser.add_argument("--sprint-multiplier", type=float, default=0,
+                        help="Hold Shift to move at this multiple of normal speed "
+                             "(land and water). 0 = disabled (vanilla, no Shift-sprint).")
+    parser.add_argument("--sprint-multiplier-random", action="store_true",
+                        help="Randomly pick a sprint multiplier (1.5x-4.0x) per seed.")
     parser.add_argument("--piston-combos", action="store_true",
                         help="Shuffle the 6 dark engine piston combination values. "
                              "Jack's Schematic becomes a required progression item.")
@@ -2594,6 +2739,7 @@ if __name__ == "__main__":
         "starting_item_bundles": args.starting_item_bundles or [],
         "insanity":              args.insanity or 0,
         "shuffle_enemies":       "random" if args.shuffle_enemies_random else args.shuffle_enemies,
+        "deadside_guns":         "random" if args.deadside_guns_random else args.deadside_guns,
         "enemy_mode":            args.enemy_mode,
         "enemy_mix_movement":    "random" if args.enemy_mix_movement_random else args.enemy_mix_movement,
         "enemy_uncap_counts":    "random" if args.enemy_uncap_counts_random else args.enemy_uncap_counts,
@@ -2606,6 +2752,7 @@ if __name__ == "__main__":
         "shuffle_enemies_sfx":   args.shuffle_enemies_sfx,
         "shuffle_sky":           args.shuffle_sky,
         "patch_tracker":         args.patch_tracker,
+        "unique_retractor_keys": "random" if args.unique_retractor_keys_random else args.unique_retractor_keys,
         "open_gates_n":          args.open_gates,
         "entrance_mode":         args.entrance_mode,
         "altar_cadeaux_required":      args.altar_cadeaux_required or 100,
@@ -2614,6 +2761,7 @@ if __name__ == "__main__":
         "altar_health_grant":          args.altar_health_grant or 1,
         "soul_threshold_mode":         "random" if args.soul_threshold_mode_random else (args.soul_threshold_mode or "off"),
         "death_penalty":               "random" if args.death_penalty_random else args.death_penalty,
+        "sprint_multiplier":           "random" if args.sprint_multiplier_random else args.sprint_multiplier,
         "piston_combos":    "random" if args.piston_combos_random else ("on" if args.piston_combos else "off"),
         "settings_string":             args.settings_string,
     }
