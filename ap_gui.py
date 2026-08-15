@@ -33,7 +33,7 @@ that key instead of the widget's current value — AP rolls it at generate
 time, same as gui.py's dice buttons roll it at patch time.
 
 Usage (dev):    python ap_gui.py
-Usage (built):  Shadow Man AP Companion.exe
+Usage (built):  shadow_man_ap_companion.exe
 """
 
 import sys

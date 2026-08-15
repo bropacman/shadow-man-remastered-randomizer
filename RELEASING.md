@@ -1,22 +1,29 @@
 # Releasing
 
-This repo produces two independent shippable artifacts from one shared
+This repo produces three independent shippable artifacts from one shared
 codebase: the **standalone randomizer** (a single .exe for players who
-just want to randomize their own single-player game) and the **AP world**
-(`shadowman.apworld`, for players using Archipelago multiworld). They have
-different audiences, different distribution channels, and should be
-versioned and released independently — see the discussion that led here
-if you want the reasoning. This file is the practical "how."
+just want to randomize their own single-player game), the **AP world**
+(`shadowman.apworld`, for players using Archipelago multiworld), and the
+**AP Companion** (a single .exe wrapping `ap_gui.py` — generates a
+player's YAML and applies their `.apshadowman` seed, no Python install
+required). They have different audiences and, for the standalone vs. the
+AP-facing pair, different distribution channels — see the discussion
+that led here if you want the reasoning. This file is the practical "how."
 
-## The two builds
+The AP Companion ships alongside the AP world (same `COMPANION_VERSION`,
+same release) rather than the standalone exe, even though its source
+lives in this repo next to `gui.py` — it only ever talks to AP seeds
+(`.apshadowman` files), never the standalone's own seed format.
 
-| | Standalone | AP world |
-|---|---|---|
-| Build script | `build.bat` | `build_apworld.bat` |
-| Output | `dist\standalone\shadow_man_randomizer.exe` | `dist\apworld\shadowman.apworld` |
-| Entry point | `gui.py` / `patcher.py` | `worlds/shadowman/__init__.py` (in your Archipelago checkout) + `ap_patcher.py`/`ap_gui.py` (in this repo) |
-| Version lives in | `gui.py`'s embedded HTML (`v1.1.5` as of this writing) | `ap_gui.py`'s `COMPANION_VERSION` (`v1.2.2` as of this writing) — bump this for companion-app changes; check whether the AP world itself should carry its own version marker separately |
-| Ships to | GitHub release / itch.io / wherever standalone players look | Archipelago's world list / Discord / manually to players who already run Archipelago |
+## The three builds
+
+| | Standalone | AP world | AP Companion |
+|---|---|---|---|
+| Build script | `build.bat` | `build_apworld.bat` | `build_ap_gui.bat` |
+| Output | `dist\standalone\shadow_man_randomizer.exe` | `dist\apworld\shadowman.apworld` | `dist\ap_companion\shadow_man_ap_companion.exe` |
+| Entry point | `gui.py` / `patcher.py` | `worlds/shadowman/__init__.py` (in your Archipelago checkout) + `ap_patcher.py`/`ap_gui.py` (in this repo) | `ap_gui.py` (same file the AP world's own `ap_patcher.py`/`apply_ap_seed.py` path uses) |
+| Version lives in | `gui.py`'s embedded HTML (`v1.1.5` as of this writing) | `ap_gui.py`'s `COMPANION_VERSION` (`v1.2.2` as of this writing) — bump this for companion-app changes; check whether the AP world itself should carry its own version marker separately | Same `COMPANION_VERSION` as the AP world row — one bump covers both |
+| Ships to | GitHub release / itch.io / wherever standalone players look | Archipelago's world list / Discord / manually to players who already run Archipelago | Same place as the AP world — the two are meant to be grabbed together |
 
 `dist/` and `build/` are both gitignored — nothing here is meant to be
 committed, only built fresh and uploaded.
@@ -57,11 +64,17 @@ see the script's own docstring for the full breakdown of which is which.
    `worlds\shadowman` path as an argument if it's not at the default
    location baked into the script) — runs the drift check, then packages
    `dist\apworld\shadowman.apworld`.
-2. Bump `COMPANION_VERSION` in `ap_gui.py` if this is a real release.
-3. Post/upload `shadowman.apworld` wherever AP players get it from (rename
-   to include the version if you want, e.g. `shadowman-v1.2.3.apworld` —
-   the AP loader doesn't care about the filename, only the folder name
-   inside the zip).
+2. Bump `COMPANION_VERSION` in `ap_gui.py` if this is a real release —
+   covers both the AP world row and the AP Companion exe below, one bump.
+3. `build_ap_gui.bat` — packages the AP Companion into
+   `dist\ap_companion\shadow_man_ap_companion.exe`. Ship this alongside
+   `shadowman.apworld`; per the README, it's the recommended way for
+   players to generate their YAML and apply their seed.
+4. Post/upload `shadowman.apworld` and `shadow_man_ap_companion.exe`
+   together wherever AP players get them from (rename either to include
+   the version if you want, e.g. `shadowman-v1.2.3.apworld` — the AP
+   loader doesn't care about the filename, only the folder name inside
+   the zip).
 
 ## What this does *not* cover yet
 
