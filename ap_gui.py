@@ -95,7 +95,15 @@ PREFS_FILE   = SCRIPT_DIR / "gui_prefs.json"   # shared with gui.py — same gam
 # else, same storage _load_prefs()/_save_prefs() already use for game_dir.
 DEFAULT_AP_DIR = Path(r"C:\Users\jonat\Documents\Archipelago-0.6.7")
 
-COMPANION_VERSION = "v1.2.2"
+# Separate, independent version track from the standalone (gui.py's HTML
+# header) -- the two ship on different schedules to different audiences,
+# see RELEASING.md. Starting over at 0.x rather than continuing the old
+# 1.2.x numbering: this is the first release that includes the AP
+# Companion exe at all, and first real-user testing already caught a
+# packaging bug (missing keystone/capstone dependency) -- genuinely beta,
+# and 0.x says so honestly. Bump to 1.0.0 once it's held up across a few
+# real multiworld games.
+COMPANION_VERSION = "v0.1.0"
 
 
 def _load_prefs() -> dict:
