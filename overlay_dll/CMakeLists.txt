@@ -9,6 +9,23 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Statically link the MSVC runtime (2026-08-15) -- without this, CMake's
+# MSVC default is /MD (dynamic CRT), so this DLL depends on
+# vcruntime140.dll/msvcp140.dll/vcruntime140_1.dll being present in the
+# TARGET process (thoth_x64_patched.exe), i.e. the Microsoft Visual C++
+# 2015-2022 x64 Redistributable installed on the *player's* machine, not
+# the dev machine that built the DLL. Leading suspect for a real bug:
+# injection works fine on Jon's own dev box (has Visual Studio, so the
+# redistributable is already present) but the overlay never loads on a
+# genuinely fresh test machine, which had no reason to have it -- exactly
+# the "missing dependency" case _inject_overlay_dll()'s own LoadLibraryW-
+# returned-NULL log message already anticipates. Static linking makes the
+# DLL fully self-contained -- no separate redistributable install required
+# for players, ever -- at the cost of a slightly larger ShadowManOverlay.dll.
+# This must be set before any add_library() calls below (minhook/imgui/
+# ShadowManOverlay all need to agree on one CRT).
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 include(FetchContent)
 
 # We want raw source only, not upstream's own build system — MinHook ships
