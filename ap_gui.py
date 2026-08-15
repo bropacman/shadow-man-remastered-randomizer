@@ -170,7 +170,15 @@ def _autodetect_ap_dir() -> "Path | None":
 # packaging bug (missing keystone/capstone dependency) -- genuinely beta,
 # and 0.x says so honestly. Bump to 1.0.0 once it's held up across a few
 # real multiworld games.
-COMPANION_VERSION = "v0.1.0"
+#
+# v0.1.0 -> v0.1.1 (2026-08-15): v0.1.0 was already published (as a
+# pre-release) before fresh-machine testing turned up real client-launch
+# bugs -- DEFAULT_AP_DIR pointed only at Jon's own dev checkout with no
+# way to override it, and the overlay DLL's path resolution broke once
+# loaded from an actual packaged .apworld. Both fixed; since v0.1.0 is
+# already public, this ships as a new tag/release rather than silently
+# swapping files under the old one.
+COMPANION_VERSION = "v0.1.1"
 
 
 def _load_prefs() -> dict:

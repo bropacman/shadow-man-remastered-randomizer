@@ -22,7 +22,7 @@ lives in this repo next to `gui.py` — it only ever talks to AP seeds
 | Build script | `build.bat` | `build_apworld.bat` | `build_ap_gui.bat` |
 | Output | `dist\standalone\shadow_man_randomizer.exe` | `dist\apworld\shadowman.apworld` | `dist\ap_companion\shadow_man_ap_companion.exe` |
 | Entry point | `gui.py` / `patcher.py` | `worlds/shadowman/__init__.py` (in your Archipelago checkout) + `ap_patcher.py`/`ap_gui.py` (in this repo) | `ap_gui.py` (same file the AP world's own `ap_patcher.py`/`apply_ap_seed.py` path uses) |
-| Version lives in | `gui.py`'s embedded HTML (`v1.1.5` as of this writing) | `ap_gui.py`'s `COMPANION_VERSION` (`v0.1.0` as of this writing — its own independent track, starting over at 0.x since this is the first release with the AP Companion exe and it's still genuinely beta) — bump this for companion-app changes; check whether the AP world itself should carry its own version marker separately | Same `COMPANION_VERSION` as the AP world row — one bump covers both |
+| Version lives in | `gui.py`'s embedded HTML (`v1.2.0` as of this writing) | `ap_gui.py`'s `COMPANION_VERSION` (`v0.1.1` as of this writing — its own independent track, starting over at 0.x since this is the first release with the AP Companion exe and it's still genuinely beta) — bump this for companion-app changes; check whether the AP world itself should carry its own version marker separately | Same `COMPANION_VERSION` as the AP world row — one bump covers both |
 | Ships to | GitHub release / itch.io / wherever standalone players look | Archipelago's world list / Discord / manually to players who already run Archipelago | Same place as the AP world — the two are meant to be grabbed together |
 
 `dist/` and `build/` are both gitignored — nothing here is meant to be
@@ -72,7 +72,7 @@ see the script's own docstring for the full breakdown of which is which.
    players to generate their YAML and apply their seed.
 4. Post/upload `shadowman.apworld` and `shadow_man_ap_companion.exe`
    together wherever AP players get them from (rename either to include
-   the version if you want, e.g. `shadowman-v0.1.0.apworld` — the AP
+   the version if you want, e.g. `shadowman-v0.1.1.apworld` — the AP
    loader doesn't care about the filename, only the folder name inside
    the zip).
 
