@@ -27,6 +27,36 @@ Excludes dev-only content that isn't needed at runtime:
     SESSION_NOTES_*.md,
     LIVE_MEMORY_TRACKING_NOTES.md — internal dev/session notes, not useful
                                      to a player installing the world
+  - launch_client.bat,
+    launch_game.bat                 — single-machine dev convenience scripts,
+                                     not portable: launch_client.bat hardcodes
+                                     this dev's own Archipelago checkout path
+                                     (cd /d "C:/Users/.../Archipelago-0.6.7"),
+                                     launch_game.bat hardcodes this dev's own
+                                     game install path. Neither can be made
+                                     "universal" by editing them — the real
+                                     paths are only known on each player's own
+                                     machine, and nothing in this repo's build
+                                     step has access to another player's
+                                     install layout. Not a functionality gap:
+                                     ap_gui.py's own "Launch Game + Client" /
+                                     "Launch Game Only" / "Launch Client Only"
+                                     buttons already do exactly this, correctly
+                                     and portably, reading each player's own
+                                     game_dir/ap_dir from their gui_prefs.json
+                                     (see ap_gui.py's launch_game()/
+                                     launch_client_only()) — and the
+                                     Archipelago Launcher's own "Shadow Man
+                                     Remastered Client" menu entry (registered
+                                     in __init__.py) covers the client-only
+                                     case with zero path configuration needed
+                                     at all. These two .bat files were always
+                                     just this dev's personal shortcuts around
+                                     functionality the project already has a
+                                     portable answer for; they stay in the
+                                     source checkout for local convenience,
+                                     just never got shipped inside the
+                                     package other players install.
 
 Kept: every .py file actually needed at runtime, guide_en.md (referenced by
 name in __init__.py's WebWorld.tutorials — required, not just documentation),
@@ -53,6 +83,10 @@ EXCLUDE_DIRS = {"__pycache__", "tools", "data"}
 EXCLUDE_FILE_PATTERNS = [
     "*.pyc", "*.sav",
     "AP_FEATURE_GAP.md", "SESSION_NOTES_*.md", "LIVE_MEMORY_TRACKING_NOTES.md",
+    # Single-machine dev convenience scripts with hardcoded local paths —
+    # see the module docstring's "Excludes" section for why these can't
+    # just be edited to be portable, and what covers the same need instead.
+    "launch_client.bat", "launch_game.bat",
 ]
 
 
