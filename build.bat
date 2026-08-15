@@ -24,11 +24,14 @@ echo [2/3] Building executable from Spec file...
 echo.
 :: Using --clean ensures we don't use stale data from previous failed builds.
 :: We point directly to the .spec file to preserve your custom configuration.
-pyinstaller --noconfirm --clean "Shadow Man Randomizer.spec"
+:: --distpath/--workpath keep this build fully separate from the apworld
+:: build's own output (see build_apworld.bat) -- the two ship independently,
+:: see RELEASING.md.
+pyinstaller --noconfirm --clean --distpath "dist\standalone" --workpath "build\standalone" "Shadow Man Randomizer.spec"
 
 if errorlevel 1 (
     echo.
-    echo ERROR: PyInstaller build failed. 
+    echo ERROR: PyInstaller build failed.
     echo Check the console output above for missing modules or syntax errors.
     pause & exit /b 1
 )
@@ -37,13 +40,13 @@ if errorlevel 1 (
 echo.
 echo [3/3] Build Complete!
 echo.
-if exist "dist\shadow_man_randomizer.exe" (
+if exist "dist\standalone\shadow_man_randomizer.exe" (
     echo SUCCESS: Executable created at:
-    echo   dist\shadow_man_randomizer.exe
+    echo   dist\standalone\shadow_man_randomizer.exe
     echo.
     echo Note: You can now distribute the single .exe file.
 ) else (
-    echo ERROR: Build finished but the .exe was not found in the dist folder.
+    echo ERROR: Build finished but the .exe was not found in dist\standalone.
 )
 
 echo.
