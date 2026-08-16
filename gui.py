@@ -679,19 +679,25 @@ _HTML = r"""<!DOCTYPE html>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomly reassigns music tracks across all levels. No effect on gameplay or logic.</span></span>
       </label>
       <label class="check-label">
-        <input type="checkbox" id="shuffleVoices">
-        Shuffle Voice Lines
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man&rsquo;s generic ambient voice lines. Purely cosmetic.</span></span>
-      </label>
-      <label class="check-label">
         <input type="checkbox" id="shuffleWeaponsSfx">
         Shuffle Weapon SFX
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapon fire and reload sounds within each weapon category. Purely cosmetic.</span></span>
       </label>
       <label class="check-label">
-        <input type="checkbox" id="shuffleEnemiesSfx">
+        <input type="checkbox" id="shuffleVoices" onchange="onVoiceEnemyDepsChange()">
+        Shuffle Voice Lines
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man&rsquo;s generic ambient voice lines. Purely cosmetic.</span></span>
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="shuffleEnemiesSfx" onchange="onVoiceEnemyDepsChange()">
         Shuffle Enemy SFX
         <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles enemy sound effects within type pools — pain sounds trade with other enemies' pain sounds, startle sounds with startle sounds, attack sounds with attack sounds. Ambient creatures and death-by-weapon sounds are left untouched. Purely cosmetic.</span></span>
+      </label>
+      <label class="check-label" style="grid-column:1 / -1;padding-left:20px">
+        <input type="checkbox" id="combineVoiceEnemySfx" disabled>
+        Shuffle Voice &amp; Enemy SFX Together
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man's voice lines and every enemy's sounds together as one shared pool instead of separately — Shadow Man can grunt with an enemy's pain sound, an enemy can scream in his voice. Requires both Shuffle Voice Lines and Shuffle Enemy SFX to also be checked. Purely cosmetic.</span></span>
+        <span class="hint" id="combineVoiceEnemySfxHint">requires Shuffle Voice Lines + Shuffle Enemy SFX</span>
       </label>
       <label class="check-label">
         <input type="checkbox" id="shuffleAmbients">
@@ -767,6 +773,13 @@ function onEnemiesChange() {
     document.getElementById('enemyUncapCounts').disabled = !on;
   }
   document.getElementById('enemyHint').textContent = on ? '' : 'enable Shuffle Enemies to unlock';
+}
+function onVoiceEnemyDepsChange() {
+  const on = document.getElementById('shuffleVoices').checked && document.getElementById('shuffleEnemiesSfx').checked;
+  const cb = document.getElementById('combineVoiceEnemySfx');
+  cb.disabled = !on;
+  if (!on) cb.checked = false;
+  document.getElementById('combineVoiceEnemySfxHint').textContent = on ? '' : 'requires Shuffle Voice Lines + Shuffle Enemy SFX';
 }
 // ── Per-field RNG toggle (🎲 buttons) ────────────────────────────────────────
 function isRng(id) {
@@ -890,6 +903,7 @@ function getConfig() {
     shuffleVoices:    document.getElementById('shuffleVoices').checked,
     shuffleWeaponsSfx:document.getElementById('shuffleWeaponsSfx').checked,
     shuffleEnemiesSfx:document.getElementById('shuffleEnemiesSfx').checked,
+    combineVoiceEnemySfx: document.getElementById('combineVoiceEnemySfx').checked,
     shuffleSky:       document.getElementById('shuffleSky').checked,
     patchTracker:        document.getElementById('patchTracker').checked,
     uniqueRetractorKeys: isRng('uniqueRetractorKeys') ? 'random' : document.getElementById('uniqueRetractorKeys').checked,
@@ -937,6 +951,7 @@ const FIELD_SHORT = {
   shuffleVoices:             'sV',
   shuffleWeaponsSfx:         'wS',
   shuffleEnemiesSfx:         'eS',
+  combineVoiceEnemySfx:      'cV',
   shuffleSky:                'sk',
   patchTracker:              'pT',
   uniqueRetractorKeys:       'uK',
@@ -981,6 +996,7 @@ const FIELD_DEFAULTS = {
   shuffleVoices:             false,
   shuffleWeaponsSfx:         false,
   shuffleEnemiesSfx:         false,
+  combineVoiceEnemySfx:      false,
   shuffleSky:                false,
   patchTracker:              true,
   uniqueRetractorKeys:       false,
@@ -1142,6 +1158,7 @@ function applyConfig(cfg) {
   set('shuffleVoices',            cfg.shuffleVoices);
   set('shuffleWeaponsSfx',        cfg.shuffleWeaponsSfx);
   set('shuffleEnemiesSfx',        cfg.shuffleEnemiesSfx);
+  set('combineVoiceEnemySfx',     cfg.combineVoiceEnemySfx);
   set('shuffleSky',               cfg.shuffleSky);
   set('patchTracker',             cfg.patchTracker);
   if (cfg.uniqueRetractorKeys !== undefined) {
@@ -1222,6 +1239,7 @@ function applyConfig(cfg) {
   updateGateDesc();
   onEntranceModeChange();
   onEnemiesChange();
+  onVoiceEnemyDepsChange();
 }
 
 function setBusy(busy) {
@@ -1400,6 +1418,7 @@ class _Api:
             ("shuffleVoices",           "--shuffle-voices"),
             ("shuffleWeaponsSfx",       "--shuffle-weapons-sfx"),
             ("shuffleEnemiesSfx",       "--shuffle-enemies-sfx"),
+            ("combineVoiceEnemySfx",    "--combine-voice-and-enemy-sfx"),
             ("shuffleSky",              "--shuffle-sky"),
         ]
         for key, flag in flag_map:

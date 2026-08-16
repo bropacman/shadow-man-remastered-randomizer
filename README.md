@@ -58,6 +58,7 @@ enemies, music, and SFX using a custom assumed-fill algorithm.
 - **Voice lines** — Shadow Man generic voice lines shuffled
 - **Weapon SFX** — fire and reload sounds shuffled within each weapon category
 - **Enemy SFX** — pain, startle, and attack sets shuffled within their own pools
+- **Shuffle voice & enemy SFX together** — optional; when enabled alongside both Voice lines and Enemy SFX, merges Shadow Man's voice pool and every enemy's sound pool into one shared pool instead of shuffling them separately, so Shadow Man can grunt with an enemy's pain sound and an enemy can scream in his voice
 - **Ambient creatures** — rats, egrets, flies, butterflies, and fish shuffled across spawn slots (global, per-movement-type, or per-context-group)
 - **Sky textures** — sky layer TGAs shuffled across levels per-filename (horizon swaps with horizon, clouds with clouds, etc.)
 
@@ -217,6 +218,7 @@ Several of the options below accept `random` in place of a number — when passe
 | `--shuffle-voices` | off | Shuffle Shadow Man generic voice lines |
 | `--shuffle-weapons-sfx` | off | Shuffle weapon fire/reload sounds within each category |
 | `--shuffle-enemies-sfx` | off | Shuffle enemy SFX within each sound-type pool (pain sets swap with pain sets, startle with startle, attack with attack) |
+| `--combine-voice-and-enemy-sfx` | off | Shuffle Shadow Man's voice lines and enemy sounds together as one shared pool instead of separately. Requires `--shuffle-voices` and `--shuffle-enemies-sfx` to also be set; no effect otherwise. |
 | `--shuffle-sky` | off | Shuffle sky textures across levels (per-filename pool — `000sky.tga` swaps with other `000sky.tga` files across levels, etc.) |
 
 Run `python patcher.py --help` for the authoritative list.

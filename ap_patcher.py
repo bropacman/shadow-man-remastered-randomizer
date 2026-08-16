@@ -677,6 +677,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"Shuffle voices: {config.get('shuffle_voices', False)}",
         f"Shuffle weapons SFX: {config.get('shuffle_weapons_sfx', False)}",
         f"Shuffle enemies SFX: {config.get('shuffle_enemies_sfx', False)}",
+        f"Shuffle voice+enemy SFX together: {config.get('combine_voice_and_enemy_sfx', False)}",
         f"Shuffle sky: {config.get('shuffle_sky', False)}",
         f"Progression balancing: {config.get('progression_balancing', 50)}",
         f"Insanity: {config.get('insanity', False)}",
@@ -1975,6 +1976,7 @@ def run_patcher(
             shuffle_voices=config.get("shuffle_voices", False),
             shuffle_weapons=config.get("shuffle_weapons_sfx", False),
             shuffle_enemies=config.get("shuffle_enemies_sfx", False),
+            combine_voice_pools=config.get("combine_voice_and_enemy_sfx", False),
         )
 
     if sfx_files:

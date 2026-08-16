@@ -1415,6 +1415,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"  Shuffle voices:        {yn(config.get('shuffle_voices', False))}",
         f"  Shuffle weapon SFX:    {yn(config.get('shuffle_weapons_sfx', False))}",
         f"  Shuffle enemy SFX:     {yn(config.get('shuffle_enemies_sfx', False))}",
+        f"  Shuffle voice+enemy SFX together: {yn(config.get('combine_voice_and_enemy_sfx', False))}",
         f"  Shuffle ambients:      {yn(config.get('shuffle_ambients', False))}",
         f"  Ambient mode:          {config.get('ambient_mode', 'global')}",
         f"  Shuffle sky:           {yn(config.get('shuffle_sky', False))}",
@@ -2492,6 +2493,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             shuffle_voices=config.get("shuffle_voices", False),
             shuffle_weapons=config.get("shuffle_weapons_sfx", False),
             shuffle_enemies=config.get("shuffle_enemies_sfx", False),
+            combine_voice_pools=config.get("combine_voice_and_enemy_sfx", False),
             dry_run=dry_run,
         )
 
@@ -2655,6 +2657,10 @@ if __name__ == "__main__":
     parser.add_argument("--shuffle-enemies-sfx", action="store_true",
                         help="Shuffle enemy SFX within each sound-type pool "
                              "(pain sets swap with pain sets, startle with startle, attack with attack)")
+    parser.add_argument("--combine-voice-and-enemy-sfx", action="store_true",
+                        help="Shuffle Shadow Man's voice lines and enemy sounds together as one "
+                             "shared pool instead of separately. Requires --shuffle-voices and "
+                             "--shuffle-enemies-sfx to also be set; no effect otherwise.")
     parser.add_argument("--shuffle-sky", action="store_true",
                         help="Shuffle sky textures across levels (per-filename pool — "
                              "000sky.tga swaps with other 000sky.tga files, etc.)")
@@ -2750,6 +2756,7 @@ if __name__ == "__main__":
         "shuffle_voices":        args.shuffle_voices,
         "shuffle_weapons_sfx":   args.shuffle_weapons_sfx,
         "shuffle_enemies_sfx":   args.shuffle_enemies_sfx,
+        "combine_voice_and_enemy_sfx": args.combine_voice_and_enemy_sfx,
         "shuffle_sky":           args.shuffle_sky,
         "patch_tracker":         args.patch_tracker,
         "unique_retractor_keys": "random" if args.unique_retractor_keys_random else args.unique_retractor_keys,

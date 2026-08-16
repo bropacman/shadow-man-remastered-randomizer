@@ -784,22 +784,29 @@ _HTML = r"""<!DOCTYPE html>
           <button class="rng-btn" id="yShuffleMusicRng" onclick="event.preventDefault();toggleRng('yShuffleMusic')" title="Randomize per seed">&#127922;</button>
         </label>
         <label class="check-label">
-          <input type="checkbox" id="yShuffleVoices" onchange="updateYamlPreview()">
-          Shuffle Voice Lines
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man&rsquo;s generic ambient voice lines. Purely cosmetic.</span></span>
-          <button class="rng-btn" id="yShuffleVoicesRng" onclick="event.preventDefault();toggleRng('yShuffleVoices')" title="Randomize per seed">&#127922;</button>
-        </label>
-        <label class="check-label">
           <input type="checkbox" id="yShuffleWeaponsSfx" onchange="updateYamlPreview()">
           Shuffle Weapon SFX
           <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapon fire and reload sounds within each weapon category. Purely cosmetic.</span></span>
           <button class="rng-btn" id="yShuffleWeaponsSfxRng" onclick="event.preventDefault();toggleRng('yShuffleWeaponsSfx')" title="Randomize per seed">&#127922;</button>
         </label>
         <label class="check-label">
-          <input type="checkbox" id="yShuffleEnemiesSfx" onchange="updateYamlPreview()">
+          <input type="checkbox" id="yShuffleVoices" onchange="updateYamlPreview();syncCombineSfxDependency()">
+          Shuffle Voice Lines
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man&rsquo;s generic ambient voice lines. Purely cosmetic.</span></span>
+          <button class="rng-btn" id="yShuffleVoicesRng" onclick="event.preventDefault();toggleRng('yShuffleVoices');syncCombineSfxDependency()" title="Randomize per seed">&#127922;</button>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yShuffleEnemiesSfx" onchange="updateYamlPreview();syncCombineSfxDependency()">
           Shuffle Enemy SFX
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles enemy pain/startle/attack sounds between enemy types. Purely cosmetic.</span></span>
-          <button class="rng-btn" id="yShuffleEnemiesSfxRng" onclick="event.preventDefault();toggleRng('yShuffleEnemiesSfx')" title="Randomize per seed">&#127922;</button>
+          <button class="rng-btn" id="yShuffleEnemiesSfxRng" onclick="event.preventDefault();toggleRng('yShuffleEnemiesSfx');syncCombineSfxDependency()" title="Randomize per seed">&#127922;</button>
+        </label>
+        <label class="check-label" style="grid-column:1 / -1;padding-left:20px">
+          <input type="checkbox" id="yCombineVoiceEnemySfx" disabled onchange="updateYamlPreview()">
+          Shuffle Voice &amp; Enemy SFX Together
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Shuffles Shadow Man's voice lines and every enemy's sounds together as one shared pool instead of separately. Requires both Shuffle Voice Lines and Shuffle Enemy SFX to also be checked (or randomized — it may still resolve true on a given seed). Purely cosmetic.</span></span>
+          <button class="rng-btn" id="yCombineVoiceEnemySfxRng" disabled onclick="event.preventDefault();toggleRng('yCombineVoiceEnemySfx')" title="Randomize per seed">&#127922;</button>
+          <span class="hint" id="yCombineVoiceEnemySfxHint">requires Shuffle Voice Lines + Shuffle Enemy SFX</span>
         </label>
         <label class="check-label">
           <input type="checkbox" id="yShuffleAmbients" onchange="updateYamlPreview()">
@@ -1098,6 +1105,32 @@ function syncDeathLinkThresholdDependency() {
   updateYamlPreview();
 }
 
+// Shuffle Voice & Enemy SFX Together only means anything when BOTH Shuffle
+// Voice Lines and Shuffle Enemy SFX are also on — same reasoning as
+// syncCadeauxGatedDependency() above, and same "force off" treatment (a
+// leftover checked-but-disabled true would misrepresent the exported YAML,
+// unlike syncCadeauxBundleDependency()/syncDeathLinkThresholdDependency()'s
+// numeric fields, where a stale value is harmless either way). Leave alone
+// if either dependency is randomized per-seed — it could still resolve true
+// on a given seed, so it's not safe to force off client-side.
+function syncCombineSfxDependency() {
+  const cveEl  = document.getElementById('yCombineVoiceEnemySfx');
+  const cveBtn = document.getElementById('yCombineVoiceEnemySfxRng');
+  const voicesOff  = !isRng('yShuffleVoices') && !document.getElementById('yShuffleVoices').checked;
+  const enemiesOff = !isRng('yShuffleEnemiesSfx') && !document.getElementById('yShuffleEnemiesSfx').checked;
+  const depsOff = voicesOff || enemiesOff;
+
+  if (depsOff) {
+    applyRng('yCombineVoiceEnemySfx', false);
+    cveEl.checked = false;
+  }
+  cveEl.disabled = depsOff || isRng('yCombineVoiceEnemySfx');
+  if (cveBtn) cveBtn.disabled = depsOff;
+  const hint = document.getElementById('yCombineVoiceEnemySfxHint');
+  if (hint) hint.textContent = depsOff ? 'requires Shuffle Voice Lines + Shuffle Enemy SFX' : '';
+  updateYamlPreview();
+}
+
 // ── Starting Item (start_inventory_from_pool) ─────────────────────────────────
 // Reworked 2026-07-22: AP's start_inventory_from_pool genuinely supports
 // picking several items at once (unlike the standalone randomizer's
@@ -1207,6 +1240,7 @@ function buildYaml() {
   kv('shuffle_voices', yamlBool('yShuffleVoices'));
   kv('shuffle_weapons_sfx', yamlBool('yShuffleWeaponsSfx'));
   kv('shuffle_enemies_sfx', yamlBool('yShuffleEnemiesSfx'));
+  kv('combine_voice_and_enemy_sfx', yamlBool('yCombineVoiceEnemySfx'));
   kv('shuffle_sky', yamlBool('yShuffleSky'));
   kv('entrance_mode', yamlChoice('yEntranceMode'));
   kv('piston_combos', yamlBool('yPistonCombos'));
@@ -1412,7 +1446,8 @@ async function importYaml() {
    'death_link:yDeathLink',
    'shuffle_ambients:yShuffleAmbients', 'shuffle_music:yShuffleMusic',
    'shuffle_voices:yShuffleVoices', 'shuffle_weapons_sfx:yShuffleWeaponsSfx',
-   'shuffle_enemies_sfx:yShuffleEnemiesSfx', 'shuffle_sky:yShuffleSky',
+   'shuffle_enemies_sfx:yShuffleEnemiesSfx', 'combine_voice_and_enemy_sfx:yCombineVoiceEnemySfx',
+   'shuffle_sky:yShuffleSky',
    'trap_bonus_secrets_enabled:yTrapBonusSecretsEnabled', 'trap_bonus_health_enabled:yTrapBonusHealthEnabled',
    'trap_bonus_voodoo_enabled:yTrapBonusVoodooEnabled', 'trap_bonus_ammo_enabled:yTrapBonusAmmoEnabled',
   ].forEach(pair => { const [key, id] = pair.split(':'); setRngField(id, s[key]); });
@@ -1463,6 +1498,7 @@ async function importYaml() {
   syncCadeauxGatedDependency();
   syncCadeauxBundleDependency();
   syncDeathLinkThresholdDependency();
+  syncCombineSfxDependency();
   updateYamlPreview();
 
   setYamlStatus(
@@ -1590,6 +1626,7 @@ window.addEventListener('pywebviewready', async () => {
   syncCadeauxGatedDependency();
   syncCadeauxBundleDependency();
   syncDeathLinkThresholdDependency();
+  syncCombineSfxDependency();
   updateYamlPreview();
   loadCheckBase();
 });

@@ -3,10 +3,20 @@ sfx_randomizer.py
 ─────────────────
 Shuffles sound effects within curated pools.
 
-Two pools are supported:
+Three pools are supported:
   1. Voice lines — all files under audio/speech/generic/ shuffle globally.
   2. Weapon sounds — manually mapped pools shuffle within each sound type
      (fire sounds swap with fire sounds, reload with reload, etc.).
+  3. Enemy sounds — manually mapped pools (pain/startle/attack/ambient/speech)
+     shuffle within each sound type, per-enemy set kept together.
+
+combine_voice_pools (opt-in, off by default) merges pools 1 and 3 into one
+shared pool before shuffling, instead of shuffling them in isolation — every
+individual voice/enemy-sound file becomes its own slot and can land on any
+other file in the combined set. Shadow Man can end up grunting with a
+Surgeon's pain bark; a Deadworm can shriek in Shadow Man's voice. Only takes
+effect when both shuffle_voices and shuffle_enemies are also enabled — with
+just one of the two on, that pool shuffles normally (isolated) as before.
 
 Output: {internal_kpf_path: local_extracted_path} dict for mod KPF packing.
 Caller (patcher.py) merges this into mod_files before build_and_install_mod.
@@ -143,6 +153,7 @@ def shuffle_sfx(
     shuffle_voices: bool = True,
     shuffle_weapons: bool = True,
     shuffle_enemies: bool = False,
+    combine_voice_pools: bool = False,
     dry_run: bool = False,
 ) -> tuple[dict[str, str], dict[str, str]]:
     """
@@ -165,19 +176,56 @@ def shuffle_sfx(
     if dry_run:
         return {}, {}
 
-    # ── Voice lines ───────────────────────────────────────────────────────────
-    if shuffle_voices:
-        voice_pool = [
+    # ── Voice lines + enemy sounds, combined ────────────────────────────────
+    if combine_voice_pools and shuffle_voices and shuffle_enemies:
+        combined_pool = [
             path for path, _ in find_file_in_kpf(kpf_index, VOICE_PATH_PATTERN)
             if path.lower().endswith(".wav")
             and Path(path).stem not in EXCLUDED_VOICE_STEMS
         ]
-        if voice_pool:
-            mf, sl = _extract_and_swap(rng, voice_pool, kpf_files, kpf_index, out_root, "voices")
+        if not combined_pool:
+            print(f"  WARNING: no voice files found at {VOICE_PATH_PATTERN}")
+
+        if ENEMY_SOUND_SETS:
+            for sets in ENEMY_SOUND_SETS.values():
+                for s in sets:
+                    combined_pool.extend(s)
+        else:
+            print("  SFX [enemies]: ENEMY_SOUND_SETS is empty — populate in constants.py")
+
+        # De-dupe (a path could theoretically appear in more than one set)
+        # while keeping order stable before the shuffle.
+        seen: set[str] = set()
+        combined_pool = [p for p in combined_pool if not (p in seen or seen.add(p))]
+
+        if combined_pool:
+            mf, sl = _extract_and_swap(rng, combined_pool, kpf_files, kpf_index, out_root, "voices+enemies")
             mod_files.update(mf)
             swap_log.update(sl)
-        else:
-            print(f"  WARNING: no voice files found at {VOICE_PATH_PATTERN}")
+    else:
+        # ── Voice lines ───────────────────────────────────────────────────────
+        if shuffle_voices:
+            voice_pool = [
+                path for path, _ in find_file_in_kpf(kpf_index, VOICE_PATH_PATTERN)
+                if path.lower().endswith(".wav")
+                and Path(path).stem not in EXCLUDED_VOICE_STEMS
+            ]
+            if voice_pool:
+                mf, sl = _extract_and_swap(rng, voice_pool, kpf_files, kpf_index, out_root, "voices")
+                mod_files.update(mf)
+                swap_log.update(sl)
+            else:
+                print(f"  WARNING: no voice files found at {VOICE_PATH_PATTERN}")
+
+        # ── Enemy sounds ──────────────────────────────────────────────────────
+        if shuffle_enemies:
+            if ENEMY_SOUND_SETS:
+                for pool_name, sets in ENEMY_SOUND_SETS.items():
+                    mf, sl = _swap_set_pool(rng, sets, kpf_index, kpf_files, out_root, f"enemies/{pool_name}")
+                    mod_files.update(mf)
+                    swap_log.update(sl)
+            else:
+                print("  SFX [enemies]: ENEMY_SOUND_SETS is empty — populate in constants.py")
 
     # ── Weapon sounds ─────────────────────────────────────────────────────────
     if shuffle_weapons:
@@ -188,16 +236,6 @@ def shuffle_sfx(
                 swap_log.update(sl)
         else:
             print("  SFX [weapons]: WEAPON_SOUND_SETS is empty — populate in constants.py")
-
-    # ── Enemy sounds ──────────────────────────────────────────────────────────
-    if shuffle_enemies:
-        if ENEMY_SOUND_SETS:
-            for pool_name, sets in ENEMY_SOUND_SETS.items():
-                mf, sl = _swap_set_pool(rng, sets, kpf_index, kpf_files, out_root, f"enemies/{pool_name}")
-                mod_files.update(mf)
-                swap_log.update(sl)
-        else:
-            print("  SFX [enemies]: ENEMY_SOUND_SETS is empty — populate in constants.py")
 
     return mod_files, swap_log
 
