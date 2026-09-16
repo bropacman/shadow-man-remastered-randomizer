@@ -1,8 +1,20 @@
 # Shadow Man Remastered Randomizer — Project Handoff
 
+**HISTORICAL SNAPSHOT, dated 2026-07-21 — moved into `docs/dev/` 2026-09-16
+during a repo restructuring pass, left otherwise unedited except the path
+fix immediately below.** Most of the "doc cleanup still needed" and
+"still-open tasks" sections below have since been resolved; for current
+state, see the standalone repo's own `CLAUDE.md` (session-by-session
+history) and the AP world repo's own git log, not this file. Kept for
+archaeology, not as an up-to-date reference.
+
 Two sibling repos, worked together:
 
-- **AP world**: `C:\Users\jonat\Documents\Archipelago\worlds\shadowman` — the Archipelago multiworld integration.
+- **AP world**: `C:\Users\jonat\Documents\Archipelago-0.6.7\worlds\shadowman`
+  (path corrected 2026-09-16 — the `Archipelago` folder without a version
+  suffix is a different, unrelated checkout; see `CLAUDE.md`'s "AP World
+  Checkout Clarification" entry) — the Archipelago multiworld integration,
+  itself its own git repo (`bropacman/shadow-man-remastered-ap-world`).
 - **Standalone**: `C:\Users\jonat\Documents\shadow-man-remastered-randomizer` — the original local randomizer, and (as `ap_patcher.py`/`ap_gui.py`) the tool that actually patches a player's game once an AP seed is generated.
 
 Both are driven from the same source data (`data/locations.csv`, duplicated as `extracted_locations.py` in each repo — keep them in sync via `tools/generate.py`).
