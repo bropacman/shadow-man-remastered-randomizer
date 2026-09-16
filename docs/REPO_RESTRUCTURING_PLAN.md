@@ -419,11 +419,49 @@ too (31 items → 3). Reverted; the harmless duplicate-collection noise
 is a far better tradeoff than a "cleanup" that can silently erase real
 coverage.
 
+**A third, genuinely unrelated CI flake also showed up after the seed
+fix landed**: `Launcher.py --update_settings` (part of upstream
+Archipelago's own official CI recipe, included so `host.yaml` exists
+before the full test suite runs) triggered `ModuleUpdate.py`
+internally, which found a real version conflict between two unrelated
+bundled worlds' `requirements.txt` files (`zilliandomizer` wanting a
+newer `typing_extensions` than another world pins) and tried to prompt
+interactively to resolve it — a bare `EOFError` with no stdin attached
+in CI. Confirmed via direct grep that `worlds/shadowman/test/__init__.py`
+and everything it imports (`test.bases`, `test.general`) never
+reference `host.yaml`/`Utils.get_settings` at all, so this step was
+never actually needed for this job's narrow scope — removed it
+entirely rather than trying to force-answer a prompt that shouldn't
+need answering. Verified stable across 2 consecutive full CI runs
+after the fix.
+
 **Phase 2**: doc consolidation done for both repos' scattered
 session-log-style `.md` files (see the Phase 2 section above for the
 final scope, narrower than originally planned — `CLAUDE.md` confirmed
 un-movable, `RELEASING.md` descoped as not worth the churn).
 
-**Not started**: Phase 3 (formalized release script) and Phase 4
-(cross-repo architecture decision — still needs Jon's explicit call
-per §4, not something to start unprompted).
+**Phase 3 — DONE, 2026-09-16.** `release_apworld.py` added to the
+standalone repo, verified with a real end-to-end run
+(`--skip-companion`): regenerates both repos' `extracted_locations.py`,
+syncs `data/locations.csv`, runs the drift check as a hard abort (not
+`build_apworld.bat`'s own non-fatal version), compile-checks both
+repos, builds a real 34-file `shadowman.apworld` including
+`archipelago.json`. Tag convention formalized in `RELEASING.md`'s new
+"Tag convention" section (three shapes: standalone `vX.Y.Z`, AP world's
+own independent `vX.Y.Z` track, and this repo's optional
+`apworld-vX.Y.Z` source-commit marker). Code-signing investigation
+(the optional line item under Phase 3) not attempted — real cost
+(a certificate), not just engineering time, left for Jon to decide.
+
+One real bug caught building it: an earlier commit's message claimed
+content edits to `docs/dev/HANDOFF.md` that were never actually staged
+(`git add HANDOFF.md` silently failed after the file had already been
+`git mv`'d, and the follow-up `git add docs/dev/HANDOFF.md` was
+missed) — surfaced when `release_apworld.py`'s compile-check step
+showed the file as unexpectedly modified. Fixed with a follow-up
+commit; worth remembering that a `git mv` + separate content edit in
+the same working session needs an explicit re-`git add` of the NEW
+path, not the old one.
+
+**Not started**: Phase 4 (cross-repo architecture decision — still
+needs Jon's explicit call per §4, not something to start unprompted).
