@@ -36,3 +36,35 @@ jobs:
           git ls-files '*.py' > /tmp/py_files.txt
           wc -l /tmp/py_files.txt
           python -m py_compile $(cat /tmp/py_files.txt)
+
+  apworld-drift-check:
+    name: Cross-repo drift check against shadow-man-remastered-ap-world
+    runs-on: windows-latest
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v4
+        with:
+          path: standalone
+
+      # Public repo, no auth needed for a read-only checkout. Always
+      # checks out shadow-man-remastered-ap-world's own main branch, not
+      # any particular commit tied to this repo -- same "is the AP
+      # world's live main currently in sync with this repo's live main"
+      # question tools/check_apworld_sync.py was already meant to answer
+      # locally, just run automatically now instead of by hand.
+      - name: Check out shadow-man-remastered-ap-world
+        uses: actions/checkout@v4
+        with:
+          repository: bropacman/shadow-man-remastered-ap-world
+          path: apworld
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the drift checker
+        shell: bash
+        working-directory: standalone
+        run: |
+          set -e
+          PYTHONIOENCODING=utf-8 python tools/check_apworld_sync.py --ap-dir ../apworld
