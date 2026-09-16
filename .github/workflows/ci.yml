@@ -147,3 +147,68 @@ jobs:
           else
             echo "::warning::Rebuilt DLL differs from the committed binary in shadow-man-remastered-ap-world (built=$(stat -c%s "$built")B, committed=$(stat -c%s "$committed")B). Not failing the build for this alone -- unpinned FetchContent deps and toolchain differences between this runner and a local dev machine are expected to cause small differences. If you actually changed overlay_dll/src and expected the shipped DLL to update, rebuild locally and re-commit it in the AP world repo -- this step won't catch that for you."
           fi
+
+  shadowman-world-tests:
+    name: Shadow Man world tests (against a real Archipelago core checkout)
+    runs-on: windows-latest
+    steps:
+      # Public repo, no auth needed. Pulls the AP world's live main --
+      # same "is this actually generation-safe right now" question as
+      # the drift-check job above, just exercised through AP's own real
+      # test/WorldTestBase machinery instead of a byte-level diff.
+      - name: Check out shadow-man-remastered-ap-world
+        uses: actions/checkout@v4
+        with:
+          repository: bropacman/shadow-man-remastered-ap-world
+          path: apworld_src
+
+      # Pinned to the exact tag this world targets (confirmed via
+      # `gh api repos/ArchipelagoMW/Archipelago/tags` -- "0.6.7" exists
+      # verbatim, not "v0.6.7"), not `main`/`master` -- this world's own
+      # code was written and tested against 0.6.7's actual BaseClasses/
+      # Fill/Options APIs, which do shift between AP releases. Bump this
+      # deliberately (and re-verify) if the world is ever updated to
+      # target a newer Archipelago version, don't let it silently float.
+      - name: Check out Archipelago core
+        uses: actions/checkout@v4
+        with:
+          repository: ArchipelagoMW/Archipelago
+          ref: "0.6.7"
+          path: archipelago
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Drop this world's source into the Archipelago checkout
+        shell: bash
+        run: |
+          set -e
+          rm -rf archipelago/worlds/shadowman
+          cp -r apworld_src archipelago/worlds/shadowman
+
+      # Mirrors ArchipelagoMW/Archipelago's own .github/workflows/
+      # unittests.yml install sequence exactly (ci-requirements.txt,
+      # then ModuleUpdate.py, then Launcher.py --update_settings to
+      # create host.yaml) -- proven working there, not guessed at here.
+      - name: Install Archipelago's test dependencies
+        working-directory: archipelago
+        shell: bash
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          pip install -r ci-requirements.txt
+          python ModuleUpdate.py --yes --force --append "WebHostLib/requirements.txt"
+          python Launcher.py --update_settings
+
+      # Run the FILE directly, not the bare `test/` directory -- see
+      # worlds/shadowman/test/__init__.py's own docstring: this AP
+      # version's pytest.ini python_files glob doesn't actually match
+      # this path on this Python version (confirmed locally), so the
+      # directory form silently collects 0 items with no error at all.
+      - name: Run this world's own test suite
+        working-directory: archipelago
+        shell: bash
+        run: |
+          set -e
+          python -m pytest worlds/shadowman/test/__init__.py -v
