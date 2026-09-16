@@ -1,0 +1,38 @@
+name: CI
+
+# Phase 1 of docs/REPO_RESTRUCTURING_PLAN.md — starts minimal on purpose
+# (compile-check only) so it's trivially green on day one, then grows in
+# small, separately-verified steps (drift check against the AP world
+# repo, DLL rebuild-and-diff, a fill smoke test). Don't add all of those
+# in one shot — each needs its own real, watched run before the next is
+# layered on, same reasoning the plan doc itself argues for.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  compile-check:
+    name: Compile-check every tracked .py file
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile every tracked Python file
+        shell: bash
+        run: |
+          set -e
+          # git ls-files (not a recursive glob) so this only ever checks
+          # what's actually committed -- matches what a fresh clone gets,
+          # not whatever happens to be sitting in this runner's working
+          # copy.
+          git ls-files '*.py' > /tmp/py_files.txt
+          wc -l /tmp/py_files.txt
+          python -m py_compile $(cat /tmp/py_files.txt)
