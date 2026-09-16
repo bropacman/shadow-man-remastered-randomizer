@@ -273,6 +273,15 @@ Jon**, and probably don't hand it to an agent solo given the blast
 radius (it touches how both repos' histories and CI relate to each
 other). Three real options, not a recommendation to pick one yet:
 
+**See `docs/PHASE4_ARCHITECTURE_SCOPING.md` (written 2026-09-16) for
+the full scoping** — real repo data (stars/forks/issues, all zero on
+both repos, checked directly), concrete step-by-step plans for each
+option, and a reconsidered recommendation that differs from this
+section's original lean (toward (c)) now that the "external
+disruption" cost assumed below turned out not to hold up. The summary
+below is kept as-is for historical context; read the scoping doc for
+the actual current thinking.
+
 - **(a) Monorepo merge.** Combine both into one repo (e.g. a
   `standalone/`, `apworld/`, and shared `core/` package split). Fully
   eliminates 1b/1c by construction — there's nothing left to drift.
