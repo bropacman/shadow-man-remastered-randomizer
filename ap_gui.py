@@ -178,7 +178,14 @@ def _autodetect_ap_dir() -> "Path | None":
 # loaded from an actual packaged .apworld. Both fixed; since v0.1.0 is
 # already public, this ships as a new tag/release rather than silently
 # swapping files under the old one.
-COMPANION_VERSION = "v0.1.1"
+#
+# v0.1.2 (2026-09-15): Unique Retractor Keys real exe enforcement + GUI
+# toggle, the .apshadowman zip-container read fix, apworld packaging
+# trim (dropped .git/docs from the shipped zip), overlay panel
+# drag/reposition follow-through, and a location friendly-name pass
+# (Asylum/Deadside/Swampland complete; Gad Temples and the 5 liveside
+# levels still in progress, to be finished in a later release).
+COMPANION_VERSION = "v0.1.2"
 
 
 def _load_prefs() -> dict:
