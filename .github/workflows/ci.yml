@@ -68,3 +68,51 @@ jobs:
         run: |
           set -e
           PYTHONIOENCODING=utf-8 python tools/check_apworld_sync.py --ap-dir ../apworld
+
+  dll-rebuild-check:
+    name: Rebuild overlay DLL and diff against the committed AP world binary
+    runs-on: windows-latest
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v4
+        with:
+          path: standalone
+
+      - name: Check out shadow-man-remastered-ap-world
+        uses: actions/checkout@v4
+        with:
+          repository: bropacman/shadow-man-remastered-ap-world
+          path: apworld
+
+      # windows-latest already ships MSVC + CMake, no extra setup needed.
+      # NOTE: CMakeLists.txt's FetchContent pulls minhook/imgui at
+      # GIT_TAG master (not pinned) -- same as local dev builds today, but
+      # it means this job's result can differ run-to-run if either
+      # upstream dep changes, independent of anything in either of our
+      # own repos. A failure here means "a fresh build right now doesn't
+      # match what's committed" -- check whether that's a real stale-DLL
+      # bug (rebuild locally and compare) or upstream drift (imgui/minhook
+      # pushed a change to master) before assuming the former. Pinning
+      # both to a fixed tag/commit would remove this ambiguity entirely;
+      # left as a possible follow-up, not done here since it's a source
+      # change to CMakeLists.txt beyond just adding CI.
+      - name: Configure (x64)
+        working-directory: standalone/overlay_dll
+        run: cmake -B build -A x64
+
+      - name: Build (Release)
+        working-directory: standalone/overlay_dll
+        run: cmake --build build --config Release
+
+      - name: Diff rebuilt DLL against the committed binary
+        shell: bash
+        run: |
+          set -e
+          built="standalone/overlay_dll/build/Release/ShadowManOverlay.dll"
+          committed="apworld/ShadowManOverlay.dll"
+          ls -la "$built" "$committed"
+          if ! cmp -s "$built" "$committed"; then
+            echo "::error::Rebuilt overlay DLL differs from the committed binary in shadow-man-remastered-ap-world -- see this job's own NOTE above before assuming it's a stale-DLL bug rather than upstream imgui/minhook drift."
+            exit 1
+          fi
+          echo "Rebuilt DLL matches the committed binary byte-for-byte."
