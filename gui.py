@@ -339,18 +339,18 @@ _HTML = r"""<!DOCTYPE html>
         <button class="rng-btn" id="pistonCombosRng" onclick="event.preventDefault();toggleRng('pistonCombos')" title="Randomize per seed">&#127922;</button>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes the 6 dark engine piston combination values (each bar 1&ndash;5). The new combinations are written into the in-game journal page &mdash; Jack&rsquo;s Schematic becomes a required progression item to read them.</span></span>
       </label>
+      <label class="check-label" style="grid-column:1/-1">
+        <input type="checkbox" id="uniqueRetractorKeys" onchange="">
+        Unique Retractor Keys
+        <button class="rng-btn" id="uniqueRetractorKeysRng" onclick="event.preventDefault();toggleRng('uniqueRetractorKeys')" title="Randomize per seed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Converts the 5 fungible Retractors into unique per-level keys &mdash; each physical Retractor is randomly assigned (per seed) to unlock exactly one liveside level (Florida/Salvage/London/Prison/Queens), instead of the vanilla "any 5 retractors opens all 5 levels" shared gate. Lets liveside levels open independently and much earlier. The assignment is documented in the spoiler log, AND tracked live in-game &mdash; the FBI folder document (Nettie&rsquo;s file) grows 5 new &ldquo;Five Schisms&rdquo; pages that update as each Retractor is actually recovered.</span></span>
+      </label>
       <div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;margin-bottom:2px">Untested &mdash; Disabled</div>
       <label class="check-label" style="opacity:0.4;cursor:not-allowed" title="Coming soon">
         <input type="checkbox" id="shufflePrisms" disabled>
         Prisms
         <button class="rng-btn" id="shufflePrismsRng" disabled style="cursor:not-allowed">&#127922;</button>
         <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Prism shuffle is not yet implemented — coming soon.</span></span>
-      </label>
-      <label class="check-label" style="grid-column:2/3;opacity:0.4;cursor:not-allowed" title="Not yet tested">
-        <input type="checkbox" id="uniqueRetractorKeys" onchange="" disabled>
-        Unique Retractor Keys
-        <button class="rng-btn" id="uniqueRetractorKeysRng" disabled style="cursor:not-allowed" title="Not yet tested">&#127922;</button>
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Converts the 5 fungible Retractors into unique per-level keys &mdash; each physical Retractor is randomly assigned (per seed) to unlock exactly one liveside level (Florida/Salvage/London/Prison/Queens), instead of the vanilla "any 5 retractors opens all 5 levels" shared gate. Lets liveside levels open independently and much earlier. The assignment is documented in the spoiler log &mdash; there's no in-game text that reveals it yet. Temporarily disabled &mdash; implemented but not yet tested.</span></span>
       </label>
     </div>
     <hr class="divider">

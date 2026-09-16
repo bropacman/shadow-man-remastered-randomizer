@@ -5,11 +5,14 @@ The local half of Shadow Man Remastered's Archipelago integration.
 
 Archipelago seed generation (whether run on the AP website or locally via
 the CLI generator) never needs Shadow Man Remastered installed. The AP
-world's generate_output() only ever writes a small *.apshadowman JSON file
-into the multiworld output — safe to bundle into the hosting zip, since it's
-just placement/config data, no game files. Whoever is actually going to
-PLAY that seed runs this script, locally, against their own legally-owned
-copy of the game:
+world's generate_output() writes a small *.apshadowman file into the
+multiworld output — safe to bundle into the hosting zip, since it's just
+placement/config data, no game files. As of 2026-08-31 that file is a real
+zip container (a bare JSON file wasn't downloadable from someone else's
+hosted room — see the AP world's own generate_output() docstring); older
+bare-JSON seeds still load fine too, see load_patch_data() below. Whoever
+is actually going to PLAY that seed runs this script, locally, against
+their own legally-owned copy of the game:
 
     python apply_ap_seed.py path/to/AP_12345_P1_Alice.apshadowman --game-dir "C:/.../Shadow Man Remastered"
 
@@ -34,6 +37,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import zipfile
 from collections import namedtuple
 from pathlib import Path
 
@@ -51,8 +55,19 @@ PlacementEntry = namedtuple("PlacementEntry", ["object", "save_idx", "level_id",
 
 
 def load_patch_data(path: Path) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    if zipfile.is_zipfile(path):
+        # Current format (2026-08-31): a real zip container, written by the
+        # AP world's generate_output() so AP's own hosted-room download
+        # route will actually serve it (see that function's docstring for
+        # why). patch_data.json is the exact same payload this file used to
+        # BE directly; archipelago.json is AP's own manifest, unused here.
+        with zipfile.ZipFile(path, "r") as zf:
+            data = json.loads(zf.read("patch_data.json"))
+    else:
+        # Pre-2026-08-31 seeds: a bare JSON file, no zip wrapper. Still
+        # readable so already-generated .apshadowman files keep working.
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
     version = data.get("format_version")
     if version != 1:
@@ -136,6 +151,13 @@ def main() -> None:
     # dest_portal_file] or None. .get() (not []) for backward compatibility
     # with .apshadowman files written before this key existed.
     entrance_shuffle = data.get("entrance_shuffle")
+    # Unique Retractor Keys (2026-08-18) — {liveside_region_name: loc_key},
+    # only present/non-empty when the AP world's UniqueRetractorKeys option
+    # was on at generation time. .get() with a {} default handles both
+    # "option was off this seed" and "older .apshadowman file predating this
+    # key" identically — ap_patcher.py's run_patcher() treats an empty dict
+    # as "nothing to do" either way.
+    retractor_key_locs = data.get("retractor_key_locs", {})
     seed = data["seed"]
     player = data.get("player", "?")
 
@@ -157,6 +179,7 @@ def main() -> None:
         progression_placement = progression_placement,
         gate_remap            = gate_remap,
         entrance_shuffle      = entrance_shuffle,
+        retractor_key_locs    = retractor_key_locs,
     )
     print(f"\nDone. Mod installed to {args.game_dir / 'mods'}, "
           f"patched exe at {args.game_dir / 'thoth_x64_patched.exe'}, "

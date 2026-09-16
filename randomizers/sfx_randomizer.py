@@ -33,7 +33,9 @@ VOICE_PATH_PATTERN = "audio/speech/generic/*"
 
 # Individual stems to exclude from voice shuffling if needed
 EXCLUDED_VOICE_STEMS: frozenset[str] = frozenset({
-    # e.g. "gn0001s",
+    "gn0075s",   # reserved for the "wrong retractor" feedback line
+                 # (unique_retractor_keys_patch.py) -- must always say
+                 # "damn i need a key", never get swapped by voice shuffle
 })
 
 def _swap_set_pool(

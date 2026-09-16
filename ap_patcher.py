@@ -1353,6 +1353,7 @@ def run_patcher(
     progression_placement: dict,
     gate_remap: dict[str, int],
     entrance_shuffle: dict[str, str] | None = None,
+    retractor_key_locs: dict[str, str] | None = None,
 ) -> None:
     """
     AP entry point.  Called from ShadowManWorld.generate_output().
@@ -1369,7 +1370,19 @@ def run_patcher(
         Deadside portal shuffle computed during generate_early() when
         EntranceMode is deadside_only (see options.py). None when the mode
         is off (default) — added 2026-07-21, Task 19/20.
+
+    retractor_key_locs: dict[liveside_region_name, loc_key] | None
+        Unique Retractor Keys (2026-08-18) — where AP's own Fill actually
+        placed each of the 5 named "Retractor - <region>" items in THIS
+        player's world, keyed by region display name (matches
+        unique_retractor_keys_patch.LIVESIDE_TO_IVAR1's keys). Built by
+        ShadowManWorld.generate_output() only when options.py's
+        UniqueRetractorKeys is on; None/empty otherwise, or when reading an
+        older .apshadowman file that predates this key (apply_ap_seed.py's
+        .get() defaults to {} either way). See Step 7 below for how this
+        feeds unique_retractor_keys_patch.build_retractor_table_from_ap().
     """
+    retractor_key_locs = retractor_key_locs or {}
     from kpf_handler import (find_kpf_files, build_kpf_index,
                                extract_game_files, which_kpf_has_levels)
 
@@ -1764,6 +1777,11 @@ def run_patcher(
 
     # ── Step 7: EXE patches ───────────────────────────────────────────────────
 
+    # Declared here (not inside the Unique Retractor Keys block below) so
+    # Step 10's extra_mod_files merge always finds a real dict, whether or
+    # not thoth_x64.exe was found / the option was on / the patch succeeded.
+    fivekeys_mod_files: dict = {}
+
     exe_src = list(game_path.glob("thoth_x64.exe"))
     if exe_src:
         src     = exe_src[0]
@@ -1910,6 +1928,106 @@ def run_patcher(
                       f"plain write_cvar_bool(), but the 9 poller-covered "
                       f"secrets (g_dogmode etc.) will only visibly apply at "
                       f"the next level transition instead of instantly.")
+
+        # Unique Retractor Keys (2026-08-18) — ported from the standalone's
+        # patcher.py Step 7 wiring, same night the feature was built and
+        # live-tested there. AP's version is simpler on one point: the AP
+        # world's generate_output() (worlds/shadowman/__init__.py) already
+        # resolves exactly which loc_key each of the 5 named
+        # "Retractor - <region>" items landed at via AP's own real Fill
+        # placement (retractor_key_locs, read out of the .apshadowman JSON
+        # by apply_ap_seed.py) — no native-level assumption or
+        # destination-resolution step needed the way standalone's
+        # retractor_level_assignment requires (see
+        # unique_retractor_keys_patch.build_retractor_table_from_ap()'s
+        # docstring). Position data comes from Step 1's records_by_folder,
+        # already computed above with source_file correctly set — this file
+        # never had the source_file bug found in standalone's own Step 4b.6
+        # this session, so no separate fix was needed here, just reuse.
+        #
+        # retractor_key_locs may hold anywhere from 0 to 5 entries (2026-08-18
+        # fix, Jon's live repro: this used to hard-crash with "expected
+        # exactly 5 ... got 4") — generate_output() only ever includes
+        # SELF-FOUND placements; a copy Fill sent to another player's game
+        # has no physical pickup in THIS player's world at all, so a
+        # multiplayer seed landing anywhere from 0 to 5 of the 5 named keys
+        # in your own world is completely normal, not an error. No longer
+        # gated on `and retractor_key_locs` being truthy — the patch must
+        # still install (and DOES still fully enforce the schism gating)
+        # even at 0 self-found, since build_retractor_table_from_ap() now
+        # fills in a sentinel slot for every missing world_id and the
+        # corresponding CF_CUSTOM flag gets set remotely instead, by
+        # client.py's write_named_flag() when AP delivers that item over
+        # the network. See that function's own docstring in
+        # unique_retractor_keys_patch.py for the full mechanism.
+        if config.get("unique_retractor_keys", False):
+            try:
+                import unique_retractor_keys_patch
+                _retractor_scanned_positions = {
+                    rec.loc_key: (rec.x, rec.y, rec.z, int(rec.zone))
+                    for _recs in records_by_folder.values()
+                    for rec in _recs
+                }
+                _rk_table = unique_retractor_keys_patch.build_retractor_table_from_ap(
+                    retractor_key_locs, _retractor_scanned_positions,
+                )
+                unique_retractor_keys_patch.apply_patch(
+                    str(patched), _rk_table, dry_run=False
+                )
+                print("EXE: Unique Retractor Keys — schisms now check for their own retractor")
+
+                # "Five Keys" folder-page tracker (Nettie's file, pages
+                # 29-33) — same reasoning as standalone: reads the same
+                # CF_CUSTOM00-04 flags the patch above just wired up, so it
+                # only makes sense to apply once that patch succeeded, and
+                # gets its own try/except so a tracker-page failure never
+                # affects retractor enforcement itself.
+                try:
+                    import retractor_folder_log_patch
+                    retractor_folder_log_patch.apply_patch(str(patched), dry_run=False)
+                    print("EXE: Five Keys tracker — Nettie's folder now tracks each retractor live")
+
+                    # Per-seed "Recovered from" fun fact — level_region +
+                    # gate_raw straight from extracted_locations.LOCATION_TABLE,
+                    # keyed by the loc_key AP already told us each region's
+                    # key landed at (retractor_key_locs), no resolution step
+                    # needed (contrast standalone's resolve_retractor_destinations()
+                    # call, which exists only because standalone doesn't have
+                    # this information directly).
+                    _found_locations = {}
+                    try:
+                        from extracted_locations import LOCATION_TABLE as _RETRACTOR_LOC_TABLE2
+                        for _region, _loc_key in retractor_key_locs.items():
+                            _wid = unique_retractor_keys_patch.LIVESIDE_TO_IVAR1.get(_region)
+                            if not _wid:
+                                continue
+                            _dest_loc = _RETRACTOR_LOC_TABLE2.get(_loc_key)
+                            if _dest_loc is not None:
+                                _found_locations[_wid - 1] = (
+                                    _dest_loc.level_region or _loc_key,
+                                    _dest_loc.gate_raw,
+                                )
+                            else:
+                                _found_locations[_wid - 1] = (_loc_key, None)
+                    except Exception as e3:
+                        print(f"  WARNING: Five Keys 'recovered from' lookup failed ({e3}) — "
+                              f"pages will still work, just without the location fun fact.")
+
+                    fivekeys_dir = Path(work_path) / "fivekeys_pages"
+                    _written = retractor_folder_log_patch.build_data_files(
+                        str(fivekeys_dir), found_locations=_found_locations
+                    )
+                    for _p in _written:
+                        _p = Path(_p)
+                        fivekeys_mod_files[f"folder/{_p.name}"] = str(_p)
+                except Exception as e2:
+                    print(f"  WARNING: Five Keys folder tracker patch failed ({e2}) — "
+                          f"Unique Retractor Keys enforcement is still active, just no "
+                          f"in-folder tracker pages this run.")
+            except Exception as e:
+                print(f"  WARNING: Unique Retractor Keys exe patch failed ({e}) — "
+                      f"seed logic still assumes per-region retractors, but nothing "
+                      f"in-game will enforce it this run.")
     else:
         print("\nWARNING: thoth_x64.exe not found - EXE patches skipped")
 
@@ -1997,9 +2115,21 @@ def run_patcher(
     # 9.6 here (not 9.7) to avoid colliding with this file's own pre-existing
     # Step 9.7 below (levels.txt tracker). Textures (ASSET_OVERRIDES, plus
     # GAD_ASSET_OVERRIDES -- gad temples are always shuffled now, see
-    # options.py's ShadowManOptions comment) and meshes
-    # (MSH_OVERRIDES — the crate→pot swap insanity/AP-marker cadeaux and
-    # barrel placements rely on, see Step 6.5) get packed into the mod KPF.
+    # options.py's ShadowManOptions comment) and meshes (MSH_OVERRIDES) get
+    # packed into the mod KPF.
+    #
+    # NOTE (2026-08-23, Jon: "we dont need to turn rsc_un_crates into this
+    # mesh/asset override" in the AP build): the crate.msh -> pot1.msh swap
+    # that used to live in the shared MSH_OVERRIDES (plus its companion
+    # 019crate.dds texture swap in ASSET_OVERRIDES) has been moved to
+    # constants.py's STANDALONE_MSH_OVERRIDES/STANDALONE_ASSET_OVERRIDES,
+    # which this file deliberately does NOT import or apply -- see those
+    # constants' comments for the full story (this loop was already the
+    # right place to fix it: Step 6.5 above disabled the decoy-marker
+    # OBJECT injection for AP back on 2026-07-21, but that never touched
+    # this unconditional MSH/asset swap, so ordinary vanilla crates
+    # everywhere in the game were still rendering as oversized pots for AP
+    # players with no marker connection left to justify it).
     randomizer_dir = Path(__file__).resolve().parent
     asset_mod_files = {}
     for src_rel, dst_rel in ASSET_OVERRIDES:
@@ -2204,7 +2334,8 @@ def run_patcher(
             config, str(spoiler_path), str(work_path), seed,
             extra_mod_files={**music_files, **sfx_files, **sky_files,
                               **asset_mod_files, **msh_mod_files, **loc_english_files,
-                              **entrance_cut_files, **piston_journal_files},
+                              **entrance_cut_files, **piston_journal_files,
+                              **fivekeys_mod_files},
         )
 
     validate_final_seed(str(work_path), progression_placement, patches_by_folder)

@@ -439,6 +439,12 @@ _HTML = r"""<!DOCTYPE html>
           <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes the 6 Dark Engine piston combination values; the in-game journal (Jack&rsquo;s Schematic entry) is rewritten to show the new numbers. When enabled, Jack&rsquo;s Schematic becomes required progression — you must find it to learn the combinations needed to shut the pistons off and reach Legion, the final boss.</span></span>
         </label>
         <label class="check-label">
+          <input type="checkbox" id="yUniqueRetractorKeys" onchange="syncUniqueRetractorKeysDependency()">
+          Unique Retractor Keys
+          <button class="rng-btn" id="yUniqueRetractorKeysRng" onclick="event.preventDefault();toggleRng('yUniqueRetractorKeys');syncUniqueRetractorKeysDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Splits the single "Retractor" pickup into 5 named keys, one per liveside region (Queens, Prison, London, Florida, Salvage Yard) — each only opens schisms in its own region, instead of any one Retractor unlocking all of them. Adds more individually-trackable checks/items to the pool. When on, the flat "Retractor (all 5)" Starting Item option below can't be used (its item no longer exists in the pool) and is disabled automatically.</span></span>
+        </label>
+        <label class="check-label">
           <input type="checkbox" id="yDeadsideGuns" onchange="updateYamlPreview()">
           Deadside Guns
           <button class="rng-btn" id="yDeadsideGunsRng" onclick="event.preventDefault();toggleRng('yDeadsideGuns')" title="Randomize per seed">&#127922;</button>
@@ -1095,6 +1101,25 @@ function syncCadeauxBundleDependency() {
 // way) whenever yDeathLink is deterministically off; leave alone if
 // yDeathLink is randomized per-seed, same reasoning as
 // syncCadeauxGatedDependency() above.
+// Unique Retractor Keys splits the single "Retractor" item into 5 named
+// per-region items — when it's on, the flat "Retractor" pickup no longer
+// exists in the item pool at all, so picking it as a Start Inventory item
+// would reference an item name AP can't find. Grey out (and deselect, since
+// a stale selection here would silently break generation) the "Retractor"
+// option in the Starting Item picker whenever Unique Retractor Keys is
+// deterministically on; leave it alone if it's randomized per-seed, same
+// reasoning as syncCadeauxGatedDependency() above.
+function syncUniqueRetractorKeysDependency() {
+  const retractorOpt = Array.from(document.getElementById('ySiItem').options).find(o => o.value === 'Retractor');
+  const urkOn = !isRng('yUniqueRetractorKeys') && document.getElementById('yUniqueRetractorKeys').checked;
+
+  if (retractorOpt) {
+    if (urkOn) retractorOpt.selected = false;
+    retractorOpt.disabled = urkOn;
+  }
+  updateYamlPreview();
+}
+
 function syncDeathLinkThresholdDependency() {
   const dltEl  = document.getElementById('yDeathLinkThreshold');
   const dltBtn = document.getElementById('yDeathLinkThresholdRng');
@@ -1244,6 +1269,7 @@ function buildYaml() {
   kv('shuffle_sky', yamlBool('yShuffleSky'));
   kv('entrance_mode', yamlChoice('yEntranceMode'));
   kv('piston_combos', yamlBool('yPistonCombos'));
+  kv('unique_retractor_keys', yamlBool('yUniqueRetractorKeys'));
   kv('deadside_guns', yamlBool('yDeadsideGuns'));
   kv('progression_balancing', yamlNum('yProgBalance'));
   kv('insanity', yamlBool('yInsanity'));
@@ -1441,6 +1467,7 @@ async function importYaml() {
    'shuffle_lore:yShuffleLore', 'shuffle_bonus:yShuffleBonus', 'shuffle_enemies:yShuffleEnemies',
    'enemy_mix_movement:yEnemyMixMovement', 'enemy_uncap_counts:yEnemyUncapCounts',
    'shuffle_true_forms:yShuffleTrueForms', 'piston_combos:yPistonCombos',
+   'unique_retractor_keys:yUniqueRetractorKeys',
    'deadside_guns:yDeadsideGuns',
    'insanity:yInsanity', 'cadeaux_gated_content:yCadeauxGatedContent',
    'death_link:yDeathLink',
@@ -1499,6 +1526,7 @@ async function importYaml() {
   syncCadeauxBundleDependency();
   syncDeathLinkThresholdDependency();
   syncCombineSfxDependency();
+  syncUniqueRetractorKeysDependency();
   updateYamlPreview();
 
   setYamlStatus(
@@ -1627,6 +1655,7 @@ window.addEventListener('pywebviewready', async () => {
   syncCadeauxBundleDependency();
   syncDeathLinkThresholdDependency();
   syncCombineSfxDependency();
+  syncUniqueRetractorKeysDependency();
   updateYamlPreview();
   loadCheckBase();
 });

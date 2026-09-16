@@ -35,7 +35,10 @@ GATE SHUFFLE
 ────────────
 When shuffle_gates=True, _shuffle_gates() runs first and assigns new SL
 thresholds to all non-locked gates before any placement begins. All three
-starting gates (WASTELAND, ASYLUM, PATH_3) are guaranteed SL <= 3.
+starting gates (MARROW, WASTELAND, ASYLUM, PATH_3) stay pinned to their
+vanilla SL (0/1/2/3) — constants.py's _HARD_LOCKED locks all four outright
+under every preset that shuffles gates at all except chaos, rather than
+this function capping them at runtime.
 
 PROGRESSION BALANCING
 ─────────────────────
@@ -289,6 +292,23 @@ LIVESIDE_REGIONS: frozenset[str] = frozenset({
     "Asylum: Engine Block - Queens",
 })
 
+# Each liveside world's own Engine Block antechamber -- reaching either one
+# requires that world's own retractor key under unique_retractor_keys mode,
+# same as the world itself. Hardcoded literals (not imported from regions.py)
+# matching this file's existing convention for LIVESIDE_REGIONS/LIVESIDE_*
+# above -- regions.py imports from access_rules.py which fill.py also
+# touches, importing back from regions.py would risk a circular import.
+# Used by _liveside_ok() below to narrow the retractor placement restriction
+# from "never any liveside region" down to "never THIS retractor's own
+# region or engine block" once unique_retractor_keys is on (2026-08-17).
+LIVESIDE_TO_ENGINE_BLOCK: dict[str, str] = {
+    "Down Street Station, London":  "Asylum: Engine Block - London",
+    "Gardelle County Jail, Texas":  "Asylum: Engine Block - Prison",
+    "Summer Camp, Florida":         "Asylum: Engine Block - Florida",
+    "Salvage Yard, Mojave Desert":  "Asylum: Engine Block - Salvage",
+    "Mordant Street, Queens, NY":   "Asylum: Engine Block - Queens",
+}
+
 REGION_GATES: dict[str, object] = {
     "Deadside - Wasteland"         : "GATE_DEADSIDE_WASTELAND",
     "Asylum: Gateways"             : "GATE_DEADSIDE_ASYLUM",
@@ -344,6 +364,7 @@ def _shuffle_gates(
     locked: frozenset[str] = frozenset(),
     max_sl: int | None = None,
     safe: bool = True,
+    entrance_shuffle=None,   # UnifiedShuffle | None
 ) -> dict[str, int]:
     """
     Shuffle SL thresholds across all non-locked gates.
@@ -352,16 +373,94 @@ def _shuffle_gates(
     max_sl:  if set, clamps the pool to values <= max_sl.
     safe:    if True, enforces a hierarchy of gate caps before returning:
                1. Gates with fixed souls or named slots: SL <= 9
-               2. Starting gates (WASTELAND, ASYLUM, PATH_3): SL <= 3
-               3. WASTELAND: SL <= 2  (tighter — needs 7-soul start circuit)
-               4. PATH_3: SL <= 5    (Temple of Fire must open mid-game)
-             Caps are enforced in order so tighter constraints aren't undone.
+             (constants.py's _HARD_LOCKED now includes GATE_DEADSIDE_MARROW/
+             WASTELAND/ASYLUM/PATH_3 outright, so every preset that reaches
+             this "safe" branch — easy/medium/hard, via _EASY_LOCKED or
+             _HARD_LOCKED — already excludes all three starting gates from
+             `shuffleable` before this function ever runs; chaos skips this
+             whole branch via `safe=False`. The old runtime swap-based caps
+             here — starting gates <=3, WASTELAND <=2, PATH_3 <=5 — were
+             therefore unreachable dead code (their `gate_id not in temp_map`
+             guard always fired) and were removed 2026-08-19, after
+             GATE_DEADSIDE_PATH_3 joined _HARD_LOCKED for the same
+             front-loading concern WASTELAND/ASYLUM were already locked to
+             prevent. Mirrors the equivalent cleanup already done in the AP
+             world's own copy of this function on 2026-08-07 (see that
+             file's docstring), though for a different original reason
+             (entrance-shuffle topology, not this dead-code path).
+    entrance_shuffle: this seed's resolved UnifiedShuffle (from
+             randomizers/entrance_randomizer.py's shuffle_unified()), or
+             None when entrance_mode is "off". Ported 2026-08-19 from the
+             AP world's copy of this function (its 2026-08-07 fix for
+             recurring Wasteland/Marrow-Gates accessibility failures under
+             entrance_mode=deadside_only), adapted to this repo's own
+             UnifiedShuffle/DEADSIDE_PORTAL_GATE/SPOKE_FOLDER_TO_PRIMARY_REGION
+             tables. Jon hadn't observed the failure here, but the same root
+             cause applies: locking GATE_DEADSIDE_WASTELAND/ASYLUM/PATH_3 by
+             NAME (above) only keeps those three gate IDs at their own
+             vanilla SL — it does nothing for the Wasteland/Asylum/Temple-of-
+             Fire REGIONS if entrance shuffle hands them a different,
+             unlocked physical portal as their new front door. Only
+             mode="deadside_only" is substituted below (see that block for
+             why "cross_hub" isn't) — matches the AP world's own scope,
+             which never implemented cross_hub at all.
     """
-    starting_gates = {
-        "GATE_DEADSIDE_WASTELAND",
-        "GATE_DEADSIDE_ASYLUM",
-        "GATE_DEADSIDE_PATH_3",
+    # ── Real (post-entrance-shuffle) region->gate substitution ───────────────
+    # Only meaningful for deadside_only: there, all 9 Deadside portals permute
+    # among the 9 Deadside spokes and DKE portals map to themselves (vanilla),
+    # so every substitution below is well-defined (deadside portal -> deadside
+    # region, always). cross_hub can pair a liveside/DKE portal with a
+    # Deadside region -- that destination has no soul-gate id to protect at
+    # all (it's gated by liveside completion, not SL), so this substitution
+    # doesn't attempt cross_hub and sl9_cap_gates/dynamic_overrides both fall
+    # back to vanilla REGION_GATES for it, same as before this fix.
+    real_region_gates: dict[str, object] = dict(REGION_GATES)
+    if entrance_shuffle is not None and entrance_shuffle.mode == "deadside_only":
+        from access_rules import DEADSIDE_PORTAL_GATE, SPOKE_FOLDER_TO_PRIMARY_REGION
+        from randomizers.entrance_randomizer import _TRANSITION_BY_PORTAL_ID
+        for portal_id, dest_id in entrance_shuffle.outbound.items():
+            portal_folder, portal_file = portal_id
+            if portal_folder != "deadside":
+                continue  # DKE portals are vanilla under deadside_only
+            dest_folder = _TRANSITION_BY_PORTAL_ID[dest_id].spoke_folder
+            region = SPOKE_FOLDER_TO_PRIMARY_REGION.get(dest_folder)
+            if region is not None:
+                real_region_gates[region] = DEADSIDE_PORTAL_GATE[portal_file]
+
+    def _gate_tokens(gate_spec) -> set[str]:
+        """Flatten a REGION_GATES-style value (a plain gate id, or a list of
+        alternate routes each a list of tokens) into every gate-id-like token
+        it references. Non-gate tokens ("BATON", "GAD2_WALK") are harmless —
+        they're simply never keys in temp_map, same tolerance REGION_GATES'
+        route lists already relied on before this fix."""
+        if isinstance(gate_spec, str):
+            return {gate_spec}
+        tokens: set[str] = set()
+        for route in gate_spec:
+            tokens.update(route)
+        return tokens
+
+    # ── Dynamic-lock overrides for the 3 critical roles ──────────────────────
+    # Whichever REAL gate now guards Wasteland/Asylum/Temple-of-Fire gets
+    # pulled out of the shuffle pool (like the named gates already always
+    # are) and pinned to that ROLE's own vanilla SL -- not its own vanilla
+    # SL, which could be far higher. Only fires when the real gate is a
+    # plain (non-route) id that isn't already locked; a route-based real gate
+    # (Cageways/Playrooms) already has its own guaranteed-cheap branch and
+    # needs no override.
+    _role_named_gate = {
+        "Deadside - Wasteland":     "GATE_DEADSIDE_WASTELAND",
+        "Asylum: Gateways":         "GATE_DEADSIDE_ASYLUM",
+        "Temple of Fire (Toucher)": "GATE_DEADSIDE_PATH_3",
     }
+    dynamic_overrides: dict[str, int] = {}
+    if entrance_shuffle is not None and entrance_shuffle.mode == "deadside_only":
+        for role_region, named_gate in _role_named_gate.items():
+            real_spec = real_region_gates.get(role_region, named_gate)
+            if isinstance(real_spec, str) and real_spec not in locked and real_spec in GATE_VANILLA_SL:
+                dynamic_overrides[real_spec] = GATE_VANILLA_SL[named_gate]
+    if dynamic_overrides:
+        locked = locked | frozenset(dynamic_overrides)
 
     shuffleable = [g for g in GATE_VANILLA_SL if g not in locked]
     hi = max_sl if max_sl is not None else 10
@@ -376,46 +475,42 @@ def _shuffle_gates(
     if not safe:
         gate_remap = {g: GATE_VANILLA_SL[g] for g in locked if g in GATE_VANILLA_SL}
         gate_remap.update(temp_map)
+        gate_remap.update(dynamic_overrides)
         return gate_remap
 
     # ── Build SL9-cap set ─────────────────────────────────────────────────────
     # Gates controlling regions with fixed souls (boss/true_form) or named
     # progression slots cannot go to SL10 — 120 souls is unreachable if
-    # the slots needed to accumulate them are locked behind SL10.
+    # the slots needed to accumulate them are locked behind SL10. Uses
+    # real_region_gates (entrance-shuffle-aware) instead of the static
+    # REGION_GATES table so the gate actually protected is whichever one is
+    # REALLY standing in front of a protected region this seed.
     protected_regions = (
         {loc.level_region for loc in FIXED_SOUL_LOCS} |
         {loc.level_region for loc in CHECKABLE_LOCS if loc.category in PROG_SLOT_CATS}
     )
     sl9_cap_gates = set()
-    for region, gate in REGION_GATES.items():
+    for region, gate in real_region_gates.items():
         if region in protected_regions:
-            if isinstance(gate, str):
-                sl9_cap_gates.add(gate)
-            else:
-                for route in gate:
-                    sl9_cap_gates.update(route)
+            sl9_cap_gates.update(_gate_tokens(gate))
 
     # ── Define constraints in priority order ──────────────────────────────────
     # Each entry: (gate_id, max_allowed_sl, excluded_swap_targets)
     # Constraints are applied in order — later ones cannot undo earlier ones
     # because swap targets are filtered to only gates that won't violate
     # already-applied constraints.
+    #
+    # The old constraints 2-4 (starting gates <=3 / WASTELAND <=2 / PATH_3
+    # <=5) were removed 2026-08-19 — see this function's own docstring above
+    # for why they'd become permanently unreachable dead code now that
+    # constants.py locks WASTELAND/ASYLUM/PATH_3 outright under every preset
+    # that reaches this branch.
     constraints = []
 
     # 1. SL9 cap for all protected gates
     # sorted() ensures deterministic constraint order regardless of PYTHONHASHSEED.
     for g in sorted(sl9_cap_gates):
-        constraints.append((g, 9, sl9_cap_gates | starting_gates))
-
-    # 2. Starting gates: SL3
-    for g in sorted(starting_gates):
-        constraints.append((g, 3, starting_gates))
-
-    # 3. WASTELAND: tighter SL2
-    constraints.append(("GATE_DEADSIDE_WASTELAND", 2, starting_gates))
-
-    # 4. PATH_3: SL5
-    constraints.append(("GATE_DEADSIDE_PATH_3", 5, starting_gates))
+        constraints.append((g, 9, sl9_cap_gates))
 
     # ── Apply constraints ─────────────────────────────────────────────────────
     for gate_id, max_sl_allowed, excluded_targets in constraints:
@@ -436,6 +531,7 @@ def _shuffle_gates(
 
     gate_remap = {g: GATE_VANILLA_SL[g] for g in locked if g in GATE_VANILLA_SL}
     gate_remap.update(temp_map)
+    gate_remap.update(dynamic_overrides)
     return gate_remap
 
 # ── Region depth probing ───────────────────────────────────────────────────────
@@ -873,7 +969,8 @@ def assumed_fill(
     _bundle_inv_set: set[str] = set()  # kept for cleanup block; no longer adds to STARTING_ITEMS
 
     if shuffle_gates:
-        gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe)
+        gate_remap = _shuffle_gates(rng, locked=lock_gates, max_sl=max_sl, safe=safe,
+                                     entrance_shuffle=entrance_shuffle)
     if not gate_remap:
         gate_remap = {g: GATE_VANILLA_SL[g] for g in GATE_VANILLA_SL}
 
@@ -1234,6 +1331,27 @@ def assumed_fill(
 
         def _liveside_ok(loc) -> bool:
             if item.category == "retractor" and loc.level_region in LIVESIDE_REGIONS:
+                if unique_retractor_keys and retractor_level_assignment:
+                    # Each retractor is individually identified now (see
+                    # access_rules.py's set_unique_retractor_keys()) -- the
+                    # only real circular-lock risk is THIS retractor landing
+                    # inside the one liveside world (or its Engine Block
+                    # antechamber) that its own key unlocks: you can't reach
+                    # that location without already having the retractor
+                    # you're trying to place there. Any OTHER liveside world
+                    # is safe, since it's gated by a DIFFERENT retractor's
+                    # key, not this one -- 2026-08-17, Jon's call.
+                    assigned_region = retractor_level_assignment.get(item.loc_key)
+                    if assigned_region is not None:
+                        forbidden = {assigned_region, LIVESIDE_TO_ENGINE_BLOCK.get(assigned_region)}
+                        return loc.level_region not in forbidden
+                    # Couldn't resolve this retractor's own assignment (shouldn't
+                    # happen -- every retractor item_pool entry gets one, see
+                    # assumed_fill()'s retractor_level_assignment build above) --
+                    # fall through to the old, safe, blanket restriction rather
+                    # than risk a silent circular lock over an unexpected gap.
+                # Vanilla count-gate mode (or the fallback above): unchanged,
+                # blanket "never any liveside region" restriction.
                 return False
             if item.category == "soul" and loc.level_region in LIVESIDE_REGIONS:
                 return R.night(st, PLAYER)

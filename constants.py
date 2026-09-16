@@ -109,15 +109,36 @@ BUNDLE_REQUIRES_SHUFFLE: dict[str, str] = {
 
 # ── Asset overrides ──────────────────────────────────────────────────────────
 # (source relative to randomizer root, dest relative to game dir)
-# Applied unconditionally on every randomizer run.
+# Applied unconditionally on every randomizer run -- both patcher.py
+# (standalone) and ap_patcher.py (AP) import and apply this same list. Only
+# put an entry here if it should apply to BOTH; anything standalone-specific
+# belongs in STANDALONE_ASSET_OVERRIDES below instead (see that list's
+# comment for why the crate/pot texture used to live here and doesn't
+# anymore).
 ASSET_OVERRIDES: list[tuple[str, str]] = [
     (r"assets\smrr_title_logo.png", r"gfx\ShadowMan_logo.png"),
     # (r"data\pot.dds", r"hdtextures\meshes\items\pot\000pot.dds"),
     # (r"assets\yellow_crate_1.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
     # (r"assets\yellow_crate_2.dds", r"hdtextures\levels\uground\objects\tga\020crate.dds"),
-    (r"assets\hd_jaunty_pot_2.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
-    # pot1.msh is handled by MSH_OVERRIDES (needs scaling), not here
+    # pot1.msh is handled by MSH_OVERRIDES/STANDALONE_MSH_OVERRIDES (needs scaling), not here
     # (r"assets\shadow_man_shirt.dds", r"hdtextures\anims\mike\textures\005shirt.dds"),
+]
+
+# Standalone-only asset overrides (2026-08-23, Jon: "we dont need to turn
+# rsc_un_crates into this mesh/asset override" in the AP build) -- only
+# patcher.py imports/applies this list; ap_patcher.py does not. Companion to
+# STANDALONE_MSH_OVERRIDES' crate.msh -> pot1.msh mesh swap below: this is
+# that same swap's texture half (the 019crate.dds slot a KPF crate object
+# reads its surface from), moved out of the shared ASSET_OVERRIDES for the
+# same reason -- see STANDALONE_MSH_OVERRIDES' comment for the full story.
+# Splitting the texture out too (not just the mesh) matters here specifically
+# because MSH_OVERRIDES' local_src (assets/pot1.msh) supplies its own
+# geometry+material reference independent of this texture path; leaving this
+# texture override in the shared list while pulling only the mesh override
+# would have left AP's vanilla crate.msh wearing the pot texture instead of
+# its own -- a worse mismatch than either swap alone.
+STANDALONE_ASSET_OVERRIDES: list[tuple[str, str]] = [
+    (r"assets\hd_jaunty_pot_2.dds", r"hdtextures\levels\uground\objects\tga\019crate.dds"),
 ]
 
 # Applied only when shuffle_gad_temples is enabled — replaces the Book of
@@ -146,6 +167,10 @@ AP_ASSET_OVERRIDES: list[tuple[str, str]] = [
 # local_src: path relative to randomizer root — used instead of extracting from KPF.
 #            Set to None to scale the vanilla KPF file in-place.
 # Note: entries here take precedence over ASSET_OVERRIDES for the same kpf path.
+# Applied unconditionally by BOTH patcher.py (standalone) and ap_patcher.py
+# (AP) -- only put an entry here if it should apply to both. The
+# crate.msh -> pot1.msh swap used to live in this list; it's been moved to
+# STANDALONE_MSH_OVERRIDES below (2026-08-23) since AP doesn't need it.
 #
 # 2x scale for unique inventory-slot items (2026-08-03, Jon's request): ANY
 # unique item that fills an inventory slot gets scaled up to be easier to
@@ -159,7 +184,6 @@ AP_ASSET_OVERRIDES: list[tuple[str, str]] = [
 # literal kpf_path string here — a case mismatch against the real archive
 # entry could make the override silently fail to shadow the vanilla file.
 MSH_OVERRIDES: list[tuple[str, float, str | None]] = [
-    (r"levels/uground/objects/crate.msh", 2, r"assets/pot1.msh"),
     (r"newitems/bookofshadows/bookofshadows.msh", 2, None),
 
     # Key items (10)
@@ -191,6 +215,29 @@ MSH_OVERRIDES: list[tuple[str, float, str | None]] = [
     # Lore
     (r"newitems/schematic/Schematic.msh", 2, None),
 ]
+
+# Standalone-only MSH overrides (2026-08-23, Jon: "we dont need to turn
+# rsc_un_crates into this mesh/asset override" in the AP build) -- only
+# patcher.py imports/applies this list; ap_patcher.py does not.
+#
+# crate.msh -> pot1.msh @ 2x: swaps the vanilla RSC_UN_CRATES crate model
+# for a more eye-catching pot so a key item hidden in a crate/barrel slot
+# doesn't blend into ordinary set dressing. This originally paired with
+# Step 6.5's insanity/AP-marker decoy-object injection (see ap_patcher.py's
+# own Step 6.5 comment, "DISABLED for the AP path specifically, 2026-07-21")
+# -- but Step 6.5 only stopped SPAWNING the decoy marker objects at specific
+# sites; it never made THIS mesh swap conditional too. Since MSH_OVERRIDES
+# is applied globally to every "levels/uground/objects/crate.msh" instance
+# in the game (not just marker sites), every ORDINARY vanilla crate was
+# still rendering as an oversized pot for AP players too, with nothing left
+# connecting it to a find anymore -- exactly the mismatch Jon caught.
+# Standalone still needs the swap (its own decoy-marker system is very much
+# live, see SOUL_SLOT_MARKER_FX/BARREL_SLOT_MARKER_FX above), so it stays
+# there, just no longer inherited by AP through the shared list.
+STANDALONE_MSH_OVERRIDES: list[tuple[str, float, str | None]] = [
+    (r"levels/uground/objects/crate.msh", 2, r"assets/pot1.msh"),
+]
+
 # NOT yet added, needs Jon's input before guessing further:
 #   - MP-909 (RSC_X_MP5): no "mp909"/"mp5"/"hkmp5" folder exists under
 #     newitems/. `newitems/shadowgun/Shadowgun.msh` looked like a plausible
@@ -303,10 +350,10 @@ _HARD_LOCKED: frozenset[str] = frozenset({
     "GATE_DEADSIDE_MARROW",
     "GATE_DEADSIDE_WASTELAND",
     "GATE_DEADSIDE_ASYLUM",
+    "GATE_DEADSIDE_PATH_3",
 })
 
 _EASY_LOCKED: frozenset[str] = _HARD_LOCKED | frozenset({
-    "GATE_DEADSIDE_PATH_3",
     "GATE_DEADSIDE_CAGEWAYS",
     "GATE_DEADSIDE_PLAYROOMS",
     "GATE_DEADSIDE_PATH_6",

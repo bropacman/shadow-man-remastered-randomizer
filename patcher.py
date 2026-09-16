@@ -41,7 +41,7 @@ from constants import (
     LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANILLA_SL, GATE_PRESETS,
     CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, ITEM_Y_ADJUST,
     SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y, DARK_SOUL_SLOT_MARKER_FX_Y, DAY_NIGHT_MIRRORS, GAD_PICKUP_EXPECTED_OFFSETS,
-    STARTING_ITEM_POOL, STARTING_ITEM_BUNDLES, SWAMPDAY_BUNDLE_SPOTS, BUNDLE_ITEMS_PER_BENCH, BUNDLE_SPOT_Z_STEP, BUNDLE_REQUIRES_SHUFFLE, ASSET_OVERRIDES, MSH_OVERRIDES, BARREL_SLOT_MARKER_FX, BARREL_SLOT_MARKER_FX_Y,
+    STARTING_ITEM_POOL, STARTING_ITEM_BUNDLES, SWAMPDAY_BUNDLE_SPOTS, BUNDLE_ITEMS_PER_BENCH, BUNDLE_SPOT_Z_STEP, BUNDLE_REQUIRES_SHUFFLE, ASSET_OVERRIDES, STANDALONE_ASSET_OVERRIDES, MSH_OVERRIDES, STANDALONE_MSH_OVERRIDES, BARREL_SLOT_MARKER_FX, BARREL_SLOT_MARKER_FX_Y,
     GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES, GAD_ASSET_OVERRIDES,
     GATE_E2O_POSITIONS, E2O_MATCH_RADIUS, LEVEL_NAMES, BARREL_RSC_SUBSTITUTIONS,
     PROGRESSION_IN_GOVI_LIFT, DARK_SOUL_SLOT_ITEM_DROP, PROGRESSION_IN_CADEAUX_LIFT, PROGRESSION_IN_BARREL_LIFT,
@@ -921,7 +921,11 @@ def apply_msh_overrides(randomizer_dir, work_path, kpf_index=None) -> dict:
     """Scale MSH vertex tables and return as mod_files dict for KPF packing."""
     mod_files = {}
 
-    for kpf_path, scale, local_src in MSH_OVERRIDES:
+    # Standalone-only: MSH_OVERRIDES is the list shared with ap_patcher.py's
+    # own copy of this function; STANDALONE_MSH_OVERRIDES (crate.msh ->
+    # pot1.msh) is the standalone-exclusive addition on top of it -- see
+    # that constant's comment in constants.py for why AP doesn't want it.
+    for kpf_path, scale, local_src in MSH_OVERRIDES + STANDALONE_MSH_OVERRIDES:
         data = None
 
         # Prefer a local source file over extracting from the KPF.
@@ -1996,23 +2000,39 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     _RETRACT_NAMES = frozenset({"RSC_X_RETRACT", "RSC_X_RETRACT1", "RSC_X_RETRACT2"})
     _ACCUM_NAMES   = frozenset({"RSC_X_ACCUMULATOR"})
     retractor_actual_xyz: dict[str, dict[str, list]] = {}
+    # loc_key -> (x, y, z, zone) for EVERY scanned record, not just retractor-
+    # named ones. A record's loc_key (folder:source_file:0xOFFSET) is purely
+    # positional -- it doesn't change when patch_rsc_file() renames the slot
+    # -- so this lets build_retractor_table() look up a retractor's DESTINATION
+    # position directly by the same loc_key progression_placement uses,
+    # instead of assuming (wrongly -- retractors shuffle like any other
+    # progression item, confirmed live 2026-08-18) that it never left its
+    # native level.
+    retractor_scanned_positions: dict[str, tuple] = {}
     for _rsc_path in sorted(levels_path.rglob("*.rsc")):
         _level_id = _rsc_path.parent.name
-        _data = _rsc_path.read_bytes()
-        _n = (len(_data) - HEADER_SIZE) // RECORD_SIZE
-        for _i in range(_n):
-            _base = HEADER_SIZE + _i * RECORD_SIZE
-            _name = _data[_base + NAME_OFF: _base + NAME_OFF + 30].split(b'\x00')[0]
-            try:
-                _name_str = _name.decode("ascii")
-            except UnicodeDecodeError:
-                continue
-            if _name_str in _RETRACT_NAMES or _name_str in _ACCUM_NAMES:
-                _x, _y, _z = struct.unpack_from("<fff", _data, _base + XYZ_OFF)
-                _zone = _data[_base + ZONE_OFF]
-                _dtype = "accumulator" if _name_str in _ACCUM_NAMES else "retractor"
+        # Reuse parse_rsc_file()'s own fixed-stride-plus-regex-scan-fallback
+        # logic instead of a naive fixed-72-byte-stride walk. Some RSC files
+        # don't have every record sitting cleanly on a HEADER_SIZE + i*72
+        # boundary (the same files parse_rsc_file() already falls back to
+        # regex scanning for) -- a plain stride walk here silently finds 0
+        # records in exactly those files, even though patch_rsc_file() wrote
+        # RSC_X_RETRACT* correctly at the real (non-stride-aligned) offset.
+        for _rec in parse_rsc_file(str(_rsc_path), folder=_level_id):
+            # parse_rsc_file() defaults every record's source_file to
+            # "quest.rsc" (see its QuestRecord dataclass default) -- it never
+            # sets this itself, same as Step 1's own call site, which always
+            # follows up with `r.source_file = filename` right after calling
+            # it. Missing this here made every non-quest.rsc record's loc_key
+            # wrong (e.g. "prison:quest.rsc:0x2BC2" instead of the real
+            # "prison:instance.rsc:0x2BC2"), which is why the retractor scan
+            # kept disagreeing with progression_placement's real loc_keys.
+            _rec.source_file = _rsc_path.name
+            retractor_scanned_positions[_rec.loc_key] = (_rec.x, _rec.y, _rec.z, int(_rec.zone))
+            if _rec.name in _RETRACT_NAMES or _rec.name in _ACCUM_NAMES:
+                _dtype = "accumulator" if _rec.name in _ACCUM_NAMES else "retractor"
                 retractor_actual_xyz.setdefault(_level_id, {}).setdefault(_dtype, []).append(
-                    (_x, _y, _z, int(_zone))
+                    (_rec.x, _rec.y, _rec.z, int(_rec.zone))
                 )
 
     # ── Step 4c: levels.txt tracker ──────────────────────────────────────────
@@ -2349,6 +2369,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     #  right after the soul gate block)
 
     # ── Step 7: EXE patches ───────────────────────────────────────────────────────
+    fivekeys_mod_files = {}   # populated below only if the retractor exe patch succeeds
     exe_src = list(game_path.glob("thoth_x64.exe"))
     if exe_src:
         src = exe_src[0]
@@ -2412,6 +2433,99 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                 print(f"\nThe Asylum's code has been rewritten — EXE patched: {patched.name}")
             else:
                 print(f"\nPrison key card fixed — EXE patched: {patched.name}")
+
+            # Conditional: Unique Retractor Keys — real in-game enforcement.
+            # Everything unique_retractor_keys_patch.build_retractor_table()
+            # needs (retractor_level_assignment, retractor_actual_xyz) is
+            # already computed above (run_assumed_fill / Step 4b.6). The
+            # "all_retractors" bundle moves every retractor RSC object onto
+            # one swampday bench, which build_retractor_table can't resolve
+            # (see its own docstring) — checked up front here so that
+            # combination fails fast with a clear message instead of a
+            # confusing exception mid-patch, same shape as the existing
+            # _gad_bundle_active / _HARD_FAIL_BUNDLES checks above.
+            if config.get("unique_retractor_keys", False) and retractor_level_assignment:
+                _retractor_bundle_active = "all_retractors" in config.get("starting_item_bundles", [])
+                if _retractor_bundle_active:
+                    print(f"  WARNING: Unique Retractor Keys — skipped exe enforcement, "
+                          f"'all_retractors' starting bundle moves every retractor off its "
+                          f"native position (not yet compatible). Seed logic still assumes "
+                          f"per-level retractors, but nothing in-game will enforce it this run.")
+                else:
+                    try:
+                        import unique_retractor_keys_patch
+                        _rk_table = unique_retractor_keys_patch.build_retractor_table(
+                            retractor_level_assignment, progression_placement,
+                            retractor_scanned_positions,
+                        )
+                        unique_retractor_keys_patch.apply_patch(
+                            str(patched), _rk_table, dry_run=dry_run
+                        )
+                        print(f"  Unique Retractor Keys — schisms now check for their own retractor")
+
+                        # "Five Keys" folder-page tracker (Nettie's file, pages
+                        # 29-33) — reads the same CF_CUSTOM00-04 flags the patch
+                        # above just wired up, so it only makes sense to apply
+                        # once that patch has actually succeeded. A failure here
+                        # doesn't affect retractor enforcement itself, just the
+                        # in-folder tracker pages, so it gets its own try/except
+                        # rather than being folded into the one above.
+                        try:
+                            import retractor_folder_log_patch
+                            retractor_folder_log_patch.apply_patch(str(patched), dry_run=dry_run)
+                            print(f"  Five Keys tracker — Nettie's folder now tracks each retractor live")
+                            if not dry_run:
+                                # Resolve where each retractor ACTUALLY got placed this
+                                # seed (same resolution build_retractor_table() just used
+                                # above, factored out so both call sites share it) so the
+                                # FOUND page can describe the real spot AND what it took
+                                # to reach it, e.g. "Recovered from: Asylum: Lavaducts,
+                                # requiring the Engineer's Key." -- a per-seed fun fact,
+                                # not baked/static text (Jon's request, 2026-08-18).
+                                # level_region + gate_raw come straight from
+                                # extracted_locations.LOCATION_TABLE -- level_region
+                                # already covers "level name, or sub-region where the
+                                # level has one" (e.g. "Asylum: Lavaducts" vs a flatter
+                                # level's own name), gate_raw covers "items/gates it took"
+                                # -- retractor_folder_log_patch.build_data_files() turns
+                                # the (region, gate_raw) pair into readable prose.
+                                _found_locations = {}
+                                try:
+                                    from extracted_locations import LOCATION_TABLE as _RETRACTOR_LOC_TABLE2
+                                    _dest_by_native = unique_retractor_keys_patch.resolve_retractor_destinations(
+                                        retractor_level_assignment, progression_placement
+                                    )
+                                    for _native_lk, _region in retractor_level_assignment.items():
+                                        _wid = unique_retractor_keys_patch.LIVESIDE_TO_IVAR1.get(_region)
+                                        _dest_lk = _dest_by_native.get(_native_lk)
+                                        if _wid and _dest_lk:
+                                            _dest_loc = _RETRACTOR_LOC_TABLE2.get(_dest_lk)
+                                            if _dest_loc is not None:
+                                                _found_locations[_wid - 1] = (
+                                                    _dest_loc.level_region or _dest_lk,
+                                                    _dest_loc.gate_raw,
+                                                )
+                                            else:
+                                                _found_locations[_wid - 1] = (_dest_lk, None)
+                                except Exception as e3:
+                                    print(f"  WARNING: Five Keys 'recovered from' lookup failed ({e3}) — "
+                                          f"pages will still work, just without the location fun fact.")
+
+                                fivekeys_dir = Path(work_path) / "fivekeys_pages"
+                                _written = retractor_folder_log_patch.build_data_files(
+                                    str(fivekeys_dir), found_locations=_found_locations
+                                )
+                                for _p in _written:
+                                    _p = Path(_p)
+                                    fivekeys_mod_files[f"folder/{_p.name}"] = str(_p)
+                        except Exception as e2:
+                            print(f"  WARNING: Five Keys folder tracker patch failed ({e2}) — "
+                                  f"Unique Retractor Keys enforcement is still active, just no "
+                                  f"in-folder tracker pages this run.")
+                    except Exception as e:
+                        print(f"  WARNING: Unique Retractor Keys exe patch failed ({e}) — "
+                              f"seed logic still assumes per-level retractors, but nothing "
+                              f"in-game will enforce it this run.")
 
         except PermissionError:
             print(
@@ -2514,7 +2628,10 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
     # ── Step 9.7: Build asset override mod files ──────────────────────────────
     randomizer_dir = Path(__file__).resolve().parent
     asset_mod_files = {}
-    for src_rel, dst_rel in ASSET_OVERRIDES:
+    # ASSET_OVERRIDES is shared with ap_patcher.py; STANDALONE_ASSET_OVERRIDES
+    # (crate/pot texture) is the standalone-exclusive addition -- see that
+    # constant's comment in constants.py.
+    for src_rel, dst_rel in ASSET_OVERRIDES + STANDALONE_ASSET_OVERRIDES:
         src = randomizer_dir / src_rel
         if not src.exists():
             print(f"  WARNING: asset override missing — {src_rel}")
@@ -2551,6 +2668,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
             extra_mod_files={
                 **music_files, **sfx_files, **sky_files, **asset_mod_files,
                 **msh_mod_files, **entrance_cut_files, **journal_mod_files,
+                **fivekeys_mod_files,
             },
         )
 
