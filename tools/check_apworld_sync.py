@@ -69,6 +69,35 @@ NEAR_IDENTICAL: list[tuple[str, str]] = [
     ("sprint_patch.py", "sprint_patch.py"),
 ]
 
+# Files in NEAR_IDENTICAL that are permanently, deliberately different
+# beyond the relative-import rewrite -- one specific, already-reviewed gap
+# each, not open-ended AP-logic divergence (that's EXPECTED_DIVERGENT's
+# job). Value is the normalized diff-line count as of the last time a
+# human actually reviewed the divergence and confirmed it was intentional
+# (see CLAUDE.md's 2026-08-15 sync-audit entry for all three). Added
+# 2026-09-15 so CI can treat this checker as a real blocking gate instead
+# of something permanently red for known reasons -- without this, these
+# 3 files would fail every single run forever, training everyone to
+# ignore the check.
+#
+# If the real count ever stops matching the value here -- up OR down --
+# check() flags it for review again: either genuinely new/unexpected
+# drift piled on top of the known gap, or the original gap got fixed and
+# this entry should just be deleted. Review with --diff, then update (or
+# remove) the entry once you've confirmed what changed -- don't just bump
+# the number to make CI green again without looking.
+KNOWN_DIVERGENCE_BASELINE: dict[str, int] = {
+    "gad_pickup_patch.py": 43,    # rsc_utils.py isn't duplicated into the AP
+                                   # world folder; _append_gad_pickup_record()
+                                   # hand-inlines an equivalent instead.
+    "levels_txt_patcher.py": 21,  # comment-only: AP-specific context notes
+                                   # (flat-module layout, starting_item_bundles
+                                   # dead-code note, stale-comment cleanup).
+    "sprint_patch.py": 8,         # comment-only: documents that this AP copy
+                                   # is unused/vestigial (ap_patcher.py imports
+                                   # the main repo's copy directly).
+}
+
 EXPECTED_DIVERGENT: list[tuple[str, str]] = [
     ("access_rules.py", "access_rules.py"),
     ("cadeaux_patch.py", "cadeaux_patch.py"),
@@ -158,8 +187,15 @@ def check(repo_dir: Path, ap_dir: Path, quiet: bool) -> int:
             if normalized_changed == 0:
                 rows.append((repo_rel, category, f"identical (only relative-import rewrite, {changed} raw diff-line(s))"))
                 continue
+            baseline = KNOWN_DIVERGENCE_BASELINE.get(Path(repo_rel).name)
+            if baseline is not None and normalized_changed == baseline:
+                rows.append((repo_rel, category, f"known divergence ({normalized_changed} diff-line(s), documented in this script -- not counted as drift)"))
+                continue
             warnings += 1
-            rows.append((repo_rel, category, f"DRIFT -- {normalized_changed} differing diff-line(s) beyond the expected relative-import rewrite (sizes {len(raw_repo)}B/{len(raw_ap)}B)"))
+            if baseline is not None:
+                rows.append((repo_rel, category, f"DRIFT -- known-divergence baseline was {baseline} diff-line(s), now {normalized_changed} -- review with --diff; either new unexpected drift on top, or the gap changed and KNOWN_DIVERGENCE_BASELINE needs updating"))
+            else:
+                rows.append((repo_rel, category, f"DRIFT -- {normalized_changed} differing diff-line(s) beyond the expected relative-import rewrite (sizes {len(raw_repo)}B/{len(raw_ap)}B)"))
         else:
             rows.append((repo_rel, category, f"differs (expected) -- {changed} diff-line(s), sizes {len(raw_repo)}B/{len(raw_ap)}B"))
 
