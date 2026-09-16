@@ -1,11 +1,13 @@
 name: CI
 
-# Phase 1 of docs/REPO_RESTRUCTURING_PLAN.md — starts minimal on purpose
-# (compile-check only) so it's trivially green on day one, then grows in
-# small, separately-verified steps (drift check against the AP world
-# repo, DLL rebuild-and-diff, a fill smoke test). Don't add all of those
-# in one shot — each needs its own real, watched run before the next is
-# layered on, same reasoning the plan doc itself argues for.
+# Phase 1 of docs/REPO_RESTRUCTURING_PLAN.md, updated 2026-09-16 for the
+# Phase 4 monorepo merge (docs/PHASE4_ARCHITECTURE_SCOPING.md): the AP
+# world's full history now lives under apworld/ in this same repo, via
+# `git subtree add`. Every job that used to check out a second repo
+# (bropacman/shadow-man-remastered-ap-world) now just reads apworld/
+# from the same checkout -- simpler, and there's nothing left to get
+# out of sync between "which commit of this repo" and "which commit of
+# that repo" the way there was before.
 
 on:
   push:
@@ -32,63 +34,49 @@ jobs:
           # git ls-files (not a recursive glob) so this only ever checks
           # what's actually committed -- matches what a fresh clone gets,
           # not whatever happens to be sitting in this runner's working
-          # copy.
+          # copy. Naturally includes apworld/**/*.py now too, no separate
+          # step needed.
           git ls-files '*.py' > /tmp/py_files.txt
           wc -l /tmp/py_files.txt
           python -m py_compile $(cat /tmp/py_files.txt)
 
   apworld-drift-check:
-    name: Cross-repo drift check against shadow-man-remastered-ap-world
+    name: Drift check between root and apworld/ shared files
     runs-on: windows-latest
     steps:
-      - name: Check out this repo
-        uses: actions/checkout@v4
-        with:
-          path: standalone
-
-      # Public repo, no auth needed for a read-only checkout. Always
-      # checks out shadow-man-remastered-ap-world's own main branch, not
-      # any particular commit tied to this repo -- same "is the AP
-      # world's live main currently in sync with this repo's live main"
-      # question tools/check_apworld_sync.py was already meant to answer
-      # locally, just run automatically now instead of by hand.
-      - name: Check out shadow-man-remastered-ap-world
-        uses: actions/checkout@v4
-        with:
-          repository: bropacman/shadow-man-remastered-ap-world
-          path: apworld
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+      # tools/check_apworld_sync.py still has real value post-merge: the
+      # ~10 "expected-divergent" files (access_rules.py, fill.py,
+      # regions.py, etc.) are STILL two genuinely separate implementations
+      # by design (see PHASE4_ARCHITECTURE_SCOPING.md's correction on
+      # this -- AP's concurrency model needs BoundR-style per-world state
+      # the standalone's simple globals can't provide), and the
+      # ~11 "near-identical" files haven't been de-duplicated yet either
+      # (that's Phase 4b, not done in this pass). DEFAULT_AP_DIR now
+      # points at the local apworld/ subfolder instead of a sibling
+      # checkout -- one repo, one clone, same comparison.
       - name: Run the drift checker
         shell: bash
-        working-directory: standalone
         run: |
           set -e
-          PYTHONIOENCODING=utf-8 python tools/check_apworld_sync.py --ap-dir ../apworld
+          PYTHONIOENCODING=utf-8 python tools/check_apworld_sync.py --ap-dir apworld
 
   dll-rebuild-check:
-    name: Rebuild overlay DLL and diff against the committed AP world binary
+    name: Rebuild overlay DLL and diff against the committed apworld/ binary
     runs-on: windows-latest
     steps:
-      - name: Check out this repo
-        uses: actions/checkout@v4
-        with:
-          path: standalone
-
-      - name: Check out shadow-man-remastered-ap-world
-        uses: actions/checkout@v4
-        with:
-          repository: bropacman/shadow-man-remastered-ap-world
-          path: apworld
+      - uses: actions/checkout@v4
 
       # windows-latest already ships MSVC + CMake, no extra setup needed.
       # NOTE: CMakeLists.txt's FetchContent pulls minhook/imgui at
       # GIT_TAG master (not pinned) -- same as local dev builds today.
       # First version of this job tried a hard byte-for-byte diff against
-      # the committed binary and it failed on the very first real run even
+      # the committed binary and it failed on its very first real run even
       # though the build was completely correct: built 821248B vs committed
       # 819712B, a ~1.5KB difference from nothing more than the runner's
       # MSVC/dependency versions not being pixel-identical to Jon's local
@@ -102,18 +90,18 @@ jobs:
       # dynamic CRT) immediately. The byte-diff is kept as a non-blocking,
       # informational step below.
       - name: Configure (x64)
-        working-directory: standalone/overlay_dll
+        working-directory: overlay_dll
         run: cmake -B build -A x64
 
       - name: Build (Release)
-        working-directory: standalone/overlay_dll
+        working-directory: overlay_dll
         run: cmake --build build --config Release
 
       - name: Verify the DLL is a statically-linked Release build
         shell: bash
         run: |
           set -e
-          built="standalone/overlay_dll/build/Release/ShadowManOverlay.dll"
+          built="overlay_dll/build/Release/ShadowManOverlay.dll"
           size=$(stat -c%s "$built")
           echo "Built DLL size: $size bytes"
           # A dynamic-CRT Debug build (the exact bug this job exists to
@@ -136,31 +124,23 @@ jobs:
           fi
           echo "DLL is a correctly statically-linked Release build."
 
-      - name: Compare against the committed AP world binary (informational only)
+      - name: Compare against the committed apworld/ binary (informational only)
         shell: bash
         run: |
-          built="standalone/overlay_dll/build/Release/ShadowManOverlay.dll"
+          built="overlay_dll/build/Release/ShadowManOverlay.dll"
           committed="apworld/ShadowManOverlay.dll"
           ls -la "$built" "$committed"
           if cmp -s "$built" "$committed"; then
             echo "Rebuilt DLL matches the committed binary byte-for-byte."
           else
-            echo "::warning::Rebuilt DLL differs from the committed binary in shadow-man-remastered-ap-world (built=$(stat -c%s "$built")B, committed=$(stat -c%s "$committed")B). Not failing the build for this alone -- unpinned FetchContent deps and toolchain differences between this runner and a local dev machine are expected to cause small differences. If you actually changed overlay_dll/src and expected the shipped DLL to update, rebuild locally and re-commit it in the AP world repo -- this step won't catch that for you."
+            echo "::warning::Rebuilt DLL differs from the committed binary in apworld/ (built=$(stat -c%s "$built")B, committed=$(stat -c%s "$committed")B). Not failing the build for this alone -- unpinned FetchContent deps and toolchain differences between this runner and a local dev machine are expected to cause small differences. If you actually changed overlay_dll/src and expected the shipped DLL to update, rebuild locally and re-commit it under apworld/ -- this step won't catch that for you."
           fi
 
   shadowman-world-tests:
     name: Shadow Man world tests (against a real Archipelago core checkout)
     runs-on: windows-latest
     steps:
-      # Public repo, no auth needed. Pulls the AP world's live main --
-      # same "is this actually generation-safe right now" question as
-      # the drift-check job above, just exercised through AP's own real
-      # test/WorldTestBase machinery instead of a byte-level diff.
-      - name: Check out shadow-man-remastered-ap-world
-        uses: actions/checkout@v4
-        with:
-          repository: bropacman/shadow-man-remastered-ap-world
-          path: apworld_src
+      - uses: actions/checkout@v4
 
       # Pinned to the exact tag this world targets (confirmed via
       # `gh api repos/ArchipelagoMW/Archipelago/tags` -- "0.6.7" exists
@@ -185,12 +165,11 @@ jobs:
         run: |
           set -e
           rm -rf archipelago/worlds/shadowman
-          cp -r apworld_src archipelago/worlds/shadowman
+          cp -r apworld archipelago/worlds/shadowman
 
       # Mirrors ArchipelagoMW/Archipelago's own .github/workflows/
-      # unittests.yml install sequence exactly (ci-requirements.txt,
-      # then ModuleUpdate.py, then Launcher.py --update_settings to
-      # create host.yaml) -- proven working there, not guessed at here.
+      # unittests.yml install sequence (ci-requirements.txt, then
+      # ModuleUpdate.py) -- proven working there, not guessed at here.
       - name: Install Archipelago's test dependencies
         working-directory: archipelago
         shell: bash
@@ -200,27 +179,26 @@ jobs:
           pip install -r ci-requirements.txt
           python ModuleUpdate.py --yes --force --append "WebHostLib/requirements.txt"
           # Deliberately NOT running `python Launcher.py --update_settings`
-          # (part of ArchipelagoMW/Archipelago's own unittests.yml recipe,
-          # there to create host.yaml before the FULL test suite runs).
-          # This job only ever runs worlds/shadowman/test/__init__.py --
-          # confirmed it has no reference to host.yaml/Utils.get_settings
-          # anywhere in its own code or in test.bases/test.general. First
-          # real run hit a genuine, unrelated flake here: ModuleUpdate.py
-          # also runs internally inside Launcher.py's own startup, found a
-          # real version conflict between two completely unrelated bundled
+          # (part of upstream's own recipe, there to create host.yaml
+          # before their FULL test suite runs). This job only ever runs
+          # worlds/shadowman/test/__init__.py -- confirmed it has no
+          # reference to host.yaml/Utils.get_settings anywhere in its own
+          # code or in test.bases/test.general. First real run hit a
+          # genuine, unrelated flake here: ModuleUpdate.py also runs
+          # internally inside Launcher.py's own startup, found a real
+          # version conflict between two completely unrelated bundled
           # worlds' requirements.txt files (zilliandomizer's dependency
           # pulling a newer typing_extensions than another world pins),
           # and tried to prompt interactively to confirm the fix -- which
           # raises a bare EOFError with no stdin attached in CI. Dropping
           # this unneeded step sidesteps that whole dependency-conflict
-          # surface for this narrow test scope entirely, rather than
-          # trying to force-answer a prompt that shouldn't need answering.
+          # surface for this narrow test scope entirely.
 
       # Run the FILE directly, not the bare `test/` directory -- see
-      # worlds/shadowman/test/__init__.py's own docstring: this AP
-      # version's pytest.ini python_files glob doesn't actually match
-      # this path on this Python version (confirmed locally), so the
-      # directory form silently collects 0 items with no error at all.
+      # apworld/test/__init__.py's own docstring: this AP version's
+      # pytest.ini python_files glob doesn't actually match this path on
+      # this Python version (confirmed locally), so the directory form
+      # silently collects 0 items with no error at all.
       - name: Run this world's own test suite
         working-directory: archipelago
         shell: bash

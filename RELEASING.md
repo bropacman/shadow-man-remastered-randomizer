@@ -60,20 +60,30 @@ see the script's own docstring for the full breakdown of which is which.
 
 ## Cutting an AP world release
 
+Both the standalone randomizer and the AP world/Companion now live in
+this one repo (`apworld/` — merged 2026-09-16 via `git subtree`, full
+history preserved; see `docs/PHASE4_ARCHITECTURE_SCOPING.md`). No
+second checkout to manage.
+
 1. Bump `COMPANION_VERSION` in `ap_gui.py` if this is a real release —
    covers both the AP world row and the AP Companion exe below, one bump.
    Do this *before* the next step so the built manifest/UI embed the
    right version.
-2. `python release_apworld.py` (optionally `--ap-dir` if your
-   Archipelago checkout's `worlds\shadowman` isn't at the default
-   location baked into the script, `--skip-companion` for a faster
-   apworld-only iteration) — formalizes what used to be ~15 manual
-   steps (added 2026-09-16, see `docs/REPO_RESTRUCTURING_PLAN.md`
-   Phase 3): regenerates both repos' `extracted_locations.py`, syncs
-   `data/locations.csv` into the AP world checkout, runs the cross-repo
-   drift check as a **hard abort** (not `build_apworld.bat`'s own
-   non-fatal version of this step), compile-checks both repos, then
-   builds `dist\apworld\shadowman.apworld` and
+2. `python release_apworld.py` (`--skip-companion` for a faster
+   apworld-only iteration; `--ap-dir` only if you're building from
+   somewhere other than this repo's own `apworld/`, e.g. a separate
+   Archipelago checkout during local dev) — formalizes what used to be
+   ~15 manual steps (added 2026-09-16, see
+   `docs/REPO_RESTRUCTURING_PLAN.md` Phase 3): regenerates
+   `extracted_locations.py` (both this repo's own copy and `apworld/`'s),
+   runs the drift check between root-level and `apworld/`-level shared
+   files as a **hard abort** (not `build_apworld.bat`'s own non-fatal
+   version of this step — reminder: the "expected-divergent" files this
+   checks are genuinely, permanently different implementations by
+   design, not accidental drift to eliminate — see
+   `docs/PHASE4_ARCHITECTURE_SCOPING.md`'s correction on this),
+   compile-checks the whole repo, then builds
+   `dist\apworld\shadowman.apworld` and
    `dist\ap_companion\shadow_man_ap_companion.exe`. Prints a checklist
    of what's still a deliberate manual step (this file's own remaining
    items below) rather than doing them for you.
@@ -84,32 +94,27 @@ see the script's own docstring for the full breakdown of which is which.
    the zip).
 
 `build_apworld.bat`/`build_ap_gui.bat` still exist and still work
-standalone (e.g. if you only need one artifact rebuilt, or don't have
-this repo's release script handy) — `release_apworld.py` calls the same
-underlying `build_apworld.py`/`build_ap_gui.bat` internally, it doesn't
-replace them, just the manual plumbing *around* them.
+standalone (e.g. if you only need one artifact rebuilt) — `release_
+apworld.py` calls the same underlying `build_apworld.py`/`build_ap_gui.bat`
+internally, it doesn't replace them, just the manual plumbing *around*
+them.
 
 ### Tag convention
 
-Two repos, two independent version tracks, formalized 2026-09-16 after
-the first release that needed all three shapes:
+One repo, two independent version tracks (formalized 2026-09-16,
+updated the same day once the AP world merged in):
 
-- **Standalone exe**: `vX.Y.Z` tags in `shadow-man-remastered-randomizer`
-  (this repo) — e.g. `v1.2.0`. Its own track, bumped in `gui.py`'s HTML
-  header.
-- **AP world / AP Companion**: `vX.Y.Z` tags in
-  `shadow-man-remastered-ap-world`, an independent `0.x` track matching
-  `COMPANION_VERSION` (which lives in *this* repo's `ap_gui.py`, since
-  the Companion exe is built from here — one number, two repos care
-  about it).
-- **Source-commit marker** (this repo only, optional): if a specific
-  commit in `shadow-man-remastered-randomizer` needs its own pointer
-  back to "this is what produced AP Companion vX.Y.Z" — e.g. for
-  release-note archaeology later — tag it `apworld-vX.Y.Z` here. Don't
-  reuse the plain `vX.Y.Z` shape for this; that's reserved for the
-  standalone exe's own track in this same repo, and mixing the two
-  would make `git tag -l` ambiguous about which artifact a given tag
-  describes.
+- **Standalone exe**: `vX.Y.Z` tags — e.g. `v1.2.0`. Its own track,
+  bumped in `gui.py`'s HTML header.
+- **AP world / AP Companion**: `apworld-vX.Y.Z` tags — its own
+  independent `0.x` track matching `COMPANION_VERSION` (`ap_gui.py`).
+  Deliberately a different shape from the standalone exe's plain
+  `vX.Y.Z`, even though both now live in the same repo's tag namespace
+  — otherwise `git tag -l` would be ambiguous about which artifact a
+  given tag describes. (Pre-merge, `shadow-man-remastered-ap-world` had
+  its own separate `v0.1.0`/`v0.1.1` tags in its own repo; those stay as
+  historical record there, `apworld-vX.Y.Z` here is the track going
+  forward.)
 
 ## What this does *not* cover yet
 
