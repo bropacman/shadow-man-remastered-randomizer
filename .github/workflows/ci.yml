@@ -199,7 +199,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r ci-requirements.txt
           python ModuleUpdate.py --yes --force --append "WebHostLib/requirements.txt"
-          python Launcher.py --update_settings
+          # Deliberately NOT running `python Launcher.py --update_settings`
+          # (part of ArchipelagoMW/Archipelago's own unittests.yml recipe,
+          # there to create host.yaml before the FULL test suite runs).
+          # This job only ever runs worlds/shadowman/test/__init__.py --
+          # confirmed it has no reference to host.yaml/Utils.get_settings
+          # anywhere in its own code or in test.bases/test.general. First
+          # real run hit a genuine, unrelated flake here: ModuleUpdate.py
+          # also runs internally inside Launcher.py's own startup, found a
+          # real version conflict between two completely unrelated bundled
+          # worlds' requirements.txt files (zilliandomizer's dependency
+          # pulling a newer typing_extensions than another world pins),
+          # and tried to prompt interactively to confirm the fix -- which
+          # raises a bare EOFError with no stdin attached in CI. Dropping
+          # this unneeded step sidesteps that whole dependency-conflict
+          # surface for this narrow test scope entirely, rather than
+          # trying to force-answer a prompt that shouldn't need answering.
 
       # Run the FILE directly, not the bare `test/` directory -- see
       # worlds/shadowman/test/__init__.py's own docstring: this AP
