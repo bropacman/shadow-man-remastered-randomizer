@@ -22,6 +22,8 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #include <string>
 #include <cstring>
 #include <vector>
+#include <fstream>
+#include <sstream>
 
 namespace {
 
@@ -50,7 +52,7 @@ std::deque<Toast> g_toasts;
 std::deque<Toast> g_history; // never expires on its own, just caps at kHistoryMaxEntries
 ImFont* g_font = nullptr; // custom themed font if found, else scaled-up default
 bool g_historyVisible = true;
-constexpr int kHistoryToggleKey = VK_F9;
+constexpr int kHistoryToggleKey = VK_F2; // was VK_F9, then briefly VK_F1 (swapped with panel 2026-08-30, Jon's ask)
 
 // ── Connect / console panel (2026-08-04, redesigned 2026-08-05) ─────────
 // See CLAUDE.md's "client injected into the DLL" writeup for the full
@@ -73,9 +75,22 @@ constexpr int kHistoryToggleKey = VK_F9;
 // a MINIMIZED one-line hint (matching the F9/history log's own minimized
 // state) rather than being fully invisible until F10 — so a new player
 // sees it exists without it taking over anything by default.
-bool g_panelExpanded = false; // F10 toggles this: minimized hint <-> full interactive panel
-constexpr int kPanelToggleKey = VK_F10;
+bool g_panelExpanded = false; // F1 toggles this: minimized hint <-> full interactive panel
+constexpr int kPanelToggleKey = VK_F1; // was VK_F10, then briefly VK_F2 (swapped with history 2026-08-30, Jon's ask)
 WNDPROC g_originalWndProc = nullptr;
+
+// F2 can now also pop the cursor out on its own (2026-08-30, Jon's ask) --
+// previously ONLY g_panelExpanded (F1) gated cursor-grab/input-forwarding,
+// so repositioning the history log required opening the connect panel
+// too. g_historyGrabWanted is F2's own independent "I want the cursor"
+// flag (see its toggle in Render() below); g_cursorGrabbed is the union of
+// both, recomputed once per frame in Render() and read by WndProcHook and
+// everything else that used to check g_panelExpanded directly for cursor/
+// input purposes -- g_panelExpanded itself still means exactly what it
+// always did (is the connect panel's own UI shown), nothing else changed
+// about it.
+bool g_historyGrabWanted = false;
+bool g_cursorGrabbed = false;
 
 // Persistent connect-panel state (2026-08-05) — separate from the
 // transient toast/history feed below, which still shows every one of
@@ -117,28 +132,76 @@ bool g_hadSavedClip = false;
 ImVec2 g_panelRectPos{};
 ImVec2 g_panelRectSize{};
 
-// Shared close/collapse logic (2026-08-05) — both the F10 toggle-off path
-// and the new click-outside-the-panel path need to do the exact same
-// cleanup (stop swallowing input, restore whatever cursor clip the game
-// had, unwind our own ShowCursor(TRUE) calls), so it lives here once
-// rather than being duplicated at both call sites.
-void CollapsePanel() {
-    if (!g_panelExpanded) return; // already collapsed — nothing to undo
-    g_panelExpanded = false;
+// Same idea as g_panelRectPos/g_panelRectSize above, but for the draggable
+// history log window (2026-08-30, Jon's ask) -- the click-outside-to-
+// minimize check below needs to also exempt this rect now that the
+// history window can sit somewhere other than directly under the panel.
+// Only valid (g_historyRectValid) on frames where the full, draggable
+// ##ap_history window actually drew -- not the fixed ##ap_history_hint.
+ImVec2 g_historyRectPos{};
+ImVec2 g_historyRectSize{};
+bool g_historyRectValid = false;
+
+// Where the live item-toast stack should start (2026-08-31, Jon's ask) --
+// toasts used to always anchor to the fixed top-right corner below the
+// connect panel, ignoring wherever the history log/hint had actually been
+// dragged to. Same one-frame-stale idea as g_panelRectPos/g_historyRectPos
+// above: the history block (further down in Render()) overwrites this with
+// its own just-drawn bottom-left corner every frame, and the toast loop
+// (which runs BEFORE the history block this same frame) reads whatever was
+// left here by the PREVIOUS frame -- imperceptible at 60fps, and avoids
+// having to reorder rendering or predict this frame's history layout
+// ahead of time. Valid unless history hasn't rendered even once yet (e.g.
+// the very first launch, before any location check exists to log) --
+// toasts fall back to the original below-the-panel column in that case.
+ImVec2 g_historyBottomAnchor{};
+bool g_historyBottomValid = false;
+
+// The actual OS-level cursor cleanup (2026-08-30, Jon's ask) -- restores
+// whatever cursor-clip the game had before we grabbed it, unwinds our own
+// ShowCursor(TRUE) calls, and turns NavEnableKeyboard back off. Factored
+// out of CollapsePanel() (which used to do this directly) so it can be
+// triggered by g_cursorGrabbed -- the UNION of g_panelExpanded and
+// g_historyGrabWanted -- going to false in Render(), rather than only the
+// panel's own toggle: F2 can now hold the grab open on its own even after
+// F1's panel has closed, and this only actually releases the OS resources
+// once NEITHER wants it anymore.
+void ReleaseCursorGrab() {
     ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
     if (g_hadSavedClip) {
         ClipCursor(&g_savedClipRect);
         g_hadSavedClip = false;
     }
     // Unwind exactly as many ShowCursor(TRUE) calls as were made in the
-    // per-frame block while expanded. ShowCursor's visibility counter is
+    // per-frame block while grabbed. ShowCursor's visibility counter is
     // one process-wide shared integer, so undoing our own net contribution
     // is correct regardless of how the game's own ShowCursor(FALSE) calls
-    // were interleaved with ours while the panel was expanded.
+    // were interleaved with ours while grabbed.
     while (g_cursorShowCount > 0) {
         ShowCursor(FALSE);
         --g_cursorShowCount;
     }
+}
+
+// Closes the connect panel's own UI (2026-08-05) — both the F1 toggle-off
+// path and the click-outside path used to do cursor cleanup here directly;
+// now that's handled generically by ReleaseCursorGrab() above once the
+// combined grab state actually drops to false, so this only ever flips
+// g_panelExpanded itself.
+void CollapsePanel() {
+    if (!g_panelExpanded) return; // already collapsed — nothing to undo
+    g_panelExpanded = false;
+}
+
+// Releases every independent grab-wanter at once (2026-08-30, Jon's ask) --
+// used by the click-outside-to-dismiss path below, so a stray click during
+// normal play fully lets go of the cursor regardless of whether F1, F2, or
+// both asked for it. Doesn't touch g_historyVisible -- whether the history
+// log's content is shown is a separate, persistent preference from the
+// transient "is the cursor currently grabbed for repositioning" state.
+void DismissHud() {
+    CollapsePanel();
+    g_historyGrabWanted = false;
 }
 
 // REVERTED back to one combined check (2026-08-05) — see g_panelExpanded's
@@ -195,7 +258,10 @@ bool IsInputMessage(UINT msg) {
 // regardless of expand state, so window management is never affected
 // either way.
 LRESULT CALLBACK WndProcHook(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    if (!g_panelExpanded) {
+    // Gates on the combined g_cursorGrabbed now, not just g_panelExpanded
+    // (2026-08-30, Jon's ask) -- F2 alone can hold this open too, see
+    // g_historyGrabWanted's own comment above.
+    if (!g_cursorGrabbed) {
         return CallWindowProcW(g_originalWndProc, hwnd, msg, wParam, lParam);
     }
 
@@ -232,6 +298,119 @@ std::string WideToUtf8(const std::wstring& wide) {
     std::string out(size - 1, '\0');
     WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, out.data(), size, nullptr, nullptr);
     return out;
+}
+
+// ── Persisted overlay prefs (2026-08-30, Jon's ask) ─────────────────────
+// Small flat JSON file living next to the DLL (same directory convention
+// as fonts/toast_font.ttf and launch_client.bat above -- see
+// GetOverlayDllDir()), remembering where the player last dragged the
+// connect panel and history log to, plus the last-used server/name/
+// password so the connect panel doesn't start blank every game launch.
+// Uses the same json_mini::Parse/Escape machinery already used for the
+// IPC protocol below (SendJsonToClient) -- it's a flat string-valued
+// object, same shape, just written to disk instead of a socket.
+//
+// NOTE: the password is stored in plain text in this file, same as
+// everywhere else in this project (client.py/ap_gui.py don't encrypt it
+// either). Archipelago room passwords are typically low-stakes (shared
+// with your co-op group), but worth knowing if this file might ever end
+// up somewhere more exposed than your own machine.
+struct OverlayPrefs {
+    bool hasPanelPos = false;
+    ImVec2 panelPos{};
+    bool hasHistoryPos = false;
+    ImVec2 historyPos{};
+    std::string server = "archipelago.gg:38281";
+    std::string name;
+    std::string password;
+};
+
+std::wstring GetPrefsPath() {
+    std::wstring dir = GetOverlayDllDir();
+    if (dir.empty()) return L"";
+    return dir + L"\\ap_overlay_prefs.json";
+}
+
+OverlayPrefs LoadPrefsFromDisk() {
+    OverlayPrefs prefs;
+    std::wstring path = GetPrefsPath();
+    if (path.empty()) return prefs;
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return prefs; // no file yet -- first run ever, defaults stand
+
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    std::unordered_map<std::string, std::string> fields;
+    if (!json_mini::Parse(ss.str(), fields)) return prefs;
+
+    auto getFloat = [&](const char* key, float& out) -> bool {
+        auto it = fields.find(key);
+        if (it == fields.end() || it->second.empty()) return false;
+        try {
+            out = std::stof(it->second);
+            return true;
+        } catch (...) {
+            return false;
+        }
+    };
+
+    float px, py, hx, hy;
+    if (getFloat("panel_x", px) && getFloat("panel_y", py)) {
+        prefs.hasPanelPos = true;
+        prefs.panelPos = ImVec2(px, py);
+    }
+    if (getFloat("history_x", hx) && getFloat("history_y", hy)) {
+        prefs.hasHistoryPos = true;
+        prefs.historyPos = ImVec2(hx, hy);
+    }
+    auto itServer = fields.find("server");
+    if (itServer != fields.end() && !itServer->second.empty()) prefs.server = itServer->second;
+    auto itName = fields.find("name");
+    if (itName != fields.end()) prefs.name = itName->second;
+    auto itPassword = fields.find("password");
+    if (itPassword != fields.end()) prefs.password = itPassword->second;
+    return prefs;
+}
+
+// Mirrors SendJsonToClient's own flat-object-builder pattern further down
+// this file, just writing to disk instead of the IPC socket.
+void SavePrefsToDisk(const OverlayPrefs& prefs) {
+    std::wstring path = GetPrefsPath();
+    if (path.empty()) return;
+
+    std::ostringstream json;
+    json << "{";
+    json << "\"panel_x\":\"" << prefs.panelPos.x << "\",";
+    json << "\"panel_y\":\"" << prefs.panelPos.y << "\",";
+    json << "\"history_x\":\"" << prefs.historyPos.x << "\",";
+    json << "\"history_y\":\"" << prefs.historyPos.y << "\",";
+    json << "\"server\":\"" << json_mini::Escape(prefs.server) << "\",";
+    json << "\"name\":\"" << json_mini::Escape(prefs.name) << "\",";
+    json << "\"password\":\"" << json_mini::Escape(prefs.password) << "\"";
+    json << "}";
+
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) return;
+    out << json.str();
+}
+
+// Loaded once, lazily, the first time anything needs it -- Init() runs
+// before any window has a size/position to seed defaults from, so there's
+// no earlier point that would actually be useful to load at.
+OverlayPrefs& GetPrefs() {
+    static OverlayPrefs prefs = LoadPrefsFromDisk();
+    return prefs;
+}
+
+// Bounded copy into a fixed ImGui input buffer, used to seed serverBuf/
+// nameBuf/passwordBuf from a loaded std::string without pulling in
+// strncpy_s (CRT-version-specific) just for this.
+void SeedBuf(char* buf, size_t bufSize, const std::string& value) {
+    if (value.empty() || bufSize == 0) return;
+    size_t n = value.size() < bufSize - 1 ? value.size() : bufSize - 1;
+    std::memcpy(buf, value.data(), n);
+    buf[n] = '\0';
 }
 
 // Same mutex check as dllmain.cpp's IsClientMutexHeld() (2026-08-05) —
@@ -356,7 +535,7 @@ void SendJsonToClient(std::initializer_list<std::pair<const char*, std::string>>
 }
 
 // Minimized, non-interactive stand-in shown whenever the panel isn't
-// expanded (2026-08-05) — mirrors the "F9: show history" hint below it
+// expanded (2026-08-05) — mirrors the "F2: show history" hint below it
 // exactly (same flags, same font scale, same dim "worn bone" color) so the
 // panel is never fully invisible: the player always sees that F10 is an
 // option, without it grabbing the cursor or stealing input until they
@@ -370,7 +549,19 @@ void SendJsonToClient(std::initializer_list<std::pair<const char*, std::string>>
 // fixed top margin of its own) would draw underneath/through whichever of
 // the two is currently showing instead of forming one single column.
 float RenderConnectPanelHint() {
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - kHudWidth - kHudMargin, kHudMargin));
+    // Anchored to the same remembered spot as the expanded panel
+    // (2026-08-30, Jon's ask) -- this hint window is its own separate,
+    // non-interactive ImGui window (never draggable itself), so without
+    // this it always snapped back to the hardcoded top-right corner the
+    // instant you toggled the panel closed, undoing wherever you'd just
+    // dragged the expanded panel to. Falls back to the same top-right
+    // default the expanded panel itself uses until something's actually
+    // been dragged and saved.
+    {
+        const OverlayPrefs& prefs = GetPrefs();
+        ImVec2 defaultPos(ImGui::GetIO().DisplaySize.x - kHudWidth - kHudMargin, kHudMargin);
+        ImGui::SetNextWindowPos(prefs.hasPanelPos ? prefs.panelPos : defaultPos);
+    }
     ImGui::SetNextWindowSize(ImVec2(kHudWidth, 0));
     ImGui::SetNextWindowBgAlpha(0.35f);
 
@@ -386,7 +577,7 @@ float RenderConnectPanelHint() {
     ImGui::SetWindowFontScale(kSubtitleFontScale);
     ImVec4 hintColor(0.55f, 0.51f, 0.44f, 0.7f);
     ImGui::PushStyleColor(ImGuiCol_Text, hintColor);
-    ImGui::TextUnformatted("F10: Archipelago Connect / Console");
+    ImGui::TextUnformatted("F1: Archipelago Connect / Console");
     ImGui::PopStyleColor();
     ImGui::SetWindowFontScale(1.0f);
     // Measured before End() — GetWindowSize() after End() doesn't see this
@@ -425,6 +616,19 @@ float RenderConnectPanel() {
     static char nameBuf[64]      = "";
     static char passwordBuf[64]  = "";
     static char cmdBuf[256]      = "";
+    // Seeded once from disk (2026-08-30, Jon's ask) -- remembers the last
+    // server/name/password entered across game launches. Injection
+    // happens fresh each game launch, so "once per DLL load" (this whole
+    // function only ever runs while the panel is expanded) is the right
+    // granularity -- no need to re-check every frame.
+    static bool prefsSeeded = false;
+    if (!prefsSeeded) {
+        const OverlayPrefs& prefs = GetPrefs();
+        SeedBuf(serverBuf, sizeof(serverBuf), prefs.server);
+        SeedBuf(nameBuf, sizeof(nameBuf), prefs.name);
+        SeedBuf(passwordBuf, sizeof(passwordBuf), prefs.password);
+        prefsSeeded = true;
+    }
     // Purely local UI feedback for the Command box specifically (2026-08-05)
     // -- fades out after a few seconds, just confirms a /command reached
     // client.py. Connect/Disconnect now has real persistent state instead
@@ -433,13 +637,28 @@ float RenderConnectPanel() {
     static std::string lastCmdStatus;
     static std::chrono::steady_clock::time_point lastCmdAt;
 
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - kHudWidth - kHudMargin, kHudMargin));
+    {
+        OverlayPrefs& prefs = GetPrefs();
+        ImVec2 defaultPos(ImGui::GetIO().DisplaySize.x - kHudWidth - kHudMargin, kHudMargin);
+        // FirstUseEver -- only seeds position the very first time this
+        // window is ever Begin()'d this run (or, via prefs, ever at all).
+        // Every later frame leaves it wherever it currently is, i.e.
+        // wherever the player last dragged it.
+        ImGui::SetNextWindowPos(prefs.hasPanelPos ? prefs.panelPos : defaultPos, ImGuiCond_FirstUseEver);
+    }
     ImGui::SetNextWindowSize(ImVec2(kHudWidth, 0));
     ImGui::SetNextWindowBgAlpha(0.90f);
 
+    // NoMove removed (2026-08-30, Jon's ask) -- draggable now by clicking
+    // any empty area of the panel body (no title bar, but ImGui still
+    // lets you drag from empty background when NoMove isn't set -- see
+    // io.ConfigWindowsMoveFromTitleBarOnly, left at its default false).
+    // The resulting position is captured into g_panelRectPos right after
+    // End() below (already done for the click-outside-to-minimize check)
+    // and persisted to disk by the "Persist dragged positions" block near
+    // the end of Render().
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar
         | ImGuiWindowFlags_NoSavedSettings
-        | ImGuiWindowFlags_NoMove
         | ImGuiWindowFlags_NoResize
         | ImGuiWindowFlags_AlwaysAutoResize;
 
@@ -450,7 +669,7 @@ float RenderConnectPanel() {
 
         ImVec4 headerColor(0.60f, 0.56f, 0.48f, 0.85f); // same muted tone as the "Recent" history header
         ImGui::PushStyleColor(ImGuiCol_Text, headerColor);
-        ImGui::TextUnformatted("Archipelago  (F10 to close)");
+        ImGui::TextUnformatted("Archipelago  (F1 to close)");
         ImGui::PopStyleColor();
 
         // No client.py currently attached at all (2026-08-05) -- the fields/
@@ -568,6 +787,13 @@ float RenderConnectPanel() {
                 // actually in flight.
                 g_apConnState = ApConnState::Connecting;
                 g_apConnDetail.clear();
+
+                // Remember these for next launch (2026-08-30, Jon's ask).
+                OverlayPrefs& prefs = GetPrefs();
+                prefs.server = serverBuf;
+                prefs.name = nameBuf;
+                prefs.password = passwordBuf;
+                SavePrefsToDisk(prefs);
             }
         }
 
@@ -653,35 +879,25 @@ bool Init(ID3D11Device* device, ID3D11DeviceContext* context, HWND hwnd) {
 void Render() {
     if (!g_initialized) return;
 
-    // Poll-based hotkey: GetAsyncKeyState reads real physical key state
+    // Poll-based hotkeys: GetAsyncKeyState reads real physical key state
     // without hooking WndProc, so it never intercepts or blocks the key
     // from also reaching the game — same "don't steal input" rule the rest
-    // of this overlay follows.
-    {
-        static bool prevDown = false;
-        bool down = (GetAsyncKeyState(kHistoryToggleKey) & 0x8000) != 0;
-        if (down && !prevDown) g_historyVisible = !g_historyVisible;
-        prevDown = down;
-    }
-
-    // Same poll-based-hotkey pattern as F9 above, so the toggle itself
-    // always works via GetAsyncKeyState regardless of whether WndProcHook
-    // is currently forwarding input elsewhere (it never touches this key's
-    // physical state, only what WM_KEYDOWN/UP messages the game sees).
-    // ShowCursor's internal display counter just needs each grab/release
-    // pair balanced, which a simple bool flip already guarantees.
-    // NavEnableKeyboard is restored to "off" the instant the cursor is
-    // released, matching the existing toast code's principle of never
-    // leaving anything changed for the game once our own UI isn't actively
-    // in use — though it only affects ImGui's own internal widget-
-    // navigation state, never anything the game itself reads.
+    // of this overlay follows. ShowCursor's internal display counter just
+    // needs each grab/release pair balanced, which the g_cursorGrabbed
+    // union below already guarantees. NavEnableKeyboard is restored to
+    // "off" the instant the cursor is released, matching the existing
+    // toast code's principle of never leaving anything changed for the
+    // game once our own UI isn't actively in use — though it only affects
+    // ImGui's own internal widget-navigation state, never anything the
+    // game itself reads.
     //
-    // 2026-08-05: reverted back to the original modal design — this
-    // toggles g_panelExpanded, which both gates WndProcHook's input
-    // swallowing AND which of RenderConnectPanel/RenderConnectPanelHint
-    // gets drawn each frame. See g_panelExpanded's own header comment for
-    // why the selective WantCaptureMouse/Keyboard forwarding attempt was
-    // abandoned.
+    // 2026-08-05: reverted back to the original modal design — F1 toggles
+    // g_panelExpanded, which gates which of RenderConnectPanel/
+    // RenderConnectPanelHint gets drawn each frame. See g_panelExpanded's
+    // own header comment for why the selective WantCaptureMouse/Keyboard
+    // forwarding attempt was abandoned. Cursor-grab/input-forwarding
+    // itself is now gated on g_cursorGrabbed (2026-08-30) rather than
+    // g_panelExpanded directly -- see its own comment above.
     {
         static bool prevDown = false;
         bool down = (GetAsyncKeyState(kPanelToggleKey) & 0x8000) != 0;
@@ -690,31 +906,81 @@ void Render() {
                 CollapsePanel();
             } else {
                 g_panelExpanded = true;
-                ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-                // Release whatever cursor-clip region the game has active
-                // (camera-look games commonly pin the OS cursor to the
-                // window or its center every frame via ClipCursor) so the
-                // mouse can actually reach the panel. Remember it so it can
-                // be put back exactly on release -- GetClipCursor always
-                // succeeds and returns the full virtual screen rect if no
-                // clip is currently set, so this is safe even if the game
-                // never called ClipCursor at all.
-                g_hadSavedClip = GetClipCursor(&g_savedClipRect) != 0;
-                ClipCursor(nullptr);
             }
         }
         prevDown = down;
     }
 
-    if (g_panelExpanded) {
-        // Force the cursor visible EVERY frame the panel is expanded, not
-        // just once on toggle -- a one-shot ShowCursor(TRUE) loses a race
-        // against a game that calls ShowCursor(FALSE) on its own every
-        // frame (very common for games that hide the OS cursor during
-        // normal play), which is what live testing showed as the cursor
-        // "blinking in and out." Looping until the counter is non-negative
-        // pins it visible for at least this frame regardless of how far
-        // negative the game drove it since the last check.
+    // Same poll-based-hotkey pattern as kPanelToggleKey (F1) above.
+    // g_historyGrabWanted mirrors g_historyVisible's new state on every
+    // press (2026-08-30, Jon's ask: F2 should also pop the cursor out, not
+    // just F1, so the history log can be repositioned without opening the
+    // connect panel too) rather than being its own separate toggle -- that
+    // way two consecutive presses can't desync into "log hidden but cursor
+    // still grabbed" or vice versa: grabbed exactly when F2 has most
+    // recently shown the full log. Only an actual press ever sets this, so
+    // a fresh launch still starts with the cursor locked for normal play
+    // even though g_historyVisible itself defaults to true.
+    {
+        static bool prevDown = false;
+        bool down = (GetAsyncKeyState(kHistoryToggleKey) & 0x8000) != 0;
+        if (down && !prevDown) {
+            g_historyVisible = !g_historyVisible;
+            g_historyGrabWanted = g_historyVisible;
+        }
+        prevDown = down;
+    }
+
+    // g_cursorGrabbed is the union of both keys' wants, recomputed every
+    // frame (2026-08-30, Jon's ask) -- capturing/releasing the actual OS
+    // cursor-clip state happens exactly once, on the frame this union
+    // value changes, not per-key: pressing one key while the other already
+    // holds the grab open is a no-op here, and releasing only happens once
+    // BOTH have let go (see ReleaseCursorGrab()).
+    g_cursorGrabbed = g_panelExpanded || g_historyGrabWanted;
+    {
+        static bool prevGrabbed = false;
+        if (g_cursorGrabbed && !prevGrabbed) {
+            ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+            // Release whatever cursor-clip region the game has active
+            // (camera-look games commonly pin the OS cursor to the window
+            // or its center every frame via ClipCursor) so the mouse can
+            // actually reach the panel/history log. Remember it so it can
+            // be put back exactly on release -- GetClipCursor always
+            // succeeds and returns the full virtual screen rect if no clip
+            // is currently set, so this is safe even if the game never
+            // called ClipCursor at all.
+            g_hadSavedClip = GetClipCursor(&g_savedClipRect) != 0;
+            ClipCursor(nullptr);
+        } else if (!g_cursorGrabbed && prevGrabbed) {
+            ReleaseCursorGrab();
+        }
+        prevGrabbed = g_cursorGrabbed;
+    }
+
+    if (g_cursorGrabbed) {
+        // Fight ClipCursor every frame too, not just once on the transition
+        // above (2026-08-30) -- same "loop every frame, don't trust a
+        // one-shot win" fix as the ShowCursor loop below. A one-shot
+        // ClipCursor(nullptr) only wins until the next frame the game
+        // itself calls ClipCursor() again for its own camera-look -- which
+        // re-traps the OS cursor to whatever rect it uses (often
+        // centered/tiny), same root cause as the ShowCursor "blinking"
+        // problem this loop already exists to fix. Live testing showed
+        // this specifically once actually connected and playing rather
+        // than sitting at a menu/loading screen -- that's when the game's
+        // own per-frame camera-look clipping is actually active. Re-
+        // releasing it here every frame wins the race the same way.
+        ClipCursor(nullptr);
+
+        // Force the cursor visible EVERY frame the cursor is grabbed, not
+        // just once on the transition -- a one-shot ShowCursor(TRUE) loses
+        // a race against a game that calls ShowCursor(FALSE) on its own
+        // every frame (very common for games that hide the OS cursor
+        // during normal play), which is what live testing showed as the
+        // cursor "blinking in and out." Looping until the counter is
+        // non-negative pins it visible for at least this frame regardless
+        // of how far negative the game drove it since the last check.
         int count;
         do {
             count = ShowCursor(TRUE);
@@ -768,7 +1034,7 @@ void Render() {
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
 
-    if (g_panelExpanded) {
+    if (g_cursorGrabbed) {
         // Polling fallback for clicks (2026-08-05): live testing showed
         // typing works but clicking the Connect button doesn't. The Win32
         // backend's WM_LBUTTONDOWN/UP handling is purely message-based
@@ -799,17 +1065,26 @@ void Render() {
 
             // Click-outside-to-minimize (2026-08-05, Jon's ask): a fresh
             // press anywhere outside the panel's own rect collapses it,
-            // same cleanup as pressing F10 again -- lets a stray click
+            // same cleanup as pressing F1 again -- lets a stray click
             // during normal play (aiming, firing, etc.) dismiss the panel
             // instead of it sitting there stuck open. Rect is one frame
             // stale -- see g_panelRectPos/g_panelRectSize's own comment
             // for why that's fine for a static HUD element like this.
+            //
+            // Also exempts the draggable history log's rect (2026-08-30,
+            // Jon's ask) -- it can now sit anywhere on screen, not just
+            // directly under the panel, so a click meant to start
+            // dragging it must not be treated as "outside" and collapse
+            // the panel out from under the drag.
             if (lButton) {
-                bool inside =
+                bool insidePanel =
                     pt.x >= g_panelRectPos.x && pt.x <= g_panelRectPos.x + g_panelRectSize.x &&
                     pt.y >= g_panelRectPos.y && pt.y <= g_panelRectPos.y + g_panelRectSize.y;
-                if (!inside) {
-                    CollapsePanel();
+                bool insideHistory = g_historyRectValid &&
+                    pt.x >= g_historyRectPos.x && pt.x <= g_historyRectPos.x + g_historyRectSize.x &&
+                    pt.y >= g_historyRectPos.y && pt.y <= g_historyRectPos.y + g_historyRectSize.y;
+                if (!insidePanel && !insideHistory) {
+                    DismissHud();
                 }
             }
         }
@@ -829,7 +1104,19 @@ void Render() {
     // separately anchoring to the same fixed top-right corner and
     // overlapping whenever the panel is expanded.
     float panelHeight = g_panelExpanded ? RenderConnectPanel() : RenderConnectPanelHint();
-    float y = margin + panelHeight + 10.0f; // same 10px gap the toast stack itself uses between entries
+
+    // Toasts stack below wherever the history log/hint last ended up, not
+    // a fixed corner (2026-08-31, Jon's ask) -- see g_historyBottomAnchor's
+    // own comment above. Falls back to the original below-the-panel column
+    // whenever history hasn't drawn at least once yet.
+    float toastX = io.DisplaySize.x - toastWidth - margin;
+    float y;
+    if (g_historyBottomValid) {
+        toastX = g_historyBottomAnchor.x;
+        y = g_historyBottomAnchor.y + 10.0f; // same 10px gap the toast stack itself uses between entries
+    } else {
+        y = margin + panelHeight + 10.0f; // same 10px gap the toast stack itself uses between entries
+    }
 
     if (g_font) ImGui::PushFont(g_font);
 
@@ -839,7 +1126,7 @@ void Render() {
         float alpha = AlphaFor(t);
         if (alpha <= 0.01f) continue;
 
-        ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - toastWidth - margin, y));
+        ImGui::SetNextWindowPos(ImVec2(toastX, y));
         ImGui::SetNextWindowSize(ImVec2(toastWidth, 0));
         ImGui::SetNextWindowBgAlpha(0.85f * alpha);
 
@@ -889,7 +1176,15 @@ void Render() {
     // ── Persistent history log — smaller, plain text, doesn't fade or
     // expire on its own (just caps at kHistoryMaxEntries). Sits right
     // below the live toasts so a burst of pickups doesn't just vanish once
-    // the big popups clear. Toggle with F9 (kHistoryToggleKey).
+    // the big popups clear. Toggle with F2 (kHistoryToggleKey).
+    //
+    // Reset every frame (2026-08-30) -- only re-validated below when the
+    // full, draggable window actually draws this frame. Stops a stale
+    // rect from a previous frame (e.g. right after toggling to the hint
+    // variant) being treated as still current by the click-outside check
+    // and the position-persist block further down.
+    g_historyRectValid = false;
+    g_historyBottomValid = false;
     if (!g_history.empty()) {
         ImGuiWindowFlags historyFlags = ImGuiWindowFlags_NoDecoration
             | ImGuiWindowFlags_NoInputs
@@ -899,16 +1194,28 @@ void Render() {
             | ImGuiWindowFlags_AlwaysAutoResize;
 
         if (g_historyVisible) {
-            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - toastWidth - margin, y));
+            OverlayPrefs& prefs = GetPrefs();
+            ImVec2 defaultPos(io.DisplaySize.x - toastWidth - margin, y);
+            ImGui::SetNextWindowPos(prefs.hasHistoryPos ? prefs.historyPos : defaultPos, ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowSize(ImVec2(toastWidth, 0));
             ImGui::SetNextWindowBgAlpha(0.55f);
 
-            ImGui::Begin("##ap_history", nullptr, historyFlags);
+            // NoInputs removed for this window specifically (2026-08-30,
+            // Jon's ask) -- draggable to reposition, same background-drag
+            // mechanism as the connect panel above. Only actually
+            // reachable while the connect panel is expanded (F1) -- that's
+            // the only state where the OS cursor is unlocked/visible and
+            // WndProcHook is forwarding input to ImGui at all (see
+            // g_panelExpanded's own comment further up for why). The
+            // minimized hint variant below (##ap_history_hint) stays
+            // fixed/non-interactive, unchanged.
+            ImGuiWindowFlags draggableFlags = historyFlags & ~ImGuiWindowFlags_NoInputs;
+            ImGui::Begin("##ap_history", nullptr, draggableFlags);
             ImGui::SetWindowFontScale(kSubtitleFontScale);
 
             ImVec4 headerColor(0.60f, 0.56f, 0.48f, 0.85f);
             ImGui::PushStyleColor(ImGuiCol_Text, headerColor);
-            ImGui::TextUnformatted("Recent  (F9 to hide)");
+            ImGui::TextUnformatted("Recent  (F2 to hide)");
             ImGui::PopStyleColor();
 
             // Newest first.
@@ -925,11 +1232,29 @@ void Render() {
             }
 
             ImGui::SetWindowFontScale(1.0f);
+            g_historyRectPos = ImGui::GetWindowPos();
+            g_historyRectSize = ImGui::GetWindowSize();
+            g_historyRectValid = true;
+            g_historyBottomAnchor = ImVec2(g_historyRectPos.x, g_historyRectPos.y + g_historyRectSize.y);
+            g_historyBottomValid = true;
             ImGui::End();
         } else {
             // Minimal always-there reminder so the toggle doesn't get
             // forgotten once hidden — a single dim line, no per-item list.
-            ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - toastWidth - margin, y));
+            //
+            // Anchored to the same remembered spot as the expanded history
+            // log (2026-08-30, Jon's ask) -- same reasoning as
+            // RenderConnectPanelHint() above: this hint is its own
+            // separate, non-interactive window, so without this it always
+            // snapped back to the default stacked position on toggle-off.
+            // Falls back to that same default (still stacked under
+            // whichever of the panel/hint is showing, via 'y') until
+            // something's actually been dragged and saved.
+            {
+                OverlayPrefs& prefs = GetPrefs();
+                ImVec2 defaultPos(io.DisplaySize.x - toastWidth - margin, y);
+                ImGui::SetNextWindowPos(prefs.hasHistoryPos ? prefs.historyPos : defaultPos);
+            }
             ImGui::SetNextWindowSize(ImVec2(toastWidth, 0));
             ImGui::SetNextWindowBgAlpha(0.35f);
 
@@ -937,14 +1262,53 @@ void Render() {
             ImGui::SetWindowFontScale(kSubtitleFontScale);
             ImVec4 hintColor(0.55f, 0.51f, 0.44f, 0.7f);
             ImGui::PushStyleColor(ImGuiCol_Text, hintColor);
-            ImGui::TextUnformatted("F9: show history");
+            ImGui::TextUnformatted("F2: show history");
             ImGui::PopStyleColor();
             ImGui::SetWindowFontScale(1.0f);
+            {
+                ImVec2 hintPos = ImGui::GetWindowPos();
+                ImVec2 hintSize = ImGui::GetWindowSize();
+                g_historyBottomAnchor = ImVec2(hintPos.x, hintPos.y + hintSize.y);
+                g_historyBottomValid = true;
+            }
             ImGui::End();
         }
     }
 
     if (g_font) ImGui::PopFont();
+
+    // Persist dragged positions (2026-08-30, Jon's ask) -- compares
+    // against what's already saved and only writes when something
+    // actually changed AND the left mouse button is currently up, so this
+    // never fires mid-drag (which would mean a disk write on every one of
+    // 60-ish frames/sec) and never fires at all for a player who never
+    // touches these windows. Only checked while the cursor is grabbed --
+    // that's the only state either window can have moved in this frame
+    // (see g_cursorGrabbed's own comment for why the cursor can't reach
+    // either window otherwise).
+    if (g_cursorGrabbed) {
+        static ImVec2 lastSavedPanelPos = GetPrefs().hasPanelPos ? GetPrefs().panelPos : ImVec2(-1.0f, -1.0f);
+        static ImVec2 lastSavedHistoryPos = GetPrefs().hasHistoryPos ? GetPrefs().historyPos : ImVec2(-1.0f, -1.0f);
+        bool mouseDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        if (!mouseDown) {
+            bool changed = false;
+            OverlayPrefs& prefs = GetPrefs();
+            if (g_panelRectPos.x != lastSavedPanelPos.x || g_panelRectPos.y != lastSavedPanelPos.y) {
+                prefs.panelPos = g_panelRectPos;
+                prefs.hasPanelPos = true;
+                lastSavedPanelPos = g_panelRectPos;
+                changed = true;
+            }
+            if (g_historyRectValid &&
+                (g_historyRectPos.x != lastSavedHistoryPos.x || g_historyRectPos.y != lastSavedHistoryPos.y)) {
+                prefs.historyPos = g_historyRectPos;
+                prefs.hasHistoryPos = true;
+                lastSavedHistoryPos = g_historyRectPos;
+                changed = true;
+            }
+            if (changed) SavePrefsToDisk(prefs);
+        }
+    }
 
     ImGui::Render();
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

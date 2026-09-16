@@ -67,12 +67,28 @@ was needed after all. Both the sender and recipient are shown as
 
 ## History log
 
-Below the live toasts is a small "Recent" panel (last 15 events, newest on
-top) that doesn't fade or expire — so a burst of pickups isn't just gone
-once the big popups clear. Press **F9** to hide/show it (polled via
-`GetAsyncKeyState`, not a WndProc hook, so it never blocks the key from
-also reaching the game). When hidden, a single dim "F9: show history" line
-stays up so the toggle doesn't get forgotten.
+A small "Recent" panel (last 15 events, newest on top) that doesn't fade
+or expire — so a burst of pickups isn't just gone once the big popups
+clear. Press **F2** to hide/show it (polled via `GetAsyncKeyState`, not a
+WndProc hook, so it never blocks the key from also reaching the game).
+When hidden, a single dim "F2: show history" line stays up so the toggle
+doesn't get forgotten.
+
+Live toasts stack directly below wherever this history log (or its hidden
+hint line) currently sits, not a fixed corner (2026-08-31) — drag the
+history log somewhere else and new item toasts follow it there too, one
+frame later.
+
+Pressing **F1** or **F2** each independently releases the OS mouse cursor
+(the game normally clips/hides it for camera-look), so either key alone is
+enough to reposition its own window — you don't need the connect panel
+open just to drag the history log. Both the connect/console panel and the
+history log can be dragged anywhere on screen by clicking an empty part of
+their body — their positions (and the last-used server/name/password) are
+remembered in `ap_overlay_prefs.json` next to the DLL, so they come back
+where you left them next launch. The cursor stays released as long as
+either window's toggle is "on"; it's re-clipped/hidden for the game once
+both are off (or you click outside both windows).
 
 ## Font
 
