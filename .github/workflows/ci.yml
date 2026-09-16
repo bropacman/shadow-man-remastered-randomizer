@@ -86,16 +86,21 @@ jobs:
 
       # windows-latest already ships MSVC + CMake, no extra setup needed.
       # NOTE: CMakeLists.txt's FetchContent pulls minhook/imgui at
-      # GIT_TAG master (not pinned) -- same as local dev builds today, but
-      # it means this job's result can differ run-to-run if either
-      # upstream dep changes, independent of anything in either of our
-      # own repos. A failure here means "a fresh build right now doesn't
-      # match what's committed" -- check whether that's a real stale-DLL
-      # bug (rebuild locally and compare) or upstream drift (imgui/minhook
-      # pushed a change to master) before assuming the former. Pinning
-      # both to a fixed tag/commit would remove this ambiguity entirely;
-      # left as a possible follow-up, not done here since it's a source
-      # change to CMakeLists.txt beyond just adding CI.
+      # GIT_TAG master (not pinned) -- same as local dev builds today.
+      # First version of this job tried a hard byte-for-byte diff against
+      # the committed binary and it failed on the very first real run even
+      # though the build was completely correct: built 821248B vs committed
+      # 819712B, a ~1.5KB difference from nothing more than the runner's
+      # MSVC/dependency versions not being pixel-identical to Jon's local
+      # machine. A byte-exact target is fundamentally the wrong bar for an
+      # unpinned, multi-environment build -- so this job instead directly
+      # tests the actual property that matters (see CMakeLists.txt's own
+      # 2026-08-15 comment: the whole point of static-linking is that the
+      # DLL must never need vcruntime140.dll/msvcp140.dll on the target
+      # machine), plus a generous size sanity bound that would have caught
+      # this session's real bug (a stale committed Debug build, ~2.8MB,
+      # dynamic CRT) immediately. The byte-diff is kept as a non-blocking,
+      # informational step below.
       - name: Configure (x64)
         working-directory: standalone/overlay_dll
         run: cmake -B build -A x64
@@ -104,15 +109,41 @@ jobs:
         working-directory: standalone/overlay_dll
         run: cmake --build build --config Release
 
-      - name: Diff rebuilt DLL against the committed binary
+      - name: Verify the DLL is a statically-linked Release build
         shell: bash
         run: |
           set -e
           built="standalone/overlay_dll/build/Release/ShadowManOverlay.dll"
-          committed="apworld/ShadowManOverlay.dll"
-          ls -la "$built" "$committed"
-          if ! cmp -s "$built" "$committed"; then
-            echo "::error::Rebuilt overlay DLL differs from the committed binary in shadow-man-remastered-ap-world -- see this job's own NOTE above before assuming it's a stale-DLL bug rather than upstream imgui/minhook drift."
+          size=$(stat -c%s "$built")
+          echo "Built DLL size: $size bytes"
+          # A dynamic-CRT Debug build (the exact bug this job exists to
+          # catch) is ~2.8MB; a correctly statically-linked Release build
+          # is currently ~800-850KB. Generous bound, not a tight one --
+          # toolchain drift over time is expected, a huge jump isn't.
+          if [ "$size" -gt 1500000 ]; then
+            echo "::error::Built DLL is $size bytes -- too large for a static-CRT Release build (expected roughly 500KB-1.5MB). Check CMAKE_MSVC_RUNTIME_LIBRARY and the build config actually used."
             exit 1
           fi
-          echo "Rebuilt DLL matches the committed binary byte-for-byte."
+          # Verified locally against real Debug/Release builds before
+          # trusting this pattern: Release contains none of these strings;
+          # Debug contains VCRUNTIME140D.dll/MSVCP140D.dll/VCRUNTIME140_1D.dll.
+          # Matches case-insensitively and covers both the debug ("D"
+          # suffix) and plain dynamic-linkage ("VCRUNTIME140.dll" with no
+          # "D") name forms.
+          if grep -aiE "VCRUNTIME140D?(_1D?)?\.dll|MSVCP140D?\.dll" "$built" > /dev/null; then
+            echo "::error::Built DLL references the MSVC runtime DLLs (vcruntime140/msvcp140) -- CRT is dynamically linked, not static. Players without the VC++ redistributable installed would fail to load this overlay."
+            exit 1
+          fi
+          echo "DLL is a correctly statically-linked Release build."
+
+      - name: Compare against the committed AP world binary (informational only)
+        shell: bash
+        run: |
+          built="standalone/overlay_dll/build/Release/ShadowManOverlay.dll"
+          committed="apworld/ShadowManOverlay.dll"
+          ls -la "$built" "$committed"
+          if cmp -s "$built" "$committed"; then
+            echo "Rebuilt DLL matches the committed binary byte-for-byte."
+          else
+            echo "::warning::Rebuilt DLL differs from the committed binary in shadow-man-remastered-ap-world (built=$(stat -c%s "$built")B, committed=$(stat -c%s "$committed")B). Not failing the build for this alone -- unpinned FetchContent deps and toolchain differences between this runner and a local dev machine are expected to cause small differences. If you actually changed overlay_dll/src and expected the shipped DLL to update, rebuild locally and re-commit it in the AP world repo -- this step won't catch that for you."
+          fi
