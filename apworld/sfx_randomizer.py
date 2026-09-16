@@ -1,0 +1,285 @@
+"""
+sfx_randomizer.py
+─────────────────
+Shuffles sound effects within curated pools.
+
+Three pools are supported:
+  1. Voice lines — all files under audio/speech/generic/ shuffle globally.
+  2. Weapon sounds — manually mapped pools shuffle within each sound type
+     (fire sounds swap with fire sounds, reload with reload, etc.).
+  3. Enemy sounds — manually mapped pools (pain/startle/attack/ambient/speech)
+     shuffle within each sound type, per-enemy set kept together.
+
+combine_voice_pools (opt-in, off by default) merges pools 1 and 3 into one
+shared pool before shuffling, instead of shuffling them in isolation — every
+individual voice/enemy-sound file becomes its own slot and can land on any
+other file in the combined set. Shadow Man can end up grunting with a
+Surgeon's pain bark; a Deadworm can shriek in Shadow Man's voice. Only takes
+effect when both shuffle_voices and shuffle_enemies are also enabled — with
+just one of the two on, that pool shuffles normally (isolated) as before.
+
+Output: {internal_kpf_path: local_extracted_path} dict for mod KPF packing.
+Caller (patcher.py) merges this into mod_files before build_and_install_mod.
+"""
+
+from __future__ import annotations
+import random
+from pathlib import Path
+from .constants import WEAPON_SOUND_SETS, ENEMY_SOUND_SETS
+
+# ── Voice line config ──────────────────────────────────────────────────────────
+
+VOICE_PATH_PATTERN = "audio/speech/generic/*"
+
+# Individual stems to exclude from voice shuffling if needed
+EXCLUDED_VOICE_STEMS: frozenset[str] = frozenset({
+    "gn0075s",   # reserved for the "wrong retractor" feedback line
+                 # (unique_retractor_keys_patch.py) -- must always say
+                 # "damn i need a key", never get swapped by voice shuffle
+})
+
+def _swap_set_pool(
+    rng: random.Random,
+    sets: list[list[str]],
+    kpf_index,
+    kpf_files: list[str],
+    out_root: Path,
+    label: str,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Shuffle a list of sound sets within themselves.
+    Each set stays together — source files tile to fill slot count if sizes differ.
+    Returns ({internal_path: local_path}, {slot_path: source_path}) for mod packing + spoiler.
+    """
+    from .kpf_handler import find_file_in_kpf, extract_file_from_kpf
+
+    if not sets:
+        return {}, {}
+
+    # Shuffle which source set fills each slot set
+    sources = sets[:]
+    rng.shuffle(sources)
+
+    mod_files: dict[str, str] = {}
+    swap_log: dict[str, str] = {}
+    changed = 0
+
+    for slot_set, source_set in zip(sets, sources):
+        if slot_set == source_set:
+            continue
+        # Tile source files to match slot count
+        tiled = [source_set[i % len(source_set)] for i in range(len(slot_set))]
+        for slot_path, source_path in zip(slot_set, tiled):
+            if slot_path == source_path:
+                continue
+            matches = find_file_in_kpf(kpf_index, source_path)
+            if not matches:
+                print(f"  WARNING [{label}]: source not found in KPF: {source_path}")
+                continue
+            internal, kpf_name = matches[0]
+            kpf_full = str(Path(kpf_index.kpf_dir) / kpf_name)
+            local_dir = out_root / Path(slot_path).parent
+            local_dir.mkdir(parents=True, exist_ok=True)
+            local_path = local_dir / Path(slot_path).name
+            ok = extract_file_from_kpf(kpf_full, internal, str(local_path))
+            if not ok:
+                print(f"  WARNING [{label}]: extraction failed: {source_path}")
+                continue
+            mod_files[slot_path] = str(local_path)
+            swap_log[slot_path] = source_path
+            changed += 1
+
+    total_files = sum(len(s) for s in sets)
+    print(f"  SFX [{label}]: {changed}/{total_files} file(s) swapped across {len(sets)} sets")
+    return mod_files, swap_log
+
+def _extract_and_swap(
+    rng: random.Random,
+    pool: list[str],
+    kpf_files: list[str],
+    kpf_index,
+    out_root: Path,
+    label: str,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Shuffle a flat list of internal KPF paths within themselves.
+    Extracts source files locally with swapped slot names.
+    Returns ({internal_path: local_path}, {slot_path: source_path}) for mod packing + spoiler.
+    """
+    from .kpf_handler import find_file_in_kpf, extract_file_from_kpf
+
+    if not pool:
+        return {}, {}
+
+    sources = pool[:]
+    rng.shuffle(sources)
+    swap_map = dict(zip(pool, sources))
+
+    mod_files: dict[str, str] = {}
+    swap_log: dict[str, str] = {}
+    changed = 0
+
+    for slot_path, source_path in swap_map.items():
+        if slot_path == source_path:
+            continue
+
+        matches = find_file_in_kpf(kpf_index, source_path)
+        if not matches:
+            print(f"  WARNING [{label}]: source not found in KPF: {source_path}")
+            continue
+
+        internal, kpf_name = matches[0]
+        kpf_full = str(Path(kpf_index.kpf_dir) / kpf_name)
+
+        local_dir = out_root / Path(slot_path).parent
+        local_dir.mkdir(parents=True, exist_ok=True)
+        local_path = local_dir / Path(slot_path).name
+
+        ok = extract_file_from_kpf(kpf_full, internal, str(local_path))
+        if not ok:
+            print(f"  WARNING [{label}]: extraction failed: {source_path}")
+            continue
+
+        mod_files[slot_path] = str(local_path)
+        swap_log[slot_path] = source_path
+        changed += 1
+
+    print(f"  SFX [{label}]: {changed}/{len(pool)} file(s) swapped")
+    return mod_files, swap_log
+
+
+def shuffle_sfx(
+    rng: random.Random,
+    kpf_files: list[str],
+    work_dir: str,
+    shuffle_voices: bool = True,
+    shuffle_weapons: bool = True,
+    shuffle_enemies: bool = False,
+    combine_voice_pools: bool = False,
+    dry_run: bool = False,
+) -> tuple[dict[str, str], dict[str, str]]:
+    """
+    Shuffle SFX pools and return:
+      mod_files  — {internal_kpf_path: local_path} for mod packing
+      swap_log   — {slot_internal_path: source_internal_path} for spoiler log
+    """
+    try:
+        from .kpf_handler import build_kpf_index, find_file_in_kpf
+    except ImportError:
+        print("  WARNING: kpf_handler.py not found — SFX shuffle skipped")
+        return {}, {}
+
+    kpf_index = build_kpf_index(kpf_files)
+    out_root = Path(work_dir) / "sfx_shuffle"
+    out_root.mkdir(parents=True, exist_ok=True)
+    mod_files: dict[str, str] = {}
+    swap_log:  dict[str, str] = {}
+
+    if dry_run:
+        return {}, {}
+
+    # ── Voice lines + enemy sounds, combined ────────────────────────────────
+    if combine_voice_pools and shuffle_voices and shuffle_enemies:
+        combined_pool = [
+            path for path, _ in find_file_in_kpf(kpf_index, VOICE_PATH_PATTERN)
+            if path.lower().endswith(".wav")
+            and Path(path).stem not in EXCLUDED_VOICE_STEMS
+        ]
+        if not combined_pool:
+            print(f"  WARNING: no voice files found at {VOICE_PATH_PATTERN}")
+
+        if ENEMY_SOUND_SETS:
+            for sets in ENEMY_SOUND_SETS.values():
+                for s in sets:
+                    combined_pool.extend(s)
+        else:
+            print("  SFX [enemies]: ENEMY_SOUND_SETS is empty — populate in constants.py")
+
+        # De-dupe (a path could theoretically appear in more than one set)
+        # while keeping order stable before the shuffle.
+        seen: set[str] = set()
+        combined_pool = [p for p in combined_pool if not (p in seen or seen.add(p))]
+
+        if combined_pool:
+            mf, sl = _extract_and_swap(rng, combined_pool, kpf_files, kpf_index, out_root, "voices+enemies")
+            mod_files.update(mf)
+            swap_log.update(sl)
+    else:
+        # ── Voice lines ───────────────────────────────────────────────────────
+        if shuffle_voices:
+            voice_pool = [
+                path for path, _ in find_file_in_kpf(kpf_index, VOICE_PATH_PATTERN)
+                if path.lower().endswith(".wav")
+                and Path(path).stem not in EXCLUDED_VOICE_STEMS
+            ]
+            if voice_pool:
+                mf, sl = _extract_and_swap(rng, voice_pool, kpf_files, kpf_index, out_root, "voices")
+                mod_files.update(mf)
+                swap_log.update(sl)
+            else:
+                print(f"  WARNING: no voice files found at {VOICE_PATH_PATTERN}")
+
+        # ── Enemy sounds ──────────────────────────────────────────────────────
+        if shuffle_enemies:
+            if ENEMY_SOUND_SETS:
+                for pool_name, sets in ENEMY_SOUND_SETS.items():
+                    mf, sl = _swap_set_pool(rng, sets, kpf_index, kpf_files, out_root, f"enemies/{pool_name}")
+                    mod_files.update(mf)
+                    swap_log.update(sl)
+            else:
+                print("  SFX [enemies]: ENEMY_SOUND_SETS is empty — populate in constants.py")
+
+    # ── Weapon sounds ─────────────────────────────────────────────────────────
+    if shuffle_weapons:
+        if WEAPON_SOUND_SETS:
+            for pool_name, sets in WEAPON_SOUND_SETS.items():
+                mf, sl = _swap_set_pool(rng, sets, kpf_index, kpf_files, out_root, f"weapons/{pool_name}")
+                mod_files.update(mf)
+                swap_log.update(sl)
+        else:
+            print("  SFX [weapons]: WEAPON_SOUND_SETS is empty — populate in constants.py")
+
+    return mod_files, swap_log
+
+
+def sfx_spoiler_section(swap_log: dict[str, str]) -> list[str]:
+    """
+    Build a human-readable spoiler section from the swap log.
+    swap_log: {slot_internal_path: source_internal_path}
+    Groups entries by category (voices / weapons / enemies) and shows clean stem names.
+    """
+    def _category(path: str) -> str:
+        p = path.lower()
+        if "speech" in p or "voice" in p:
+            return "voices"
+        if "weapon" in p:
+            return "weapons"
+        if "enemy" in p or "enemies" in p:
+            return "enemies"
+        return "other"
+
+    def _label(path: str) -> str:
+        """Short human-readable label: parent folder + filename stem."""
+        p = Path(path)
+        return f"{p.parent.name}/{p.stem}"
+
+    lines = ["", "── SFX SHUFFLE ─────────────────────────────────────────", ""]
+
+    by_category: dict[str, list[tuple[str, str]]] = {}
+    for slot, source in sorted(swap_log.items()):
+        cat = _category(slot)
+        by_category.setdefault(cat, []).append((slot, source))
+
+    for cat in ("voices", "weapons", "enemies", "other"):
+        entries = by_category.get(cat)
+        if not entries:
+            continue
+        lines.append(f"  [{cat.upper()}]  ({len(entries)} swaps)")
+        col = max(len(_label(s)) for s, _ in entries) + 2
+        for slot, source in entries:
+            lines.append(f"    {_label(slot):<{col}}  ->  {_label(source)}")
+        lines.append("")
+
+    total = sum(len(v) for v in by_category.values())
+    lines.append(f"  Total SFX swapped: {total}")
+    return lines

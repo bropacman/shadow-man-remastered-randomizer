@@ -1,0 +1,22 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# ── IDEs / editors ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── OS junk ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Local runtime state / scratch (never ship or version these) ──
+ap_overlay_prefs.json
+_to_delete/
+_patcher.py.removed_*
