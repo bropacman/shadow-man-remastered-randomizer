@@ -57,6 +57,38 @@ Excludes dev-only content that isn't needed at runtime:
                                      source checkout for local convenience,
                                      just never got shipped inside the
                                      package other players install.
+  - .git/                         — (added 2026-08-31, Jon's ask -- "what
+                                     takes up space?") the apworld repo's own
+                                     git history/object database. Was being
+                                     zipped in whole: measured 2026-08-31 at
+                                     ~4.85MB of a 6.96MB built .apworld
+                                     (~69% of the file), for zero runtime
+                                     value -- a player's AP install never
+                                     touches a world's git history.
+  - docs/                         — (added 2026-08-31) README/guide
+                                     screenshots, referenced by guide_en.md's
+                                     markdown (not by README.md, which has no
+                                     image refs). AP's own tutorial-page
+                                     rendering (WebHostLib/misc.py) reads
+                                     pre-generated docs out of the webhost's
+                                     own static/generated/docs/ tree, never
+                                     out of an installed world's package
+                                     contents, so these images have no
+                                     runtime reader once bundled — GitHub
+                                     still renders guide_en.md with working
+                                     images regardless, since it reads them
+                                     straight from the repo, not the built
+                                     .apworld. Was ~1.14MB uncompressed
+                                     (~1.07MB compressed) of the same build.
+  - _to_delete/                   — (added 2026-08-31) scratch holding pen
+                                     for files pending manual deletion (see
+                                     CLAUDE.md's device_bash delete-permission
+                                     workflow) — never part of the world.
+  - _patcher.py.removed_*         — (added 2026-08-31) old patcher.py,
+                                     renamed rather than deleted when it was
+                                     removed 2026-07-21 (see generate_output()'s
+                                     docstring in __init__.py) — dead weight,
+                                     not the actual runtime module.
 
 Kept: every .py file actually needed at runtime, guide_en.md (referenced by
 name in __init__.py's WebWorld.tutorials — required, not just documentation),
@@ -79,7 +111,7 @@ from pathlib import Path
 
 MODULE_NAME = "shadowman"
 
-EXCLUDE_DIRS = {"__pycache__", "tools", "data"}
+EXCLUDE_DIRS = {"__pycache__", "tools", "data", ".git", "docs", "_to_delete"}
 EXCLUDE_FILE_PATTERNS = [
     "*.pyc", "*.sav",
     "AP_FEATURE_GAP.md", "SESSION_NOTES_*.md", "LIVE_MEMORY_TRACKING_NOTES.md",
@@ -87,6 +119,14 @@ EXCLUDE_FILE_PATTERNS = [
     # see the module docstring's "Excludes" section for why these can't
     # just be edited to be portable, and what covers the same need instead.
     "launch_client.bat", "launch_game.bat",
+    # Renamed-not-deleted debris (see module docstring's "Excludes" section).
+    "_patcher.py.removed_*",
+    # The overlay DLL's own local prefs file (server/name/password + window
+    # positions, see overlay_dll/README.md) -- written next to the DLL during
+    # live testing, i.e. right into this same source folder. Personal state,
+    # never something to ship to other players (2026-08-31, caught while
+    # investigating apworld size).
+    "ap_overlay_prefs.json",
 ]
 
 
