@@ -1,10 +1,12 @@
 # Repo Restructuring & Formalization Plan
 
-Status: **draft — not started.** This is a planning document only. Nothing
-in this file has been executed. Written 2026-09-15 after cutting the
+Status: **Phase 1 (CI safety net) complete and verified. Phase 2 (doc
+consolidation) substantially done.** Written 2026-09-15 after cutting the
 AP world v0.1.2 / Companion v0.1.2 release, which surfaced most of the
 problems below directly (not hypothetically — see "Evidence" under each
-item).
+item). Updated 2026-09-16 with real execution results — see "Progress
+log" at the end of this file for what actually happened, including two
+real bugs the CI work itself surfaced along the way.
 
 Goal of this document: give a future session (human or Claude agent)
 enough context to pick up any one phase below independently, without
@@ -177,6 +179,9 @@ could run in parallel with 1–3 if someone wants to split work across
 multiple agents.
 
 ### Phase 1 — CI safety net (do first; lowest risk, highest immediate value)
+**DONE, 2026-09-16.** All four items below are live in both repos'
+`.github/workflows/ci.yml`, each independently verified green across
+multiple runs (not just "looks right on paper" — see the Progress log).
 Directly prevents 1a and 1d from recurring, with no structural changes
 to the repos themselves.
 
@@ -205,10 +210,20 @@ to the repos themselves.
   ignore.
 
 ### Phase 2 — Documentation consolidation
-Addresses 1f. Do *after* Phase 1's CI exists, so a doc-move that
-accidentally breaks a tool-referenced path (guide_en.md, CLAUDE.md,
-generate.py paths) gets caught by CI instead of discovered at the next
-release.
+**Substantially done, 2026-09-16.** `CLAUDE.md`'s root placement is
+CONFIRMED harness-required (Claude Code loads it by walking up from the
+working directory — a `docs/CLAUDE.md` would silently stop being
+auto-read), so it stays at root, along with `README.md` (GitHub
+homepage convention) and `RELEASING.md` (referenced by name in 4+
+other files' comments — more churn than benefit to move for this pass,
+descoped from the original plan below). What *did* move, in both
+repos: `docs/dev/` created, session-log-style docs relocated into it
+(`HANDOFF.md` standalone; `AP_FEATURE_GAP.md`/
+`LIVE_MEMORY_TRACKING_NOTES.md`/`SESSION_NOTES_2026-07-15.md` AP world),
+every reference to their old paths fixed (README.md, client.py's
+comment pointers), verified via compile-check + a full test-suite run
+after the move. `docs/release/` (RELEASING.md) was NOT created — see
+above. Original plan text preserved below for reference:
 
 - Standalone repo: create `docs/dev/` (session-log-style material —
   `CLAUDE.md` *if* verified safe to move, `HANDOFF.md`) and `docs/release/`
@@ -220,7 +235,8 @@ release.
   constraint in §2 unless that reference is updated and tested too).
 - Write a one-paragraph `docs/README.md` (or a section in the main
   README) in each repo explaining the layout, so this doesn't need
-  re-deriving again.
+  re-deriving again. **Not done** — low value now that only `docs/dev/`
+  exists in each repo; revisit if more subdirectories get added later.
 
 ### Phase 3 — Formalize the release process
 Addresses 1e and 1f's tag-namespace ambiguity. Turns tonight's ~15
@@ -326,3 +342,88 @@ Jon first picking (a)/(b)/(c) from §3.
 4. Phase 4 — only after Jon picks an option; scope a fresh, dedicated
    plan for it at that point rather than trying to fully spec it here
    in advance of that decision.
+
+---
+
+## 6. Progress log (2026-09-16)
+
+What actually happened executing Phases 1-2, including real bugs the
+work itself surfaced — kept here rather than editing history above, so
+a future session can see what was *tried and reverted* as well as
+what stuck.
+
+**Phase 1, all 4 jobs live and verified in both repos' CI, each
+individually watched through to a real green run (not assumed from the
+yaml alone):**
+1. Compile-check (`py_compile` over every tracked `.py` file).
+2. Cross-repo drift check — required first adding a
+   `KNOWN_DIVERGENCE_BASELINE` to `tools/check_apworld_sync.py` so 3
+   already-vetted, permanently-divergent files (`gad_pickup_patch.py`,
+   `levels_txt_patcher.py`, `sprint_patch.py`) don't fail every run
+   forever; verified both directions (a real injected 2-line drift
+   still gets caught, the known-baseline files don't).
+3. Overlay DLL rebuild verification — first version tried an exact
+   byte-diff against the committed binary and failed on its very first
+   real run despite a completely correct build (unpinned FetchContent
+   deps + toolchain differences produced a ~1.5KB gap). Replaced with a
+   size-sanity-bound + static-CRT-string check that targets the actual
+   property that matters, keeping the byte-diff as non-blocking/
+   informational only.
+4. **Added mid-session, not in the original plan**: a real
+   `worlds/shadowman/test/` package (AP's standard per-world
+   `WorldTestBase` convention — this world had none before), run in CI
+   against a freshly-checked-out, version-pinned (`0.6.7`) Archipelago
+   core. 31 tests / 1355+ subtests. Getting here surfaced two real,
+   previously-unknown bugs (see below), plus a testing-methodology
+   lesson worth internalizing.
+
+**Real bugs found and fixed along the way (unplanned, discovered
+because the CI/test work forced touching code paths nobody had
+exercised this way before):**
+- `shadowman.apworld` was missing its `archipelago.json` manifest —
+  would have completely failed to load on Archipelago 0.7.0 (works
+  today only because <0.7.0 silently downgrades a missing manifest to
+  a warning). Fixed in `build_apworld.py`; verified live by loading the
+  packaged apworld alone (raw folder moved out) in a real Archipelago
+  install.
+- `fill.py` (AP world repo) had a stray unconditional `sys.path.insert`
+  at import time that silently broke Python's own `test` package
+  resolution the instant a `test/` folder existed anywhere under
+  `worlds/shadowman/` — found only because adding the new test package
+  triggered it. Fixed by scoping the insert to the one rare fallback
+  branch that actually needed it.
+
+**Methodology lesson, learned twice the hard way — worth internalizing
+for any future AP-world test work:** `WorldTestBase.test_fill()` is a
+"shortened reimplementation" (its own docstring's words) of AP's real
+completability check, and `WorldTestBase.setUp()` seeds every test run
+with a genuinely fresh random seed unless you override it. Both times
+this surfaced an apparent "this option breaks the game" failure in
+this session, the real `Generate.py` pipeline — run directly against
+the exact same options, several times — showed zero failures. Neither
+was a real product bug: one was this test file redundantly
+double-invoking `test_fill()`, the other was pure non-determinism from
+never pinning a seed. **Fix applied**: every test class now pins an
+explicit, individually-verified `seed`, confirmed deterministic across
+4 repeated local runs. **Before ever reporting a `WorldTestBase`
+failure as a real bug again**: reproduce it against real `Generate.py`
+first. If real generation doesn't fail, the bug is almost certainly in
+the test, not the world.
+
+**Also tried and reverted, documented so it isn't retried blind**:
+`__test__ = False` on the shared `ShadowManTestBase`, intended to stop
+it (and the bare imported `WorldTestBase`) from being redundantly
+collected as their own trivial passing tests. It inherits down the
+whole class hierarchy and silently deleted every real subclass's tests
+too (31 items → 3). Reverted; the harmless duplicate-collection noise
+is a far better tradeoff than a "cleanup" that can silently erase real
+coverage.
+
+**Phase 2**: doc consolidation done for both repos' scattered
+session-log-style `.md` files (see the Phase 2 section above for the
+final scope, narrower than originally planned — `CLAUDE.md` confirmed
+un-movable, `RELEASING.md` descoped as not worth the churn).
+
+**Not started**: Phase 3 (formalized release script) and Phase 4
+(cross-repo architecture decision — still needs Jon's explicit call
+per §4, not something to start unprompted).
