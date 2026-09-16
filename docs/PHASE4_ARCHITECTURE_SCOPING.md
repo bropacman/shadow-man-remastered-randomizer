@@ -58,30 +58,76 @@ argument that sounds compelling until checked.
 
 ### Option (a): Monorepo merge
 
+**CORRECTION (2026-09-16, same day, before any execution started):** the
+original version of this section overstated what a monorepo fixes. Jon
+correctly pushed back: some of the ~15 shared files carry *genuinely
+different, permanently necessary* logic, not just accidental drift.
+Confirmed directly in `access_rules.py`: the AP copy has an entire
+`BoundR` class (its own docstring explains why) because **Archipelago
+generates multiple worlds concurrently in one process** — AP's rules
+need per-world-instance state with zero global mutation. The standalone
+randomizer only ever processes one seed at a time, so its own
+`access_rules.py` safely uses plain module-level globals
+(`set_unique_retractor_keys()` + a bare `_unique_retractor_keys` flag)
+that would be a real correctness bug if reused under AP's concurrency
+model. This is true, to varying degrees, for most of
+`check_apworld_sync.py`'s "expected-divergent" bucket (`access_rules.py`,
+`cadeaux_patch.py`, `constants.py`, `fill.py`, `kpf_handler.py`,
+`locations.py`, `regions.py`, `save_path_patch.py`,
+`setup_gad_records.py`, `soul_threshold_patch.py` — each already showing
+900-1300+ diff-lines against its standalone counterpart). **A monorepo
+cannot and should not merge these into one file** — the two
+implementations solve genuinely different constraints and need to keep
+existing side by side, in a monorepo exactly as much as in two repos.
+
+What a monorepo *does* fix is narrower, but still real: the ~11
+"near-identical" files that are supposed to be one piece of logic with
+no legitimate reason to differ (`sprint_patch.py`, `gad_pickup_patch.py`,
+`health_patch.py`, `death_penalty_patch.py`, `extracted_locations.py`,
+`extracted_enemy_locations.py`, the `randomizers/` cosmetic shuffle
+modules, `patchers/levels_txt_patcher.py`) can become genuinely single-
+sourced — imported by both sides, not copy-pasted — eliminating that
+half of 1b outright. For the genuinely-divergent half, a monorepo's real
+benefit is proximity, not elimination: porting an analogous conceptual
+fix (e.g. this project's own history of a fixed gate route needing the
+identical change applied to 4 files across both repos) becomes one PR
+with both files visible side by side, instead of two separate commits
+in two separate repos where it's easy to forget the second one exists
+at all — and CI runs both sides' tests on every push without needing a
+cross-repo checkout trick to even compare them. Real, worthwhile
+sustainability win for a solo maintainer; just not the "root cause
+eliminated by construction" claim the original version of this section
+made.
+
 **What actually happens:**
-1. Pick a layout inside `shadow-man-remastered-randomizer` — e.g.
-   `apworld/` for what's currently `worlds/shadowman/`'s own-only files
-   (`__init__.py`, `options.py`, `regions.py`, `access_rules.py`,
-   `items.py`, `locations.py`, `client.py`), with the already-shared
-   "canonical" files (`fill.py`, `constants.py`, `access_rules.py`'s
-   core, etc.) either staying at repo root (imported by both sides) or
-   moved into a genuinely shared `core/` package that both `apworld/`
-   and the standalone modules import from.
+1. Layout inside `shadow-man-remastered-randomizer`: `apworld/` holds
+   only the files with no standalone equivalent at all
+   (`__init__.py`, `options.py`, `items.py`, `client.py`) plus the
+   AP-specific copy of each genuinely-divergent file
+   (`access_rules.py`, `regions.py`, `fill.py`, `constants.py`,
+   `cadeaux_patch.py`, `kpf_handler.py`, `locations.py`,
+   `save_path_patch.py`, `setup_gad_records.py`,
+   `soul_threshold_patch.py` — ten files, each staying genuinely
+   separate from its standalone counterpart at repo root, on purpose).
+   The ~11 true near-identical files move to a shared location (repo
+   root, imported by both `apworld/` and the standalone modules) and
+   stop being duplicated at all.
 2. `git subtree add` (or a plain history-preserving merge) the AP world
    repo's commits into the new `apworld/` subfolder, so its own commit
    history isn't lost.
 3. Rewrite `build_apworld.py` — currently assumes a *second checkout*
-   as `--source`; would instead just zip a subfolder of the same repo.
-   Simpler, not harder.
-4. Rewrite CI — the `apworld-drift-check` and `dll-rebuild-check`
-   jobs currently checkout a *second* repo
-   (`bropacman/shadow-man-remastered-ap-world`) specifically to compare
-   against. In a monorepo, `tools/check_apworld_sync.py`'s entire
-   reason to exist disappears — there's nothing left to drift, since
-   editing shared logic and the AP-specific consumer happens in the
-   same commit, same PR, same review. This is the biggest real win:
-   **1b (the drift risk that started this whole investigation) is
-   eliminated by construction, not just monitored.**
+   as `--source`; would instead zip `apworld/` plus the now-shared
+   root-level files together into the same `shadowman/` package layout
+   players already get. Simpler, not harder.
+4. Rewrite CI — the `apworld-drift-check` job currently checks out a
+   *second* repo specifically to diff the ~11 near-identical files
+   against; that check becomes unnecessary for those specific files
+   (nothing left to drift, there's only one copy). The genuinely-
+   divergent files were never covered by that check anyway (they're in
+   `check_apworld_sync.py`'s "expected-divergent," reported for
+   visibility only, never a hard fail) — a monorepo doesn't change that,
+   it just makes both sides visible in the same `git diff` when a human
+   goes looking.
 5. `shadow-man-remastered-ap-world` repo: either archive it with a
    README pointing at the new location (keeps old release asset URLs
    alive), or leave it as a frozen historical snapshot. Don't delete it
@@ -189,7 +235,8 @@ places for one piece of logic to live).
 
 | | (a) Monorepo | (b) Submodule | (c) Formalized sync |
 |---|---|---|---|
-| Eliminates 1b's root cause | **Yes** | No (relocates it) | No (only detects it) |
+| Eliminates 1b for true duplicates (~11 files) | **Yes** | No (relocates it) | No (only detects it) |
+| Helps with 1b for genuinely-divergent files (~10 files) | Some (proximity, one PR) | No | No |
 | One-time migration effort | Medium | Low-medium | Low (mostly done already) |
 | Ongoing day-to-day friction | Lowest (one repo, one PR per change) | **Highest** (submodule pointer discipline) | Medium (still 2 repos to think about) |
 | Preserves separate repo identity/URL | No (AP world repo archived) | Yes | Yes |
@@ -205,12 +252,16 @@ The original `REPO_RESTRUCTURING_PLAN.md` §3 leaned toward option (c)
 specifically because of an *assumed* cost to (a) — "players/
 contributors have bookmarked/starred/cloned it" — that turned out not
 to be true (checked: 0 stars, 0 forks, 0 watchers, 0 issues, on both
-repos). With that cost removed, (a) is the only option that actually
-fixes the problem this whole investigation started from (1b, silent
-cross-repo drift) rather than continuing to monitor it. (b) looks worse
-the more concretely it's scoped — it trades an already-partially-solved
-problem (drift, now caught by CI) for a well-known, ongoing git
-workflow footgun.
+repos). With that cost removed, (a) fixes real, present-day drift risk
+for the ~11 files that are true duplicates, and meaningfully improves
+(without fully solving — see the correction in §2 above, added after
+Jon caught an overstated claim in an earlier draft of this section) the
+~10 genuinely-divergent files' own drift risk by putting both
+implementations in one PR/diff instead of two separate repos. (b) looks
+worse the more concretely it's scoped either way — it trades an
+already-partially-solved problem (drift, now caught by CI) for a
+well-known, ongoing git workflow footgun, without even the "one PR"
+benefit (a).
 
 **Revised recommendation: (a), if there's no reason to keep the two
 repos' identities separate that I don't have visibility into.**
