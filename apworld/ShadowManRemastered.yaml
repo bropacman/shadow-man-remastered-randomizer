@@ -1,0 +1,222 @@
+# Shadow Man Remastered — example player YAML
+# =============================================
+# A fully-commented reference for every option this world supports, with
+# its type, valid range/choices, and default. Copy this file, rename it,
+# and edit the values below to taste — or use the Shadow Man Remastered AP
+# Companion tool (ap_gui.py in the shadow-man-remastered-randomizer repo,
+# "Generate YAML" tab) for the same thing with a GUI and inline tooltips.
+#
+# Every value shown below is this option's DEFAULT — as-is, this file
+# generates a vanilla-ish, low-risk seed. This is a reference, not a
+# recommended loadout; tune it to how you actually want to play.
+#
+# Notes that apply to every option below:
+#   - Toggle options accept true/false.
+#   - Range options accept a plain number, "random" (uniform across the
+#     option's full range), "random-range-X-Y" (uniform across a narrower
+#     sub-range), or AP's standard weighted-dict syntax
+#     (option_name: {value1: 50, value2: 50}).
+#   - Choice options accept the option name shown in its comment (e.g.
+#     "hard"), or the same random/weighted syntax as Range options.
+#   - For the full "why", including edge cases and interactions between
+#     options, see options.py in this folder — every option's Python
+#     docstring goes into much more depth than the one-liners below.
+#     guide_en.md covers the handful most worth knowing about up front.
+
+name: YourNameHere
+description: Shadow Man Remastered Settings
+game: Shadow Man Remastered
+
+Shadow Man Remastered:
+
+  # ── Progression & logic ──────────────────────────────────────────────
+  # Coffin gate soul requirements: story (all open) | easy | medium | hard
+  # (full shuffle with safety caps) | chaos (fully unconstrained).
+  gate_preset: hard
+
+  # Caps the highest Soul Level a shuffled gate can require (3-10). Lower
+  # values leave more slack in the soul supply, which makes generation far
+  # more reliable, especially in multiworlds. 10 = no cap.
+  max_gate_sl: 8
+
+  # Overrides the gate preset's own "N gates start open" count (-1 to 6).
+  # -1 leaves the preset's own baked-in value alone.
+  open_gates_n: -1
+
+  # Shuffles which Deadside portal leads where. off (vanilla) |
+  # deadside_only (the 9 Deadside hub portals shuffled among themselves).
+  entrance_mode: "off"
+
+  # How aggressively key items are pushed toward deeper locations (0-100).
+  # 0 = uniform random placement, 100 = strongly biased toward the
+  # hardest-to-reach spots.
+  progression_balancing: 50
+
+  # Randomizes the real in-game soul counts required for SL1-10. off
+  # (vanilla 1,3,7,15,23,35,51,71,95,120) | progressive (geometric ramp) |
+  # balanced (even spacing) | full_random.
+  soul_threshold_mode: "off"
+
+  # Extra slack AP's own LOGIC leaves beyond a gate's real in-game
+  # requirement — doesn't touch what's actually patched into the exe.
+  # off (default) | hard (+2 souls) | medium (+4) | easy (+6). Only worth
+  # raising if a specific seed's soul economy feels razor-tight.
+  soul_logic_buffer: "off"
+
+  # Randomizes the 6 Dark Engine piston combinations; when on, Jack's
+  # Schematic becomes required progression (needed to read the new
+  # combinations in the in-game journal before reaching Legion).
+  piston_combos: false
+
+  # Whether cadeaux (statue/altar) locations exist as AP checks at all.
+  # Off (default): ~657 cadeaux locations are excluded entirely — no
+  # checks, no hints, no "Cadeaux" item in the pool. On: they become real
+  # AP checks with no item-type restriction (can hold anyone's key items).
+  cadeauxsanity: false
+
+  # Groups cadeaux pickups into a single AP check instead of one per
+  # cadeaux (1-50). Only meaningful when cadeauxsanity is also on. 1
+  # (default) = no bundling. E.g. 5 turns ~657 individual checks into
+  # ~131 bundles.
+  cadeaux_bundle_size: 1
+
+  # Whether the Fogometers Light Soul location (SL10 + enough Cadeaux)
+  # exists as an AP check. Only meaningful when cadeauxsanity is also on.
+  cadeaux_gated_content: false
+
+  # ── Cosmetic / optional shuffles ─────────────────────────────────────
+  # Shuffle weapons into the pool. Off leaves them at vanilla locations.
+  shuffle_weapons: true
+
+  # Shuffle lore items (Book of Shadows, Prophecy, Jack's Schematic).
+  shuffle_lore: true
+
+  # Shuffle the Light Soul (the 666-Cadeaux invincibility reward) into
+  # the item pool.
+  shuffle_bonus: false
+
+  # Randomize enemy types within each level. Doesn't affect item logic.
+  shuffle_enemies: false
+
+  # Controls how enemies are shuffled when shuffle_enemies is on.
+  # difficulty (weighted by depth, default) | full (global pool) |
+  # contextual (shuffle within themed pools per level).
+  enemy_mode: "difficulty"
+
+  # Let enemy shuffle swap across movement types (ground/flying/
+  # swimming). Ignored unless shuffle_enemies is on.
+  enemy_mix_movement: false
+
+  # Enemy shuffle draws each slot independently instead of preserving
+  # per-type counts. Ignored unless shuffle_enemies is on.
+  enemy_uncap_counts: false
+
+  # Let true-form boss enemies (which drop Dark Souls) swap positions
+  # with regular enemies. Soul reachability logic is preserved either way.
+  shuffle_true_forms: false
+
+  # Shuffle friendly/ambient creatures (rats, egrets, flies, butterflies,
+  # friendly fish) across their spawn slots. Cosmetic only.
+  shuffle_ambients: false
+
+  # Controls how ambient creatures are shuffled when shuffle_ambients is
+  # on. global (one pool, no bucketing) | full (within movement type) |
+  # contextual (within context group + movement type).
+  ambient_mode: "global"
+
+  # Shuffle music tracks globally across all levels. Cosmetic; applied by
+  # apply_ap_seed.py, not at generation time.
+  shuffle_music: false
+
+  # Shuffle Shadow Man's generic voice lines. Cosmetic only.
+  shuffle_voices: false
+
+  # Shuffle weapon fire/reload sounds within each weapon category.
+  # Cosmetic only.
+  shuffle_weapons_sfx: false
+
+  # Shuffle enemy pain/startle/attack sounds between enemy types.
+  # Cosmetic only.
+  shuffle_enemies_sfx: false
+
+  # Shuffle level skyboxes between levels. Cosmetic only.
+  shuffle_sky: false
+
+  # ── Gameplay tweaks (EXE patch — applied by apply_ap_seed.py) ───────
+  # Forces the vanilla "I Like Dead Side Guns" secret on at patch time
+  # (Deadside weapons work on Liveside and vice versa) without needing to
+  # find its hidden in-world unlock trigger. Requires having launched the
+  # game at least once already.
+  deadside_guns: false
+
+  # Starting (and max) health as a multiple of 1000 (1-10). Vanilla is 5
+  # (5000 HP).
+  starting_health: 5
+
+  # Health granted per life altar interaction, as a multiple of 1000
+  # (1-10). Vanilla is 1 (1000 HP per altar, 5 altars total).
+  altar_health_grant: 1
+
+  # Minimum Cadeaux required to interact with a life altar or the
+  # Fogometers door (1-133). Vanilla is 100.
+  altar_cadeaux_required: 100
+
+  # Total Cadeaux required to open the Fogometers door (0-666, clamped to
+  # at least 5x altar_cadeaux_required). Vanilla is 666.
+  fogometers_cadeaux_required: 666
+
+  # Max health lost per death, as tenths (0-100; 10 = -1000 HP/death).
+  # 0 = disabled. Health never drops below one step.
+  death_penalty: 0
+
+  # Hold Shift to move at this multiple of normal speed, on both land and
+  # in water, as tenths (0-50; 20 = 2.0x). 0 = disabled (vanilla, no
+  # Shift-sprint).
+  sprint_multiplier: 0
+
+  # ── Traps & Bonuses (AP-only — filler items with a random effect) ───
+  # How many Trap/Bonus filler items are added to the pool this seed
+  # (0-1000). 0 (default) adds none.
+  trap_bonus_count: 0
+
+  # How long a temporary Trap/Bonus effect lasts before reverting.
+  # always_temporary (reverts after trap_bonus_duration seconds, default)
+  # | always_permanent (stays until superseded) | mixed (rolls per item).
+  trap_bonus_mode: "always_temporary"
+
+  # Seconds a temporary Trap/Bonus effect lasts before reverting (10-300).
+  # Only matters when a trap actually goes temporary.
+  trap_bonus_duration: 60
+
+  # Allow Trap/Bonus items to roll a cosmetic secret effect (Big Head,
+  # Wireframe, Disco Lights, etc.). On by default.
+  trap_bonus_secrets_enabled: true
+
+  # Allow Trap/Bonus items to roll a health poison (drains to 0 over ~1
+  # min unless you find health first) or gradual heal. On by default.
+  trap_bonus_health_enabled: true
+
+  # Allow Trap/Bonus items to roll an instant voodoo power drain or a
+  # temporary hold at max. On by default.
+  trap_bonus_voodoo_enabled: true
+
+  # Allow Trap/Bonus items to roll an instant ammo drain or a temporary
+  # hold at max (Shotgun/Violator/9mm together). On by default.
+  trap_bonus_ammo_enabled: true
+
+  # ── Multiplayer ───────────────────────────────────────────────────────
+  # Standard Archipelago Death Link — when anyone linked dies, everyone
+  # linked dies. Off by default.
+  death_link: false
+
+  # How many of your OWN deaths it takes to send one Death Link (1-5).
+  # 1 (default) sends every death. Only matters when death_link is on.
+  # Deaths you receive from the team are never throttled by this.
+  death_link_threshold: 1
+
+  # ── Standard Archipelago options ─────────────────────────────────────
+  # Guarantee specific items in your starting inventory instead of
+  # finding them through play — e.g. all 3 Gad Powers from the start:
+  #   start_inventory_from_pool:
+  #     Gad Power: 3
+  start_inventory_from_pool: {}

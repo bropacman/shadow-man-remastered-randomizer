@@ -1,11 +1,14 @@
 """
 build_apworld.py
 =================
-Packages worlds/shadowman/ (from a local Archipelago checkout) into a
-shadowman.apworld file — a plain zip with one top-level folder named after
-the module ("shadowman/"). Drop the result into another Archipelago
-install's custom_worlds/ folder (or worlds/, replacing/adding the module)
-and it's picked up like any built-in world.
+Packages apworld/ (this repo's own copy of the AP world's source, merged
+in 2026-09-16 via `git subtree` — see docs/PHASE4_ARCHITECTURE_SCOPING.md;
+pass --source to build from somewhere else, e.g. a separate Archipelago
+checkout during local dev) into a shadowman.apworld file — a plain zip
+with one top-level folder named after the module ("shadowman/"). Drop
+the result into an Archipelago install's custom_worlds/ folder (or
+worlds/, replacing/adding the module) and it's picked up like any
+built-in world.
 
 Also writes a top-level archipelago.json manifest into the zip (2026-09-16,
 found while investigating this repo's own test setup) — REQUIRED, not
@@ -237,8 +240,12 @@ def build(source: Path, output: Path) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--source", type=Path, required=True,
-                         help="Path to worlds/shadowman (the folder containing __init__.py)")
+    parser.add_argument("--source", type=Path,
+                         default=Path(__file__).resolve().parent / "apworld",
+                         help="Path to worlds/shadowman's own files (default: "
+                              "apworld/, this repo's own copy since the 2026-09-16 "
+                              "monorepo merge -- see docs/PHASE4_ARCHITECTURE_SCOPING.md. "
+                              "Pass a different path to build from elsewhere.")
     parser.add_argument("--output", type=Path, default=Path("dist") / "apworld" / f"{MODULE_NAME}.apworld",
                          help="Output .apworld path (default: dist/apworld/shadowman.apworld -- "
                               "kept in its own subfolder, separate from dist/standalone/, since "

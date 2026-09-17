@@ -1,0 +1,47 @@
+item_id,name,loc_key,mechanism,Base,slot_index_hex,slot_index_dec,Item Addr,status,notes
+3,Baton,wastland:quest.rsc:0x2F6A,giveitem-array,140F9C380,00000011,17,140F9C3CC,confirmed,"live round-trip confirmed (0/1/2/3 all toggled manually)"
+6,Calabash,t3swmgad:quest.rsc:0x06EA,giveitem-array,140F9C380,16,22,140F9C3E0,confirmed,
+9,Engineers Key,asylum:quest.rsc:0x173A,giveitem-array,140F9C380,A,10,140F9C3B0,confirmed,
+11,Flambeau,t1tchgad:quest.rsc:0x0972,giveitem-array,140F9C380,B,11,140F9C3B4,confirmed,
+16,Eclipser: La Lune,deadside:quest.rsc:0x197A,giveitem-array,140F9C380,1A,26,140F9C3F0,confirmed,
+17,Eclipser: La Lame,deadside:quest.rsc:0x2352,giveitem-array,140F9C380,1C,28,140F9C3F8,confirmed,
+18,Marteau,t2wlkgad:quest.rsc:0x02B2,giveitem-array,140F9C380,10,16,140F9C3C8,confirmed,
+21,Prison Key Card,prison:instance.rsc:0x0A4A,giveitem-array,140F9C380,E,14,140F9C3C0,confirmed,
+28,Eclipser: Le Soleil,deadside:quest.rsc:0x1F1A,giveitem-array,140F9C380,1B,27,140F9C3F4,confirmed,
+30,Violator (Loose),as2exper:resource.rsc:0x07C2,giveitem-array,140F9C380,F,15,140F9C3C4,confirmed,"second Violator slot exists, see Violator (Accumulator Reward)"
+2,Asson,wastland:quest.rsc:0x0E82,giveitem-array,140F9C380,7,7,140F9C3A4,confirmed,
+4,Book of Shadows,deadside:quest.rsc:0x0102,giveitem-array,140F9C380,3,3,140F9C394,confirmed,
+10,Enseigne,wastland:quest.rsc:0x026A,giveitem-array,140F9C380,6,6,140F9C3A0,confirmed,
+14,Flashlight,tenement:quest.rsc:0x0972,giveitem-array,140F9C380,9,9,140F9C3AC,confirmed,
+24,Jacks Schematics,uground:quest.rsc:0x2FB2,giveitem-array,140F9C380,2,2,140F9C390,confirmed,"same item as giveinv's ""Jack's Journal"", confirmed by Jon"
+12,0.9-SMG,florida:resource.rsc:0x158A,giveitem-array,140F9C380,8,8,140F9C3A8,confirmed,
+13,MP-909,prison:instance.rsc:0x2BC2,giveitem-array,140F9C380,12,18,140F9C3D0,confirmed,
+22,Book of Prophecy,deadside:quest.rsc:0x16F2,giveitem-array,140F9C380,1,1,140F9C38C,confirmed,
+26,Shotgun,prison:quest.rsc:0x3BCA,giveitem-array,140F9C380,D,13,140F9C3BC,confirmed,
+30,Violator (Accumulator Reward),ah2playr:instance.rsc:0x2D2A,giveitem-array,140F9C380,17,23,140F9C3E4,confirmed,"second Violator slot, first is Violator (Loose)"
+560,Sawed-off Shotgun,salvage:quest.rsc:0x002A,giveitem-array,140F9C380,13,19,140F9C3D4,confirmed,"address confirmed live; internal table item_id is 560 (0x230 exactly), NOT a normal 1-30 giveinv-reachable ID - distinct slot from regular Shotgun (item_id 26), confirmed NOT shared. item_id column here is the real internal table value, not a giveinv argument."
+609,Tete De Mort,as2exper:quest.rsc:0x2352,giveitem-array,140F9C380,15,21,140F9C3DC,confirmed,"address confirmed live; internal table item_id is 609 (0x261 exactly), NOT the same as Key Card (item_id 21 in giveinv's numbering) - that was a labeling bug on my part, fixed here. Not a normal giveinv-reachable ID. item_id column here is the real internal table value, not a giveinv argument."
+0,Nettie's File,,giveitem-array,140F9C380,0,0,140F9C388,confirmed,"address confirmed live; raw table entry value was 0 (unlike every real item, which is nonzero) - may be granted via a special code path rather than the normal item_id lookup; loc_key unknown, wasn't in the locations.csv excerpt reviewed so far"
+29,Teddy Bear,,giveitem-array,140F9C380,4,4,140F9C398,confirmed,"matches giveinv 29; loc_key unknown - teddies seem to be a separate collection system (see givetedpoints console command)"
+587,Bloody Teddy Bear,,giveitem-array,140F9C380,18,24,140F9C3E8,confirmed,"address confirmed live; internal table item_id is 587 (0x24B exactly) - NOT 24, that number was actually Jack's Schematics' item_id and got miswritten into this row (labeling bug on my part, fixed here). Not a normal giveinv-reachable ID. loc_key unknown. item_id column here is the real internal table value, not a giveinv argument."
+7,Handgun,,giveitem-array,140F9C380,C,12,140F9C3B8,confirmed,"matches giveinv 7 (aliased with 25); not seen in the locations.csv excerpt reviewed so far - possibly a starting weapon rather than a placed pickup, unconfirmed"
+5,Cadeaux (ever collected, generic),,giveitem-array,140F9C380,1D,29,140F9C3FC,confirmed,"boolean 'ever collected a cadeaux' flag only - hundreds of individual cadeaux locations exist and are NOT distinguishable via this slot, they still need position/SaveIdx-based tracking same as before"
+1,Accumulator (ever collected, generic),,giveitem-array,140F9C380,5,5,140F9C39C,confirmed,"boolean 'ever collected' flag in addition to the real running total at this+0x84 (WORD) - neither tells you which of the 5 Accumulator locations you got, see per-location rows below"
+20,Prism (ever collected, generic),,giveitem-array,140F9C380,19,25,140F9C3EC,confirmed,"boolean 'ever collected' flag in addition to the real running total at this+0x80 (WORD) - IMPORTANT: read this address as 2 Bytes, not 4. Reading 4 bytes bleeds into Retractor's count field immediately after it (e.g. two WORD=5 fields back to back read as DWORD 0x00050005=327685). Same caution applies to the Retractor/Accumulator counted-only rows below."
+23,Retractor (ever collected, generic),,giveitem-array,140F9C380,14,20,140F9C3D8,confirmed,"boolean 'ever collected' flag in addition to the real running total at this+0x82 (WORD) - neither tells you which of the 5 Retractor locations you got, see per-location rows below"
+20,Prism (all locations),,counted,140F9C380,,,140F9C400,counted-only,"shared count cell (WORD @ this+0x80, read as 2 Bytes not 4 - see note on the Prism array-slot row above). Per-location loc_keys not yet pulled from locations.csv - add rows here once we have them, same pattern as Accumulator/Retractor below"
+1,Accumulator (Florida),florida:instance.rsc:0x1B2A,counted,140F9C380,,,140F9C404,counted-only,"shared count cell (WORD @ this+0x84, read as 2 Bytes not 4) across all 5 Accumulator locations, can't tell which one you picked up"
+1,Accumulator (Queens),tenement:quest.rsc:0x2112,counted,140F9C380,,,140F9C404,counted-only,"shared cell as other Accumulator rows"
+1,Accumulator (Salvage),salvage:resource.rsc:0x2E92,counted,140F9C380,,,140F9C404,counted-only,"shared cell; locations.csv flags this row ""wrong item, just a barrel"" - worth double-checking"
+1,Accumulator (Prison),prison:quest.rsc:0x3282,counted,140F9C380,,,140F9C404,counted-only,"shared cell as other Accumulator rows"
+1,Accumulator (London),uground:instance.rsc:0x3D32,counted,140F9C380,,,140F9C404,counted-only,"shared cell; locations.csv flags this row ""MARKED AS FILLER FOR SOME REASON???"""
+23,Retractor (AsyFog),ah4fogom:quest.rsc:0x266A,counted,140F9C380,,,140F9C402,counted-only,"shared count cell (WORD @ this+0x82, read as 2 Bytes not 4) across all 5 Retractor locations"
+23,Retractor (AsyExp),as2exper:quest.rsc:0x2AEA,counted,140F9C380,,,140F9C402,counted-only,"shared cell as other Retractor rows"
+23,Retractor (AsyLav),ah3lavad:instance.rsc:0x5832,counted,140F9C380,,,140F9C402,counted-only,"shared cell as other Retractor rows"
+23,Retractor (AsyCag),ah1cagew:quest.rsc:0x1B2A,counted,140F9C380,,,140F9C402,counted-only,"shared cell as other Retractor rows"
+23,Retractor (AsyPla),ah2playr:quest.rsc:0x26FA,counted,140F9C380,,,140F9C402,counted-only,"shared cell as other Retractor rows"
+,Poigne,t1tchgad:quest.rsc:0x3E0A,byte-flag,,,,140F9C1A4,existing-mechanism,"single byte flag via givegad, already implemented as POIGNE_RVA in client.py; not part of the GiveItem array"
+,Light Soul,ah4fogom:quest.rsc:0x2742,unresolved,,,,,unresolved,"CONFIRMED not in the 30-slot GiveItem array (full sweep of all 30 slots done, no match) - must be tied to cadeaux_666/Fogometers reward logic (cadeaux_patch.py), not player inventory; needs its own separate investigation"
+,Gad Power Upgrade (t1tchgad),t1tchgad:quest.rsc:0x3E52,byte-flag,,,,,existing-mechanism,"GAD_1..4_RVA byte flags in client.py, not the GiveItem array; which specific RVA maps to which temple not yet confirmed"
+,Gad Power Upgrade (t2wlkgad),t2wlkgad:quest.rsc:0x3432,byte-flag,,,,,existing-mechanism,"GAD_1..4_RVA byte flags in client.py, not the GiveItem array; which specific RVA maps to which temple not yet confirmed"
+,Gad Power Upgrade (t3swmgad),t3swmgad:quest.rsc:0x3A1A,byte-flag,,,,,existing-mechanism,"GAD_1..4_RVA byte flags in client.py, not the GiveItem array; which specific RVA maps to which temple not yet confirmed"

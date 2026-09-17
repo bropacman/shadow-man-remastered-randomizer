@@ -49,9 +49,14 @@ import difflib
 import sys
 from pathlib import Path
 
-# Default location of the Archipelago checkout's worlds/shadowman/ folder.
-# Override with --ap-dir if your checkout lives somewhere else.
-DEFAULT_AP_DIR = r"C:\Users\jonat\Documents\Archipelago-0.6.7\worlds\shadowman"
+# Default location of the AP world's own files, relative to this repo's
+# root -- changed 2026-09-16 (Phase 4 monorepo merge, see
+# docs/PHASE4_ARCHITECTURE_SCOPING.md): apworld/ now lives inside this
+# same repo (git subtree merge preserved its full separate history), no
+# longer a machine-specific absolute path to a sibling checkout. Override
+# with --ap-dir if you're comparing against something else (e.g. a fresh
+# Archipelago install's worlds/shadowman/ during local dev/testing).
+DEFAULT_AP_DIR = "apworld"
 
 # (path relative to this repo's root, path relative to worlds/shadowman/)
 NEAR_IDENTICAL: list[tuple[str, str]] = [
@@ -239,8 +244,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--repo-dir", type=Path, default=Path(__file__).resolve().parent.parent,
                          help="Root of this repo (default: parent of tools/)")
-    parser.add_argument("--ap-dir", type=Path, default=Path(DEFAULT_AP_DIR),
-                         help=f"Path to worlds/shadowman/ (default: {DEFAULT_AP_DIR})")
+    parser.add_argument("--ap-dir", type=Path,
+                         default=Path(__file__).resolve().parent.parent / DEFAULT_AP_DIR,
+                         help=f"Path to worlds/shadowman/'s own files (default: "
+                              f"{{repo root}}/{DEFAULT_AP_DIR}, resolved relative to "
+                              f"this repo regardless of cwd)")
     parser.add_argument("--diff", metavar="FILENAME",
                          help="Print a full unified diff for one pair (e.g. fill.py) and exit")
     parser.add_argument("--quiet", action="store_true",
