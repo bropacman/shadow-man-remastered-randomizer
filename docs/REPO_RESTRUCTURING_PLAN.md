@@ -472,5 +472,49 @@ commit; worth remembering that a `git mv` + separate content edit in
 the same working session needs an explicit re-`git add` of the NEW
 path, not the old one.
 
-**Not started**: Phase 4 (cross-repo architecture decision — still
-needs Jon's explicit call per §4, not something to start unprompted).
+**Phase 4 — DONE (the merge itself), 2026-09-16.** Jon picked option
+(a) after a real correction round-trip: an earlier draft of
+`docs/PHASE4_ARCHITECTURE_SCOPING.md` overstated what a monorepo fixes
+("eliminates 1b's root cause") — Jon caught it, correctly recalling
+that some shared files carry permanently necessary logic differences
+(AP's `BoundR` class exists specifically because Archipelago generates
+multiple worlds concurrently and needs per-world-instance state the
+standalone's simple globals can't safely provide). Corrected the
+scoping doc's claims before proceeding — see that doc's own "CORRECTION"
+notes in §2 and §4.
+
+Executed on a branch first, not directly on `main`, given the stakes:
+1. `git subtree add --prefix=apworld <ap-world-repo-url> main` —
+   verified the full 21-commit history (back to "Initial commit") is
+   genuinely present in the object graph (the merge commit's second
+   parent is the AP world repo's own real HEAD), not just a flat copy.
+2. Rewired `tools/check_apworld_sync.py`, `build_apworld.py`,
+   `release_apworld.py`, and `.github/workflows/ci.yml` to read
+   `apworld/` locally instead of checking out a second repo — every
+   job that used to need two checkouts now needs one (the
+   `shadowman-world-tests` job still checks out `ArchipelagoMW/
+   Archipelago` separately, but that's a genuine third-party
+   dependency, unrelated to this repo's own structure).
+3. Verified before ever opening a PR: drift-checker output unchanged,
+   `build_apworld.py` produces the identical 34-file/~995KB apworld,
+   `release_apworld.py --skip-companion` runs clean end-to-end, and —
+   the real proof — temporarily swapped a plain copy of the branch's
+   `apworld/` folder into a real local Archipelago 0.6.7 install (the
+   live git checkout moved aside, confirmed clean, restored
+   immediately after) and ran the actual test suite against it: 31
+   passed / 1717 subtests, identical to the pre-merge result.
+4. Opened a PR rather than merging blind — real CI (not just local
+   runs) went green twice in a row on the PR itself, then a third time
+   on `main` after merging. `git subtree` command atomicity note: `git
+   add file1 file2 badpath` fails the ENTIRE command if any pathspec is
+   invalid, staging nothing — caught this the hard way when a commit
+   claimed 7 files changed but only landed 1; fixed by re-staging
+   correctly and amending the still-unpushed local commit (safe here
+   specifically because it had never left local — this is not a
+   precedent for amending published history).
+
+**Not yet done, needs Jon's explicit call before anyone touches it**:
+what happens to the now-superseded `shadow-man-remastered-ap-world`
+repo. The scoping doc's own recommendation was archive-with-a-pointer,
+not delete — its old release asset URLs (`v0.1.0`, `v0.1.1`) stay alive
+either way as long as the repo itself still exists, archived or not.
