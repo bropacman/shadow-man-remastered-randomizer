@@ -185,7 +185,15 @@ def _autodetect_ap_dir() -> "Path | None":
 # drag/reposition follow-through, and a location friendly-name pass
 # (Asylum/Deadside/Swampland complete; Gad Temples and the 5 liveside
 # levels still in progress, to be finished in a later release).
-COMPANION_VERSION = "v0.1.2"
+# v0.1.2 was tagged but never actually published as a release -- the
+# session that set it continued straight into a real bug fix (the
+# shipped .apworld was missing its archipelago.json manifest, would
+# have broken entirely on Archipelago 0.7.0) plus a full CI/testing
+# buildout and the Phase 4 monorepo merge (apworld/ now lives inside
+# this repo, full history preserved -- see
+# docs/PHASE4_ARCHITECTURE_SCOPING.md). v0.1.3 is the first version
+# actually published as a real GitHub Release, from the merged repo.
+COMPANION_VERSION = "v0.1.3"
 
 
 def _load_prefs() -> dict:
