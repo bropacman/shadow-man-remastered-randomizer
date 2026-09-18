@@ -193,7 +193,17 @@ def _autodetect_ap_dir() -> "Path | None":
 # this repo, full history preserved -- see
 # docs/PHASE4_ARCHITECTURE_SCOPING.md). v0.1.3 is the first version
 # actually published as a real GitHub Release, from the merged repo.
-COMPANION_VERSION = "v0.1.3"
+#
+# v0.1.4 (2026-09-18): finished the location friendly-name pass (all
+# 3050 rows now have a name -- the remaining generic ones, mostly
+# rarely-checkable barrels plus some cadeaux, got a deterministic
+# fallback name derived from level/item/zone/file/offset rather than
+# guessed landmarks), and the overlay DLL was rebuilt from source for
+# the first time since the in-game connect/console panel (WndProc hook,
+# bidirectional IPC) was added -- that work had been committed but never
+# actually compiled anywhere until this release. Drafted, not yet
+# published -- pending Jon's own playtest of the new panel.
+COMPANION_VERSION = "v0.1.4"
 
 
 def _load_prefs() -> dict:
