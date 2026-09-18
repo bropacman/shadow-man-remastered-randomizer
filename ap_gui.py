@@ -990,13 +990,22 @@ const GATE_PRESET_MAX_SL = { story: 10, easy: 7, medium: 8, hard: 10, chaos: 10 
 // top of the preset's own cap (whichever is lower)" — meaning easy's
 // real effective cap was already always <=7 no matter what the slider
 // displayed, just not shown that way in the UI).
-function onGatePresetChange() {
+// snapMaxSl=false (importYaml() only) skips re-snapping the slider's VALUE
+// to the preset's default — the disabled/opacity styling still applies
+// regardless. Without this, importing a YAML that explicitly set
+// max_gate_sl got silently overwritten back to the preset's default the
+// instant onGatePresetChange() ran as part of the post-import refresh
+// below, since a concrete (non-random) restored value always passes the
+// `!isRng('yMaxGateSl')` check the same as a user manually changing the
+// preset would (found 2026-09-18 — Jon reported Max SL never survived a
+// YAML load).
+function onGatePresetChange(snapMaxSl = true) {
   const preset = document.getElementById('yGatePreset').value;
   if (!isRng('yMaxGateSl')) {
     const el = document.getElementById('yMaxGateSl');
     el.disabled = (preset === 'story');
     el.style.opacity = (preset === 'story') ? '0.35' : '';
-    if (Object.prototype.hasOwnProperty.call(GATE_PRESET_MAX_SL, preset)) {
+    if (snapMaxSl && Object.prototype.hasOwnProperty.call(GATE_PRESET_MAX_SL, preset)) {
       el.value = GATE_PRESET_MAX_SL[preset];
       document.getElementById('yMaxGateSlVal').textContent = el.value;
     }
@@ -1297,7 +1306,7 @@ function buildYaml() {
   kv('unique_retractor_keys', yamlBool('yUniqueRetractorKeys'));
   kv('deadside_guns', yamlBool('yDeadsideGuns'));
   kv('progression_balancing', yamlNum('yProgBalance'));
-  kv('insanity', yamlBool('yInsanity'));
+  kv('cadeauxsanity', yamlBool('yInsanity'));
   kv('cadeaux_bundle_size', yamlNum('yCadeauxBundleSize'));
   kv('starting_health', yamlNum('yStartingHealth'));
   kv('altar_health_grant', yamlNum('yAltarHealth'));
@@ -1468,6 +1477,14 @@ async function importYaml() {
     if (s[k] === false) s[k] = 'off';
   });
 
+  // Backward-compat for YAML files saved before the option was renamed
+  // "Insanity" -> "Cadeauxsanity" (apworld/options.py, 2026-08-23) —
+  // ap_gui.py itself wasn't updated to match until now, so any YAML this
+  // tool exported since then was actually still keyed `insanity:`, a
+  // stale/unrecognized key that AP's own generator silently ignores.
+  // Accept either key on import so an old file still restores correctly.
+  if (s.cadeauxsanity === undefined && s.insanity !== undefined) s.cadeauxsanity = s.insanity;
+
   if (result.name) document.getElementById('playerName').value = result.name;
   document.getElementById('playerDescription').value = result.description || '';
 
@@ -1494,7 +1511,7 @@ async function importYaml() {
    'shuffle_true_forms:yShuffleTrueForms', 'piston_combos:yPistonCombos',
    'unique_retractor_keys:yUniqueRetractorKeys',
    'deadside_guns:yDeadsideGuns',
-   'insanity:yInsanity', 'cadeaux_gated_content:yCadeauxGatedContent',
+   'cadeauxsanity:yInsanity', 'cadeaux_gated_content:yCadeauxGatedContent',
    'death_link:yDeathLink',
    'shuffle_ambients:yShuffleAmbients', 'shuffle_music:yShuffleMusic',
    'shuffle_voices:yShuffleVoices', 'shuffle_weapons_sfx:yShuffleWeaponsSfx',
@@ -1542,7 +1559,9 @@ async function importYaml() {
 
   // Re-run the side-effect handlers so disabled/greyed-out sub-controls and
   // slider labels stay consistent with whatever we just restored.
-  onGatePresetChange();
+  // snapMaxSl=false: don't let this clobber the max_gate_sl value the
+  // import loop above just restored from the file.
+  onGatePresetChange(false);
   onEnemiesChange();
   refreshDeathPenaltyLabel();
   refreshSprintMultiplierLabel();
