@@ -513,8 +513,39 @@ Executed on a branch first, not directly on `main`, given the stakes:
    specifically because it had never left local — this is not a
    precedent for amending published history).
 
-**Not yet done, needs Jon's explicit call before anyone touches it**:
-what happens to the now-superseded `shadow-man-remastered-ap-world`
-repo. The scoping doc's own recommendation was archive-with-a-pointer,
-not delete — its old release asset URLs (`v0.1.0`, `v0.1.1`) stay alive
-either way as long as the repo itself still exists, archived or not.
+**CORRECTION (2026-09-18, same day the merge shipped):** archived
+`shadow-man-remastered-ap-world` with a pointer, per the plan above —
+then Jon asked a sharp follow-up ("even that one they keep the repos
+separate..") after I pulled up a real precedent
+(`tanjo3/wwrando`/`tanjo3/tww_apworld`) that showed the Archipelago
+community convention actually favors keeping the AP world itself in a
+dedicated, single-purpose repo, even when a related tool combines
+release tracks in one list. That directly cuts against this doc's own
+"clean for end users" bar (Jon's stated criteria) — someone looking for
+"Shadow Man Archipelago" expects a repo that's unambiguously and only
+about that, and a world that might someday be submitted upstream to
+`ArchipelagoMW/Archipelago` is cleaner to extract from its own repo
+root than a subfolder of an unrelated project.
+
+**Revised, final shape**: `apworld/` in this repo stays the one place
+development actually happens (the original problem was never "two
+repos," it was editing two *independently diverging* copies with
+nothing forcing them to agree) — but `shadow-man-remastered-ap-world`
+is un-archived and kept as a one-way publish target instead, via a new
+`sync_apworld_mirror.py` (fresh clone every run, never a stale local
+checkout, commits only on a real diff). Releases for the AP world/
+Companion go back to being tagged and published on the mirror repo,
+on its own independent `vX.Y.Z` track — see `RELEASING.md`'s "Tag
+convention" for the final shape. This also incidentally resolves a
+problem the merge itself had introduced without anyone noticing
+until Jon asked about it directly: a single interleaved release list
+mixing standalone and AP-world releases together on one repo's
+`/releases` page.
+
+Also: the local Archipelago install's raw `worlds/shadowman/` git
+checkout (the one used for live testing throughout this whole
+investigation) was removed entirely, replaced with just dropping the
+built `shadowman.apworld` into `custom_worlds/` — Jon's own request,
+"so we never work out of worlds/shadowman." Verified the game install
+still loads the world correctly (`world_version 0.1.3`) with only the
+packaged artifact present, no raw source folder anywhere locally.
