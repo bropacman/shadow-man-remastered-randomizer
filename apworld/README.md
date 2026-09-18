@@ -3,12 +3,15 @@
 An [Archipelago](https://archipelago.gg) multiworld implementation of
 **Shadow Man Remastered** (Nightdive Studios, 2021). This is the AP
 *world* — the plugin Archipelago's generator and client load to include
-Shadow Man in a multiworld. It's a sibling project to the standalone
-single-player randomizer (the
+Shadow Man in a multiworld.
+
+This folder lives inside
 [`shadow-man-remastered-randomizer`](https://github.com/bropacman/shadow-man-remastered-randomizer)
-repo) for the same game, sharing the same byte-level patching engine — see
-"How this differs from the standalone randomizer" below for where the
-two diverge.
+(merged in 2026-09-18, full history preserved — previously its own
+separate repo, `shadow-man-remastered-ap-world`, now archived) alongside
+the standalone single-player randomizer for the same game, sharing the
+same byte-level patching engine — see "How this differs from the
+standalone randomizer" below for where the two diverge.
 
 ## Goal
 
@@ -188,4 +191,4 @@ locally on the player's own installation via `apply_ap_seed.py`, exactly
 as it works for the standalone randomizer. Use at your own risk; verify
 your game files via Steam if you need to restore a clean install.
 
-This project is released under the [MIT License](https://github.com/bropacman/shadow-man-remastered-ap-world/blob/main/LICENSE).
+This project is released under the [MIT License](LICENSE).
