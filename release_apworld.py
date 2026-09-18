@@ -126,7 +126,14 @@ def main() -> None:
         print("\n[5/5] Building the AP Companion exe (this installs/upgrades "
               "pyinstaller, pywebview, pyyaml, keystone-engine, capstone -- "
               "can take a few minutes)...")
-        run(["cmd", "/c", "build_ap_gui.bat"], cwd=ROOT)
+        # Absolute path, not a bare "build_ap_gui.bat" -- `cmd /c` launched
+        # from a subprocess (as opposed to typed directly into a cmd.exe
+        # session) doesn't reliably resolve a relative script name against
+        # cwd on this setup; confirmed live (first real run of this script
+        # with --skip-companion omitted failed with "'build_ap_gui.bat' is
+        # not recognized"). Absolute path sidesteps the resolution
+        # question entirely.
+        run(["cmd", "/c", str(ROOT / "build_ap_gui.bat")], cwd=ROOT)
 
     apworld_path = ROOT / "dist" / "apworld" / "shadowman.apworld"
     companion_path = ROOT / "dist" / "ap_companion" / "shadow_man_ap_companion.exe"
