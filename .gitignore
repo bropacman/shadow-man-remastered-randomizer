@@ -81,8 +81,9 @@ gui_prefs.json
 # ── LibreOffice lock files ────────────────────────────────────────
 .~lock.*
 
-# ── AI assistant instructions (local only) ───────────────────────
-CLAUDE.md
+# ── Claude session history archive (personal dev log; local only) ──
+# CLAUDE.md itself is committed; the full investigation history lives here.
+docs/archive/
 
 # ── Extracted game reference assets (huge; never commit) ──
 reference/
