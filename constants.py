@@ -5,7 +5,7 @@ Single source of truth for level folders and RSC file types.
 Imported by patcher.py, kpf_handler.py, and extracted_locations.py.
 """
 
-RANDOMIZER_VERSION = "v1.2.0"
+RANDOMIZER_VERSION = "v1.2.1"
 
 LEVEL_FOLDERS = [
     "swampday", "tenement", "prison", "uground", "florida", "salvage",
