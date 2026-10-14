@@ -205,3 +205,34 @@ jobs:
         run: |
           set -e
           python -m pytest worlds/shadowman/test/__init__.py -v
+
+  apworld-artifact:
+    name: Build shadowman.apworld (downloadable test build)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Same packager release builds use (build_all.py / build_apworld.bat),
+      # so every push gets an installable .apworld under the run's
+      # Artifacts. Named with COMPANION_VERSION + short SHA; the file inside
+      # stays shadowman.apworld because AP loads a world by its file name.
+      - name: Package the apworld
+        id: build
+        shell: bash
+        run: |
+          set -e
+          PYTHONIOENCODING=utf-8 python build_apworld.py --source apworld --output dist/apworld/shadowman.apworld
+          version=$(python -c "import re; print(re.search(r'COMPANION_VERSION\s*=\s*\"(v[0-9.]+)\"', open('ap_gui.py', encoding='utf-8').read()).group(1))")
+          echo "name=shadowman-apworld-${version}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the apworld
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: dist/apworld/shadowman.apworld
+          if-no-files-found: error
+          retention-days: 30
