@@ -25,7 +25,7 @@ from .regions import create_regions, DEADSIDE_PORTAL_FILES, ASYLUM_ENGINE_BLOCK,
 from .items import ShadowManItem, item_table, STACKABLE_COUNTS, AP_ITEM_TO_RSC, _UNIQUE_ITEM_RSC_NAMES, \
     is_cadeaux_item, cadeaux_bundle_item_name, CADEAUX_ITEM_NAMES, is_trap_bonus_item, \
     RETRACTOR_KEY_ITEM_NAMES
-from .locations import ShadowManLocation, location_table
+from .locations import ShadowManLocation, location_table, FRIENDLY_NAMES
 from .options import ShadowManOptions
 
 
@@ -104,8 +104,12 @@ class ShadowManWorld(World):
     item_name_to_id:     Dict[str, int] = {
         name: data.code for name, data in item_table.items()
     }
+    # Keyed by the friendly display name the Locations are created with
+    # (locations.py's FRIENDLY_NAMES), not the loc_key: this table is the
+    # datapackage, which the web tracker, hints and YAML location options
+    # all read names from.
     location_name_to_id: Dict[str, int] = {
-        name: data.code for name, data in location_table.items()
+        FRIENDLY_NAMES[key]: data.code for key, data in location_table.items()
     }
     # Cadeaux Bundle Size (2026-07-27): "Cadeaux Bundle x{N}" (see items.py)
     # is a distinct concrete item per denomination, since the bundle's
