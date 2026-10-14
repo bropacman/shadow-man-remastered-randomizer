@@ -35,16 +35,16 @@ in dependency order: apply a pending naming log, regenerate both
 `extracted_locations.py`, drift + compile checks (blocking), the overlay
 DLL (only when `overlay_dll/src` is newer than `apworld/ShadowManOverlay.dll`),
 the apworld, the AP Companion exe, the standalone exe, then versioned
-release folders under `distelease\`. It ends by printing the tag,
+release folders under `dist/release/`. It ends by printing the tag,
 mirror-sync and `gh release create` commands; it never runs them.
 
 - Versions: `--ap-version patch|minor|major|X.Y.Z` sets `COMPANION_VERSION`
   (`ap_gui.py`, also the apworld manifest); `--standalone-version ...` sets
   `RANDOMIZER_VERSION` (`constants.py`). Both are applied before building.
 - Steps: `--only apworld,package`, `--skip standalone`, `--dll`, `--no-dll`.
-- Release names: `distelease\shadow-man-ap-world-vX.Y.Z\` (the
+- Release names: `dist/release/shadow-man-ap-world-vX.Y.Z\` (the
   `.apworld` keeps its name, since AP loads a world by file name) and
-  `distelease\shadow-man-randomizer-vX.Y.Z.zip` (exe + README + LICENSE).
+  `dist/release/shadow-man-randomizer-vX.Y.Z.zip` (exe + README + LICENSE).
 
 ## Before every release: check for drift
 
