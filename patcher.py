@@ -1043,7 +1043,12 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
         **gate_kwargs,
     )
 
-    MAX_RETRIES = 5
+    # Each retry re-runs assumed_fill with a fresh rng, which also re-rolls
+    # the gate shuffle. Chaos (safe=False) produces an unbeatable gate layout
+    # ~75% of the time (e.g. both Blood gates at SL10 with only 118 souls
+    # reachable outside them), so it gets a much bigger budget: brutal gates,
+    # but always a beatable seed. 0.76^40 ~= 1 in 60,000 chance of giving up.
+    MAX_RETRIES = 40 if gate_preset == "chaos" else 5
     for attempt in range(MAX_RETRIES):
         retry_seed = rng.randint(0, 99_999_999) ^ attempt
         retry_rng = random.Random(retry_seed)
