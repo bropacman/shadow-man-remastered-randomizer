@@ -10,13 +10,85 @@ name: CI
 # that repo" the way there was before.
 
 on:
+  # Every branch, not just main, so feature branches get checked before
+  # they're merged (public repo -- Actions minutes are free).
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
     branches: [main]
   workflow_dispatch: {}
 
 jobs:
+  fill-check:
+    name: Standalone fill produces beatable seeds
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Fixed seeds across vanilla/easy/medium/hard plus regression seeds
+      # (tools/ci_fill_check.py). Nothing else in CI exercises the
+      # standalone fill -- a 2026-10 bug failed ~1 in 5 seeds unnoticed.
+      # Re-run a failure locally: python fill.py --seed N --gate-preset P -v
+      - name: Run the fill smoke test
+        shell: bash
+        run: |
+          set -e
+          PYTHONIOENCODING=utf-8 python tools/ci_fill_check.py
+
+  location-data-check:
+    name: Location CSVs identical and extracted_locations.py up to date
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # CLAUDE.md §5: after any locations.csv edit, copy it to apworld/ and
+      # re-run both generators. This catches a skipped step.
+      - name: Compare the two locations.csv copies
+        shell: bash
+        run: |
+          set -e
+          if ! cmp -s data/locations.csv apworld/data/locations.csv; then
+            echo "::error::data/locations.csv and apworld/data/locations.csv differ -- copy the root one over apworld/data/"
+            exit 1
+          fi
+
+      - name: Regenerate and check for drift
+        shell: bash
+        run: |
+          set -e
+          PYTHONIOENCODING=utf-8 python tools/generate.py > /dev/null
+          PYTHONIOENCODING=utf-8 python apworld/tools/generate.py > /dev/null
+          if ! git diff --exit-code --stat; then
+            echo "::error::Generated files are stale -- run python tools/generate.py and python apworld/tools/generate.py, then commit"
+            exit 1
+          fi
+
+  gui-js-check:
+    name: Syntax-check JS embedded in gui.py / ap_gui.py
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # windows-latest ships Node; py_compile can't see JS errors inside
+      # the GUIs' _HTML strings (CLAUDE.md §4).
+      - name: node --check every inline <script>
+        shell: bash
+        run: |
+          set -e
+          python tools/check_gui_js.py
+
   compile-check:
     name: Compile-check every tracked .py file
     runs-on: windows-latest
