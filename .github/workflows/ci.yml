@@ -10,10 +10,10 @@ name: CI
 # that repo" the way there was before.
 
 on:
-  # Every branch, not just main, so feature branches get checked before
-  # they're merged (public repo -- Actions minutes are free).
+  # Branches are checked through their PR (main's ruleset requires one);
+  # pushing to every branch as well ran each job twice per PR push.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch: {}
