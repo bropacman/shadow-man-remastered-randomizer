@@ -4,6 +4,9 @@ build_all.py
 One command for every rebuild after a code or data change, in dependency
 order. Wraps the existing scripts; it doesn't replace them.
 
+  0. version  --ap-version / --standalone-version: set COMPANION_VERSION
+              (ap_gui.py; also the apworld manifest) / RANDOMIZER_VERSION
+              (constants.py) before anything is built
   1. naming   apply data/naming_log.csv, if there is one (tools/apply_naming_log.py)
   2. data     regenerate both extracted_locations.py from data/locations.csv
   3. checks   drift check (blocking) + compile check of every tracked .py
@@ -12,25 +15,30 @@ order. Wraps the existing scripts; it doesn't replace them.
   5. apworld  dist/apworld/shadowman.apworld
   6. companion dist/ap_companion/shadow_man_ap_companion.exe (build_ap_gui.bat)
   7. standalone dist/standalone/shadow_man_randomizer.exe (build.bat)
+  8. package  versioned release folders under dist/release/, plus the tag and
+              `gh release create` commands to run yourself
 
 Builds package whatever is on disk, so uncommitted changes are listed
 before anything runs. Nothing is committed, pushed, tagged or published.
 
 Usage:
-    python build_all.py                      # everything
-    python build_all.py --only apworld       # just these steps (comma-separated)
-    python build_all.py --skip standalone    # everything but these
-    python build_all.py --dll                # force a DLL rebuild
-    python build_all.py --no-dll             # never rebuild the DLL
+    python build_all.py                          # everything, current versions
+    python build_all.py --ap-version patch       # v0.1.4 -> v0.1.5, then build
+    python build_all.py --standalone-version 1.3.0
+    python build_all.py --only apworld           # just these steps (comma-separated)
+    python build_all.py --skip standalone        # everything but these
+    python build_all.py --dll / --no-dll         # force / never rebuild the DLL
 """
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 from release_apworld import run, compile_check
@@ -42,8 +50,11 @@ DLL_BUILD = DLL_SRC / "build"
 DLL_OUT = DLL_BUILD / "Release" / "ShadowManOverlay.dll"
 DLL_SHIPPED = AP_DIR / "ShadowManOverlay.dll"
 NAMING_LOG = ROOT / "data" / "naming_log.csv"
+RELEASE_DIR = ROOT / "dist" / "release"
+MIRROR_REPO = "bropacman/shadow-man-remastered-ap-world"
+STANDALONE_REPO = "bropacman/shadow-man-remastered-randomizer"
 
-STEPS = ["naming", "data", "checks", "dll", "apworld", "companion", "standalone"]
+STEPS = ["naming", "data", "checks", "dll", "apworld", "companion", "standalone", "package"]
 ARTIFACTS = {
     "apworld":    ROOT / "dist" / "apworld" / "shadowman.apworld",
     "companion":  ROOT / "dist" / "ap_companion" / "shadow_man_ap_companion.exe",
@@ -51,6 +62,53 @@ ARTIFACTS = {
     "dll":        DLL_SHIPPED,
 }
 
+# (file, constant) holding each track's version, e.g. COMPANION_VERSION = "v0.1.4"
+VERSION_FILES = {
+    "ap":         (ROOT / "ap_gui.py", "COMPANION_VERSION"),
+    "standalone": (ROOT / "constants.py", "RANDOMIZER_VERSION"),
+}
+
+
+# ── Versions ──────────────────────────────────────────────────────────────────
+
+def _version_re(const: str) -> re.Pattern:
+    return re.compile(rf'^({const}\s*=\s*")v(\d+)\.(\d+)\.(\d+)(")', re.M)
+
+
+def read_version(track: str) -> str:
+    path, const = VERSION_FILES[track]
+    m = _version_re(const).search(path.read_text(encoding="utf-8"))
+    if not m:
+        sys.exit(f"ABORTED: no {const} = \"vX.Y.Z\" line in {path.name}")
+    return f"v{m.group(2)}.{m.group(3)}.{m.group(4)}"
+
+
+def resolve_version(current: str, spec: str) -> str:
+    """spec is major/minor/patch or an explicit X.Y.Z (with or without v)."""
+    major, minor, patch = (int(x) for x in current[1:].split("."))
+    if spec == "major":
+        return f"v{major + 1}.0.0"
+    if spec == "minor":
+        return f"v{major}.{minor + 1}.0"
+    if spec == "patch":
+        return f"v{major}.{minor}.{patch + 1}"
+    if re.fullmatch(r"v?\d+\.\d+\.\d+", spec):
+        return spec if spec.startswith("v") else f"v{spec}"
+    sys.exit(f"ABORTED: version {spec!r} is not major/minor/patch or X.Y.Z")
+
+
+def write_version(track: str, new: str) -> None:
+    path, const = VERSION_FILES[track]
+    raw = path.read_bytes().decode("utf-8")
+    nums = new[1:].split(".")
+    raw, n = _version_re(const).subn(
+        lambda m: f"{m.group(1)}v{nums[0]}.{nums[1]}.{nums[2]}{m.group(5)}", raw, count=1)
+    if n != 1:
+        sys.exit(f"ABORTED: couldn't update {const} in {path.name}")
+    path.write_bytes(raw.encode("utf-8"))
+
+
+# ── Build helpers ─────────────────────────────────────────────────────────────
 
 def run_bat(name: str) -> None:
     # stdin=DEVNULL lets the .bat's trailing `pause` return instead of
@@ -90,10 +148,58 @@ def warn_uncommitted() -> None:
             print(f"    {line}")
 
 
+# ── Release packaging ─────────────────────────────────────────────────────────
+
+def package(done: list[str]) -> list[str]:
+    """Copy fresh artifacts into versioned release folders; return the
+    commands to tag and publish them (printed, never run)."""
+    cmds: list[str] = []
+    ap_ver, sa_ver = read_version("ap"), read_version("standalone")
+
+    ap_files = [ARTIFACTS[k] for k in ("apworld", "companion") if k in done]
+    if ap_files:
+        # File names stay as-is: AP loads a world by its .apworld file name.
+        out = RELEASE_DIR / f"shadow-man-ap-world-{ap_ver}"
+        out.mkdir(parents=True, exist_ok=True)
+        for f in ap_files:
+            shutil.copy2(f, out / f.name)
+        print(f"  {out.relative_to(ROOT)}\\  ({', '.join(f.name for f in ap_files)})")
+        assets = " ".join(f'"{(out / f.name).relative_to(ROOT)}"' for f in ap_files)
+        cmds += [
+            f"git tag apworld-{ap_ver}",
+            f"python sync_apworld_mirror.py",
+            f'gh release create {ap_ver} {assets} --repo {MIRROR_REPO} --prerelease '
+            f'--title "Shadow Man Remastered AP World {ap_ver} - Beta" --notes-file <notes.md>',
+        ]
+
+    if "standalone" in done:
+        RELEASE_DIR.mkdir(parents=True, exist_ok=True)
+        zip_path = RELEASE_DIR / f"shadow-man-randomizer-{sa_ver}.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(ARTIFACTS["standalone"], ARTIFACTS["standalone"].name)
+            for extra in ("README.md", "LICENSE"):
+                if (ROOT / extra).exists():
+                    z.write(ROOT / extra, extra)
+        print(f"  {zip_path.relative_to(ROOT)}")
+        cmds += [
+            f"git tag {sa_ver}",
+            f'gh release create {sa_ver} "{zip_path.relative_to(ROOT)}" --repo {STANDALONE_REPO} '
+            f'--title "Shadow Man Remastered Randomizer {sa_ver} - <headline features>" '
+            f"--notes-file <notes.md>",
+        ]
+    return cmds
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Rebuild everything in dependency order.")
     ap.add_argument("--only", help="comma-separated steps to run: " + ",".join(STEPS))
     ap.add_argument("--skip", help="comma-separated steps to skip")
+    ap.add_argument("--ap-version", metavar="SPEC",
+                    help="set the AP world/Companion version: major, minor, patch or X.Y.Z")
+    ap.add_argument("--standalone-version", metavar="SPEC",
+                    help="set the standalone version: major, minor, patch or X.Y.Z")
     dll = ap.add_mutually_exclusive_group()
     dll.add_argument("--dll", action="store_true", help="force the DLL rebuild")
     dll.add_argument("--no-dll", action="store_true", help="never rebuild the DLL")
@@ -118,6 +224,16 @@ def main() -> None:
     print("Steps: " + ", ".join(steps))
     print("=" * 70)
     warn_uncommitted()
+
+    for track, spec in (("ap", args.ap_version), ("standalone", args.standalone_version)):
+        old = read_version(track)
+        if spec:
+            new = resolve_version(old, spec)
+            write_version(track, new)
+            print(f"Version ({track}): {old} -> {new}  ({VERSION_FILES[track][0].name})")
+        else:
+            print(f"Version ({track}): {old}")
+
     t0 = time.time()
     done = []
 
@@ -170,14 +286,24 @@ def main() -> None:
         run_bat("build.bat")
         done.append("standalone")
 
+    cmds = []
+    if "package" in steps:
+        header("package", f"release folders under {RELEASE_DIR.relative_to(ROOT)}")
+        cmds = package(done)
+        done.append("package")
+
     print("\n" + "=" * 70)
     print(f"Done in {time.time() - t0:.0f}s. Artifacts:")
     for step, path in ARTIFACTS.items():
         if step in done and path.exists():
             stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime))
             print(f"  {path.relative_to(ROOT)}  ({stamp})")
-    print("\nNot automated: version bumps, commit/tag, sync_apworld_mirror.py, "
-          "publishing (see RELEASING.md).")
+    if cmds:
+        print("\nTo release, after testing and committing (not run for you):")
+        for c in cmds:
+            print(f"  {c}")
+    else:
+        print("\nNot automated: commit/tag, sync_apworld_mirror.py, publishing (see RELEASING.md).")
 
 
 if __name__ == "__main__":
