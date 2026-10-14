@@ -194,6 +194,47 @@ from .items import is_cadeaux_item, cadeaux_item_weight, RETRACTOR_KEY_ITEM_NAME
 # (thousands of lines → Kivy lag) — keep only warnings and above.
 logging.getLogger("pymem").setLevel(logging.WARNING)
 
+
+# ── Player-facing log filter (2026-10-14) ──────────────────────────────────────
+#
+# Most "[ShadowMan] ..." INFO lines are diagnostics (per-tick effect logs,
+# pickup-log resolution, "if the game crashes now, THIS is the item" markers)
+# that drown out what a player actually cares about. This filter hides them
+# from the client window and console but NOT from the log file — it sets
+# AP's own per-record flags (Utils.init_logging's "NoStream" filter on the
+# stdout handler, kvui.LogtoUI's "skip_gui"), so crash hunts still have the
+# full trail in logs/.
+#
+# Shown on screen:
+#   - anything at WARNING or above,
+#   - lines logged with extra=_SHOW (item received, trap on/off, goal, ...),
+#   - non-[ShadowMan] lines (AP's own hints, chat, DeathLink, found-item
+#     messages),
+#   - everything while a /command is running (so command output is visible),
+#   - everything when /debug on.
+_SHOW = {"sm_show": True}
+
+
+class _PlayerFacingLogFilter(logging.Filter):
+    def __init__(self) -> None:
+        super().__init__()
+        self.verbose = False      # /debug on
+        self.in_command = 0       # >0 while a /command handler runs
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if (not self.verbose and not self.in_command
+                and record.levelno < logging.WARNING
+                and not getattr(record, "sm_show", False)
+                and isinstance(record.msg, str)
+                and record.msg.startswith("[ShadowMan]")):
+            record.NoStream = True
+            record.skip_gui = True
+        return True  # never drop the record — the log file still gets it
+
+
+_player_log_filter = _PlayerFacingLogFilter()
+logger.addFilter(_player_log_filter)
+
 # ── AP constants ───────────────────────────────────────────────────────────────
 
 GAME_NAME      = "Shadow Man Remastered"
@@ -4684,6 +4725,15 @@ class ShadowManCommandProcessor(SuperCommandProcessor):
     """
     ctx: "ShadowManContext"
 
+    def __call__(self, raw: str):
+        # Anything a command prints synchronously is a direct answer to the
+        # player, so it bypasses the player-facing log filter.
+        _player_log_filter.in_command += 1
+        try:
+            return super().__call__(raw)
+        finally:
+            _player_log_filter.in_command -= 1
+
     def _cmd_savedir(self, *args: str) -> None:
         """Show or set your save folder path.  Usage: /savedir [path]"""
         if args:
@@ -5129,18 +5179,18 @@ class ShadowManCommandProcessor(SuperCommandProcessor):
 
     def _cmd_debug(self, *args: str) -> None:
         """
-        Show or toggle verbose per-tick logging for Voodoo/Ammo Max Hold
-        (the "tick N/M: ok — cap=..." lines these two effects emit every
-        HEALTH_EFFECT_TICK_INTERVAL_SECONDS while active). Off by default —
-        those lines are development/debug noise during normal play,
-        especially with Trap/Bonus's permanent holds running for a while.
-        Session-only: resets to off on every client launch.
+        Show or toggle verbose client logging. Off by default: the window
+        only shows items received, traps/bonuses starting and ending, the
+        goal, hints/chat, and warnings. On shows every diagnostic
+        "[ShadowMan]" line too (pickup resolution, per-tick effect logs,
+        item-apply markers, ...) — those always go to the log file in
+        logs/ either way. Session-only: resets to off on every launch.
         Usage: /debug [on|off]   (no argument shows current state)
         """
         ctx = self.ctx
         if not args:
             state = "on" if ctx.debug_hold_logging else "off"
-            logger.info(f"[ShadowMan] Voodoo/Ammo Max Hold tick logging: {state}")
+            logger.info(f"[ShadowMan] Verbose logging: {state}")
             return
         choice = args[0].strip().lower()
         if choice in ("on", "true", "1"):
@@ -5150,7 +5200,8 @@ class ShadowManCommandProcessor(SuperCommandProcessor):
         else:
             logger.warning("[ShadowMan] Usage: /debug [on|off]")
             return
-        logger.info(f"[ShadowMan] Voodoo/Ammo Max Hold tick logging: "
+        _player_log_filter.verbose = ctx.debug_hold_logging
+        logger.info(f"[ShadowMan] Verbose logging: "
                     f"{'on' if ctx.debug_hold_logging else 'off'}")
 
 
@@ -6942,7 +6993,8 @@ class ShadowManContext(SuperContext):
                                 "status": ClientStatus.CLIENT_GOAL,
                             }])
                             logger.info(
-                                "[ShadowMan] Legion defeated — CLIENT_GOAL sent."
+                                "[ShadowMan] Legion defeated — CLIENT_GOAL sent.",
+                                extra=_SHOW,
                             )
             except Exception as exc:
                 logger.warning(f"[ShadowMan] Goal watcher error: {exc}")
@@ -7045,7 +7097,7 @@ class ShadowManContext(SuperContext):
                             if self._active_health_effect_task is not None:
                                 logger.info(
                                     f"[ShadowMan] Health effect ({self._active_health_effect_kind}) "
-                                    f"cancelled — player died.")
+                                    f"cancelled — player died.", extra=_SHOW)
                                 self._active_health_effect_task.cancel()
                                 self._active_health_effect_task = None
                                 self._active_health_effect_kind = None
@@ -7128,7 +7180,7 @@ class ShadowManContext(SuperContext):
             )
             sender: str = self._player_label(item.player)
 
-            logger.info(f"[ShadowMan] Received: {item_name} from {sender}")
+            logger.info(f"[ShadowMan] Received: {item_name} from {sender}", extra=_SHOW)
             self._log_received_item(item_name, sender)
             _overlay_ipc.item_received(item_name, sender)
             self._received_items.append((idx, item_name, item.player))
@@ -7400,7 +7452,8 @@ class ShadowManContext(SuperContext):
         if pm is None:
             logger.info(
                 f"[ShadowMan] Game not running — '{item_name}' queued in log. "
-                f"Start the game and use /catchup to re-apply."
+                f"Start the game and use /catchup to re-apply.",
+                extra=_SHOW,
             )
             return
 
@@ -8142,20 +8195,20 @@ class ShadowManContext(SuperContext):
 
         if effect == "poison":
             self.start_health_effect("poison")
-            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Poison.")
+            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Poison.", extra=_SHOW)
             _overlay_ipc.trap_bonus("Trap: Poison")
             return
 
         if effect == "heal":
             self.start_health_effect("heal")
-            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Recovery.")
+            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Recovery.", extra=_SHOW)
             _overlay_ipc.trap_bonus("Bonus: Recovery")
             return
 
         if effect == "voodoo_drain":
             ok = self.trigger_voodoo_drain(pm, base)
             logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Voodoo Drain, "
-                        f"{'ok' if ok else 'FAILED'}.")
+                        f"{'ok' if ok else 'FAILED'}.", extra=_SHOW)
             _overlay_ipc.trap_bonus("Trap: Voodoo Drain")
             return
 
@@ -8163,14 +8216,14 @@ class ShadowManContext(SuperContext):
             self.start_voodoo_max_hold(
                 total_seconds=self.trap_bonus_duration, permanent=permanent)
             duration_desc = "permanent" if permanent else f"{self.trap_bonus_duration}s"
-            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Voodoo Max Hold ({duration_desc}).")
+            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Voodoo Max Hold ({duration_desc}).", extra=_SHOW)
             _overlay_ipc.trap_bonus(f"Bonus: Voodoo Max Hold ({duration_desc})")
             return
 
         if effect == "ammo_drain":
             ok = self.trigger_ammo_drain(pm, base)
             logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Ammo Drain, "
-                        f"{'ok' if ok else 'FAILED'}.")
+                        f"{'ok' if ok else 'FAILED'}.", extra=_SHOW)
             _overlay_ipc.trap_bonus("Trap: Ammo Drain")
             return
 
@@ -8178,7 +8231,7 @@ class ShadowManContext(SuperContext):
             self.start_ammo_max_hold(
                 total_seconds=self.trap_bonus_duration, permanent=permanent)
             duration_desc = "permanent" if permanent else f"{self.trap_bonus_duration}s"
-            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Ammo Max Hold ({duration_desc}).")
+            logger.info(f"[ShadowMan] Trap/Bonus #{idx}: Ammo Max Hold ({duration_desc}).", extra=_SHOW)
             _overlay_ipc.trap_bonus(f"Bonus: Ammo Max Hold ({duration_desc})")
             return
 
@@ -8236,7 +8289,7 @@ class ShadowManContext(SuperContext):
                 if prior_rva is not None:
                     write_cvar_bool(pm, base, prior_rva, False)
                     logger.info(f"[ShadowMan] Trap/Bonus: {self._active_secret_trap} OFF "
-                                f"(superseded by {secret})")
+                                f"(superseded by {secret})", extra=_SHOW)
                 self._active_secret_trap = None
                 # Small settling gap before the new secret's ON write (2026-08-01,
                 # confirmed live: a supersede's OFF+ON writes landing within the
@@ -8261,7 +8314,8 @@ class ShadowManContext(SuperContext):
             logger.info(
                 f"[ShadowMan] Trap/Bonus #{idx}: rolled secret -> {secret} ON "
                 f"({duration_desc}) "
-                f"{'ok' if ok else 'FAILED'}"
+                f"{'ok' if ok else 'FAILED'}",
+                extra=_SHOW,
             )
             if ok:
                 self._active_secret_trap = secret
@@ -8354,7 +8408,7 @@ class ShadowManContext(SuperContext):
             title_state = _read_is_at_title_screen(pm, base)
             if title_state is False:
                 ok = write_cvar_bool(pm, base, rva, False)
-                logger.info(f"[ShadowMan] Secret Trap: {secret} OFF (auto-revert) {'ok' if ok else 'FAILED'}")
+                logger.info(f"[ShadowMan] Secret Trap: {secret} OFF (auto-revert) {'ok' if ok else 'FAILED'}", extra=_SHOW)
                 break
             # title_state is None or True here. None specifically means
             # "reads failed or disagreed" (see _read_is_at_title_screen's
@@ -8399,7 +8453,7 @@ class ShadowManContext(SuperContext):
         if self._active_health_effect_task is not None:
             self._active_health_effect_task.cancel()
             logger.info(f"[ShadowMan] Health effect: {self._active_health_effect_kind} "
-                        f"cancelled, superseded by {kind}.")
+                        f"cancelled, superseded by {kind}.", extra=_SHOW)
         self._active_health_effect_kind = kind
         self._active_health_effect_task = asyncio.create_task(
             self._run_health_effect(kind, **kwargs))
@@ -8524,7 +8578,7 @@ class ShadowManContext(SuperContext):
                         ok = inject_death(pm, base)
                         logger.info(f"[ShadowMan] Poison effect: lethal tick "
                                     f"({current} -> <=0) — triggered a real death, "
-                                    f"{'ok' if ok else 'FAILED'}. Effect ending.")
+                                    f"{'ok' if ok else 'FAILED'}. Effect ending.", extra=_SHOW)
                         return
                     delta = per_tick
                 else:  # "heal"
@@ -8540,6 +8594,7 @@ class ShadowManContext(SuperContext):
                 new_health = read_current_health(pm, base)
                 logger.info(f"[ShadowMan] {kind_label} tick {i + 1}/{ticks}: delta={delta} "
                             f"{'ok' if ok else 'FAILED'} — health now {new_health}/{maximum}")
+            logger.info(f"[ShadowMan] {kind_label} effect ended.", extra=_SHOW)
         finally:
             if self._active_health_effect_task is asyncio.current_task():
                 self._active_health_effect_task = None
@@ -8560,7 +8615,7 @@ class ShadowManContext(SuperContext):
         if self._active_voodoo_hold_task is not None:
             self._active_voodoo_hold_task.cancel()
             self._active_voodoo_hold_task = None
-            logger.info("[ShadowMan] Voodoo Max Hold cancelled — superseded by Voodoo Drain.")
+            logger.info("[ShadowMan] Voodoo Max Hold cancelled — superseded by Voodoo Drain.", extra=_SHOW)
         return apply_voodoo_drain(pm, base)
 
     def start_voodoo_max_hold(
@@ -8647,6 +8702,7 @@ class ShadowManContext(SuperContext):
                                 f"{'' if permanent else f'/{ticks}'}: "
                                 f"{'ok' if ok else 'FAILED'} — cap={cap}")
                 i += 1
+            logger.info("[ShadowMan] Voodoo Max Hold ended.", extra=_SHOW)
         finally:
             if self._active_voodoo_hold_task is asyncio.current_task():
                 self._active_voodoo_hold_task = None
@@ -8662,7 +8718,7 @@ class ShadowManContext(SuperContext):
         if self._active_ammo_hold_task is not None:
             self._active_ammo_hold_task.cancel()
             self._active_ammo_hold_task = None
-            logger.info("[ShadowMan] Ammo Max Hold cancelled — superseded by Ammo Drain.")
+            logger.info("[ShadowMan] Ammo Max Hold cancelled — superseded by Ammo Drain.", extra=_SHOW)
         return apply_ammo_drain(pm, base)
 
     def start_ammo_max_hold(
@@ -8734,6 +8790,7 @@ class ShadowManContext(SuperContext):
                                 f"{'' if permanent else f'/{ticks}'}: "
                                 f"{'ok' if ok else 'FAILED'}")
                 i += 1
+            logger.info("[ShadowMan] Ammo Max Hold ended.", extra=_SHOW)
         finally:
             if self._active_ammo_hold_task is asyncio.current_task():
                 self._active_ammo_hold_task = None
@@ -8771,7 +8828,7 @@ class ShadowManContext(SuperContext):
             return
 
         logger.info(
-            f"[ShadowMan] Replaying {len(self._received_items)} item(s)...")
+            f"[ShadowMan] Replaying {len(self._received_items)} item(s)...", extra=_SHOW)
 
         # Reset stateful counters so the replay rebuilds the correct end state
         saved_gad = self.gad_powers_received
@@ -9006,7 +9063,8 @@ class ShadowManContext(SuperContext):
 
         logger.info(
             f"[ShadowMan] Replay complete — "
-            f"{len(self._received_items) - failed} OK, {failed} failed."
+            f"{len(self._received_items) - failed} OK, {failed} failed.",
+            extra=_SHOW,
         )
 
     def _log_received_item(self, item_name: str, sender: str) -> None:
