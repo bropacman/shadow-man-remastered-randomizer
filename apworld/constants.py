@@ -44,6 +44,64 @@ _PRISON_KEY_CARD = "RSC_X_PRISON_KEY_CARD"
 _ACCUMULATOR     = "RSC_X_ACCUMULATOR"
 _GAD_PICKUP      = "RSC_X_GAD_PICKUP"
 
+# ── Item display names ───────────────────────────────────────────────────────
+# What an item is called in spoiler logs, by RSC object. Locations are named
+# by their CSV friendly_name ("Church Missing Desert Eagle"); items must not
+# be, or every placed item reads like the spot it came from.
+ITEM_DISPLAY_NAMES: dict[str, str] = {
+    "RSC_X_BATON":           "Baton",
+    "RSC_X_FLAMBEAU":        "Flambeau",
+    "RSC_X_MARTEAU":         "Marteau",
+    "RSC_X_CALABASH":        "Calabash",
+    "RSC_X_POIGNE":          "Poigne",
+    "RSC_X_ENGINEERS_KEY":   "Engineers Key",
+    "RSC_X_PRISON_KEY_CARD": "Prison Key Card",
+    "RSC_X_FLASHLIGHT":      "Flashlight",
+    "RSC_X_RETRACT":         "Retractor",
+    "RSC_X_ACCUMULATOR":     "Accumulator",
+    "RSC_X_GAD_PICKUP":      "Gad Power Upgrade",
+    "RSC_X_ASSON":           "Asson",
+    "RSC_X_SHOTGUN":         "Shotgun",
+    "RSC_X_SHOTGUN2":        "Sawed-off Shotgun",
+    "RSC_X_MP5":             "MP-909",
+    "RSC_X_MAC10":           "0.9-SMG",
+    "RSC_X_ENSEIGNE":        "Enseigne",
+    "RSC_X_TETEDEMORT":      "Tete de Mort",
+    "RSC_X_BOOK_OF_SHADOWS": "Book of Shadows",
+    "RSC_X_PROPHECY":        "Book of Prophecy",
+    "RSC_X_JACKS_SCHEMATIC": "Jacks Schematic",
+    "RSC_X_LIGHT_SOUL":      "Light Soul",
+    "RSC_Q_VIOLATOR":        "Violator",
+    "RSC_X_ECLIPSER_PART1": "La Lune",
+    "RSC_X_ECLIPSER_PART2": "Le Soleil",
+    "RSC_X_ECLIPSER_PART3": "La Lame",
+    "RSC_X_RETRACT1":       "Retractor",
+    "RSC_X_RETRACT2":       "Retractor",
+    "RSC_X_VIOLATOR":       "Violator",
+    "RSC_X_DESERTEAGLE":    "Desert Eagle",
+    "RSC_X_PRISM":          "Prism",
+    "RSC_X_DARK_SOUL":      "Dark Soul",
+    "RSC_X_GOVI":           "Dark Soul",
+}
+
+# Fallback by location category for objects not listed above (cadeaux
+# containers, barrels, ...).
+_CATEGORY_DISPLAY_NAMES: dict[str, str] = {
+    "soul":        "Dark Soul",
+    "cadeaux":     "Cadeaux",
+    "barrel":      "Barrel",
+    "retractor":   "Retractor",
+    "accumulator": "Accumulator",
+    "gad":         "Gad Power Upgrade",
+}
+
+
+def item_display_name(obj, category=None) -> str:
+    """Generic, location-independent name for an item, e.g. "Desert Eagle"."""
+    return (ITEM_DISPLAY_NAMES.get(obj or "")
+            or _CATEGORY_DISPLAY_NAMES.get(category or "")
+            or obj or "???")
+
 # ── Gate constants ────────────────────────────────────────────────────────────
 
 GATE_VANILLA_SL: dict[str, int] = {

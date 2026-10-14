@@ -73,6 +73,42 @@ STARTING_ITEM_POOL: dict[str, str] = {
     "Gad Power Upgrade":  "RSC_X_GAD_PICKUP",
 }
 
+# ── Item display names ───────────────────────────────────────────────────────
+# What an item is called in spoiler logs, by RSC object. Locations are named
+# by their CSV friendly_name ("Church Missing Desert Eagle"); items must not
+# be, or every placed item reads like the spot it came from.
+ITEM_DISPLAY_NAMES: dict[str, str] = {
+    **{v: k for k, v in STARTING_ITEM_POOL.items()},
+    "RSC_X_ECLIPSER_PART1": "La Lune",
+    "RSC_X_ECLIPSER_PART2": "Le Soleil",
+    "RSC_X_ECLIPSER_PART3": "La Lame",
+    "RSC_X_RETRACT1":       "Retractor",
+    "RSC_X_RETRACT2":       "Retractor",
+    "RSC_X_VIOLATOR":       "Violator",
+    "RSC_X_DESERTEAGLE":    "Desert Eagle",
+    "RSC_X_PRISM":          "Prism",
+    "RSC_X_DARK_SOUL":      "Dark Soul",
+    "RSC_X_GOVI":           "Dark Soul",
+}
+
+# Fallback by location category for objects not listed above (cadeaux
+# containers, barrels, ...).
+_CATEGORY_DISPLAY_NAMES: dict[str, str] = {
+    "soul":        "Dark Soul",
+    "cadeaux":     "Cadeaux",
+    "barrel":      "Barrel",
+    "retractor":   "Retractor",
+    "accumulator": "Accumulator",
+    "gad":         "Gad Power Upgrade",
+}
+
+
+def item_display_name(obj, category=None) -> str:
+    """Generic, location-independent name for an item, e.g. "Desert Eagle"."""
+    return (ITEM_DISPLAY_NAMES.get(obj or "")
+            or _CATEGORY_DISPLAY_NAMES.get(category or "")
+            or obj or "???")
+
 # ── Starting item bundles ────────────────────────────────────────────────────
 # Spawn spots in swampday (zone 5, near the church) for bundle injections.
 # Up to 5 items per bundle; if both bundles are active items cycle through

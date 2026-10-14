@@ -64,7 +64,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
 from access_rules import R, GATE_VANILLA_SL, set_piston_combos_random, set_soul_thresholds, set_unique_retractor_keys, VANILLA_SOUL_THRESHOLDS, CAGEWAYS_ROUTES, PLAYROOMS_ROUTES
-from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER, STARTING_ITEM_BUNDLES
+from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER, STARTING_ITEM_BUNDLES, item_display_name
 import regions as _regions
 
 # ── Player constant ────────────────────────────────────────────────────────────
@@ -862,7 +862,7 @@ def simulate_playthrough(
             source_loc = placement[loc.loc_key]
             placed_object = source_loc.object
             category = item_category.get(placed_object, "filler")
-            item_friendly = source_loc.friendly_name or placed_object
+            item_friendly = item_display_name(placed_object, getattr(source_loc, "category", None))
 
             if category == "soul":
                 if loc.level_region in LIVESIDE_REGIONS:
@@ -1404,7 +1404,7 @@ def assumed_fill(
 
         if verbose:
             tag = "[S]" if item.category == "soul" else "[P]"
-            item_label = item.friendly_name or item.object
+            item_label = item_display_name(item.object, getattr(item, "category", None))
             print(f"{i + 1:3d}. {tag} {item_label:25} -> "
                   f"{chosen.level_region:25} | "
                   f"Req: {chosen.gate_raw or 'free':20} | "

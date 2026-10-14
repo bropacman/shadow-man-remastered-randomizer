@@ -59,7 +59,7 @@ import sys
 
 from .extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
 from .access_rules import R, GATE_VANILLA_SL, CAGEWAYS_ROUTES, PLAYROOMS_ROUTES
-from .constants import GATE_PRESETS
+from .constants import GATE_PRESETS, item_display_name
 
 # ── Player constant ────────────────────────────────────────────────────────────
 
@@ -975,7 +975,7 @@ def simulate_playthrough(
             source_loc = placement[loc.loc_key]
             placed_object = source_loc.object
             category = item_category.get(placed_object, "filler")
-            item_friendly = source_loc.friendly_name or placed_object
+            item_friendly = item_display_name(placed_object, getattr(source_loc, "category", None))
 
             if category == "soul":
                 if loc.level_region in LIVESIDE_REGIONS:
