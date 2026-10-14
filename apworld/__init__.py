@@ -169,23 +169,7 @@ class ShadowManWorld(World):
         uses it instead of re-randomizing whenever it's available.
         """
         self._ut_passthrough = None
-        # Diagnostic (2026-07-28, Jon: no crash/warning showed up in the
-        # console, so the earlier "unhandled exception" theory looks
-        # wrong -- next most likely explanation is re_gen_passthrough
-        # simply never getting populated the way this code assumes in the
-        # first place (still falling back to fresh randomization every
-        # regen, same as before this passthrough support existed at all).
-        # Unconditional so it fires on every generate_early() call --
-        # both the real one-time generation run and (if UT ever actually
-        # invokes it) each UT regen -- to see directly whether
-        # re_gen_passthrough exists at all and whether this world's game
-        # name is a key in it.
         _has_rgp = hasattr(self.multiworld, "re_gen_passthrough")
-        print(
-            f"  [UT-passthrough] hasattr(multiworld.re_gen_passthrough)="
-            f"{_has_rgp}, keys={list(self.multiworld.re_gen_passthrough.keys()) if _has_rgp else None}, "
-            f"this world's game={self.game!r}"
-        )
         if _has_rgp and self.game in self.multiworld.re_gen_passthrough:
             _pt = self.multiworld.re_gen_passthrough[self.game]
             # Defensive validation (2026-07-28, Jon's report: after this
