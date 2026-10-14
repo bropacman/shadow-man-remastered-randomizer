@@ -125,3 +125,22 @@ Exe patches. Save files. Existing location IDs.
 - B: Cadeaux as progression (see table).
 - C: shuffle the health reward: patch altar grant to 0, add 5 "Life
   Upgrade" items applied by the client (writes max health).
+
+## Appendix: other save flags that could become checks (post-release)
+
+Full CF flag table: 336 names, pointer table at file 0xCA1090 (stride 8),
+index = position. The client currently reads only `CF_GOT_LIGHTSOUL`, the
+Legion flags and `CF_CUSTOM00-04`. All of these are flag reads only, no
+RSC/exe patching. Grouped by how much logic they'd need:
+
+| Tier | Flags | Logic needed |
+|---|---|---|
+| Region access only | `CF_BEENTO_LEVEL00..25` (first visit per level) | the level's existing region entrance; low-value "free" checks |
+| Existing item rules | `CF_AP_ACCUM0..4_PLACED` (accumulators placed), `CF_RETRACTOR01..05USED` (schisms), `CF_DARKENG_STOPPED1..6` (pistons), `CF_ECLIPSER_0..2` | `x3_accumulator`, retractor rules, `pistons()`, eclipser parts + region; check interplay with Unique Retractor Keys |
+| Bosses not already fixed souls | `CF_YORT_DEAD`, `CF_SERAPHDEAD`, `CF_COPTERDEAD`/`CF_COPTER2DEAD`, `CF_NCOPTERDEAD`/`CF_NCOPTER2DEAD` | boss region + weapon assumptions |
+| Puzzles / world switches | padlocks (`CF_PRISONPADLOCK*`, `CF_UNDERGROUNDPADLOCKSHOT`, `CF_FL_PADLOCK`, `CF_MO_PADLOCK1/2`), `CF_TENEMENTPOWERON`, `CF_FL_FUSEBOX`, `CF_SLUICEGATE_OPEN`, `CF_PIPEHATCH*`, `CF_WASTELANDWINDMILL`, `CF_ZIGTRIALDONE`, `CF_G1_ZIGLEVEL1..6` | per-flag research: where it is, what it needs (gun, gad power, etc.) |
+| Teddy bears | `CF_TED_*` (19, one per level/hub) | find out what sets them first |
+| Skip | `CF_HM_*` hint messages, cutscene/dialogue flags, `CF_CUSTOM*`, difficulty/ironman | not player achievements |
+
+Before any of these: confirm in game that each flag flips on the expected
+action and survives save/reload, same as the altar flags.
