@@ -16,7 +16,8 @@ order. Wraps the existing scripts; it doesn't replace them.
   6. companion dist/ap_companion/shadow_man_ap_companion.exe (build_ap_gui.bat)
   7. standalone dist/standalone/shadow_man_randomizer.exe (build.bat)
   8. package  versioned release folders under dist/release/, plus the tag and
-              `gh release create` commands to run yourself
+              `gh release create` commands to run yourself; opens dist/release/
+              in Explorer when done (--no-open to skip)
 
 Builds package whatever is on disk, so uncommitted changes are listed
 before anything runs. Nothing is committed, pushed, tagged or published.
@@ -154,6 +155,7 @@ def package(done: list[str]) -> list[str]:
     """Copy fresh artifacts into versioned release folders; return the
     commands to tag and publish them (printed, never run)."""
     cmds: list[str] = []
+    RELEASE_DIR.mkdir(parents=True, exist_ok=True)
     ap_ver, sa_ver = read_version("ap"), read_version("standalone")
 
     ap_files = [ARTIFACTS[k] for k in ("apworld", "companion") if k in done]
@@ -203,6 +205,8 @@ def main() -> None:
     dll = ap.add_mutually_exclusive_group()
     dll.add_argument("--dll", action="store_true", help="force the DLL rebuild")
     dll.add_argument("--no-dll", action="store_true", help="never rebuild the DLL")
+    ap.add_argument("--no-open", action="store_true",
+                    help="don't open dist/release/ in Explorer when done")
     args = ap.parse_args()
     # Child scripts print ✓/→; the default Windows console codepage can't.
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
@@ -304,6 +308,11 @@ def main() -> None:
             print(f"  {c}")
     else:
         print("\nNot automated: commit/tag, sync_apworld_mirror.py, publishing (see RELEASING.md).")
+
+    if "package" in done:
+        print(f"\nRelease files: {RELEASE_DIR}")
+        if not args.no_open and hasattr(os, "startfile"):
+            os.startfile(RELEASE_DIR)
 
 
 if __name__ == "__main__":
