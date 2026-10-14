@@ -81,8 +81,11 @@ copies across both sides) — grep for every copy before calling a fix done.
   a store_true arg and resolves in `_resolve_random_config()`.
 - `ap_gui.py` enforces option combinations in embedded JS (`sync*Dependency`,
   `syncCadeauxConstraints`, `onGatePresetChange`). Hand-written YAMLs bypass
-  that; the AP world must enforce the same rules in `generate_early()` (scope:
-  `docs/scope_yaml_option_validation.md`). Keep GUI and backend rules in step.
+  that; the AP world enforces the same rules in
+  `ShadowManWorld._validate_options()` (`apworld/__init__.py`, called first in
+  `generate_early()`; scope: `docs/scope_yaml_option_validation.md`). New
+  option-combination rules go in both `ap_gui.py` and that method; keep their
+  behavior in step.
 - After editing embedded GUI JS, extract the `<script>` block and run
   `node --check` on it; `py_compile` doesn't see JS errors.
 

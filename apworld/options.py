@@ -85,6 +85,7 @@ class DeadsideGuns(Toggle):
 
 class EnemyMode(Choice):
     """
+    Only applies when Shuffle Enemies is on.
     Controls how enemies are shuffled when Shuffle Enemies is enabled.
     - difficulty:  Difficulty-weighted — harder enemies land in deeper areas.
     - full:        Draw from all enemy types globally.
@@ -99,6 +100,7 @@ class EnemyMode(Choice):
 
 class EnemyMixMovement(Toggle):
     """
+    Only applies when Shuffle Enemies is on.
     If enabled, enemy shuffle may swap enemies across movement types
     (ground/flying/swimming). Ignored unless Shuffle Enemies is on.
     """
@@ -108,6 +110,7 @@ class EnemyMixMovement(Toggle):
 
 class EnemyUncapCounts(Toggle):
     """
+    Only applies when Shuffle Enemies is on.
     If enabled, enemy shuffle draws each slot's replacement independently
     instead of preserving per-type counts — some enemy types may appear far
     more (or less) often than vanilla. Ignored unless Shuffle Enemies is on.
@@ -185,6 +188,7 @@ class ShuffleEnemiesSfx(Toggle):
 
 class CombineVoiceAndEnemySfx(Toggle):
     """
+    Only applies when Shuffle Voice Lines and Shuffle Enemy SFX are both on (turned off otherwise).
     If enabled, Shadow Man's voice lines and every enemy's sounds are
     shuffled together as one shared pool, instead of shuffling separately.
     Shadow Man can end up grunting with an enemy's pain sound, and an enemy
@@ -229,6 +233,7 @@ class AltarHealthGrant(Range):
 
 class AltarCadeauxRequired(Range):
     """
+    Fogometers Cadeaux Required is raised to at least 5x this value.
     Minimum Cadeaux required to interact with a life altar or the
     Fogometers door (cost per interaction always matches). Vanilla is 100.
     Does not affect AP logic — cadeaux_666 in access_rules.py is currently
@@ -242,6 +247,7 @@ class AltarCadeauxRequired(Range):
 
 class FogometersCadeauxRequired(Range):
     """
+    Automatically raised to at least 5x Altar Cadeaux Required.
     Total Cadeaux required to open the Fogometers door. Vanilla is 666.
     Clamped to at least 5x Altar Cadeaux Required. EXE patch — applied by
     running apply_ap_seed.py (shadow-man-remastered-randomizer repo)
@@ -266,6 +272,7 @@ class FogometersCadeauxRequired(Range):
 
 class CadeauxGatedContent(Toggle):
     """
+    Only applies when Cadeauxsanity is on (turned off otherwise).
     Controls whether the Fogometers Light Soul location (gated behind
     SL10 + collecting Fogometers Cadeaux Required worth of Cadeaux) exists
     as an AP check at all.
@@ -424,6 +431,7 @@ SOUL_LOGIC_BUFFER_VALUES: dict[str, int] = {
 
 class MaxGateSL(Range):
     """
+    Ignored with the story gate preset.
     Caps the highest Soul Level a shuffled coffin gate can require.
     10 = no cap (vanilla SL pool, top gate needs all 120 souls — zero slack;
     generation may fail and retry). Lower values leave slack between the
@@ -439,6 +447,7 @@ class MaxGateSL(Range):
 
 class OpenGatesN(Range):
     """
+    Ignored with the story gate preset.
     Overrides the gate preset's own "N gates open" count, forcing the first
     N coffin gates (a fixed linear order: Marrow, Wasteland, Asylum, Temple,
     Cageways, Playrooms) to SL0 regardless of which preset is chosen.
@@ -490,6 +499,7 @@ class ProgressionBalancing(Range):
 
 class Cadeauxsanity(Toggle):
     """
+    Required for Fog Door Check and Cadeaux Bundle Size to have any effect.
     Controls whether cadeaux (statue/altar) locations exist as AP checks at
     all.
 
@@ -521,6 +531,7 @@ class Cadeauxsanity(Toggle):
 
 class CadeauxBundleSize(Range):
     """
+    Only applies when Cadeauxsanity is on (reset to 1 otherwise).
     Groups cadeaux pickups into a single AP check instead of one check per
     cadeaux. Only meaningful when Cadeauxsanity is also on (cadeaux
     locations don't exist as AP checks at all otherwise).
@@ -590,6 +601,7 @@ class PistonCombos(Toggle):
 
 class UniqueRetractorKeys(Toggle):
     """
+    Replaces any starting "Retractor" with unique Retractor keys.
     Splits the 5 Retractors (the items that let you teleport from Deadside
     to a liveside region through its schism) into 5 distinctly-named items
     -- one per liveside region -- instead of one fungible "Retractor" stack.
@@ -613,6 +625,7 @@ class UniqueRetractorKeys(Toggle):
 
 class TrapBonusCount(Range):
     """
+    Needs at least one Trap/Bonus category enabled (Secrets is enabled if none are).
     How many "Trap/Bonus" filler items are added to the pool this seed.
 
     Renamed from SecretTrapCount (2026-08-03) when this system grew past
@@ -657,6 +670,7 @@ class TrapBonusCount(Range):
 
 class TrapBonusMode(Choice):
     """
+    Only applies when Trap/Bonus Count is above 0.
     Controls how long a Trap/Bonus's effect lasts once received, for the
     categories where "how long" is meaningful — secret, voodoo hold, and
     ammo hold. Poison and heal ignore this entirely (they're one-shot
@@ -686,6 +700,7 @@ class TrapBonusMode(Choice):
 
 class TrapBonusDuration(Range):
     """
+    Only applies when Trap/Bonus Count is above 0.
     Seconds a temporary Trap/Bonus effect lasts before automatically
     reverting (see Trap/Bonus Mode) — applies to secret, voodoo hold, and
     ammo hold. Only matters when a given trap actually goes temporary.
@@ -700,6 +715,7 @@ class TrapBonusDuration(Range):
 
 class TrapBonusSecretsEnabled(Toggle):
     """
+    Only applies when Trap/Bonus Count is above 0; forced on if all categories are off.
     If enabled, received Trap/Bonus items can roll a random cosmetic
     secret effect (Big Head, Wireframe, Disco Lights, etc.). On by default
     to match this category's original (Secret Trap) behavior.
@@ -710,6 +726,7 @@ class TrapBonusSecretsEnabled(Toggle):
 
 class TrapBonusHealthEnabled(Toggle):
     """
+    Only applies when Trap/Bonus Count is above 0.
     If enabled, received Trap/Bonus items can roll poison (drains your
     whole health pool over ~1 min, ending in a real death if you don't
     find health first) or a gradual heal (restores well past full over
@@ -721,6 +738,7 @@ class TrapBonusHealthEnabled(Toggle):
 
 class TrapBonusVoodooEnabled(Toggle):
     """
+    Only applies when Trap/Bonus Count is above 0.
     If enabled, received Trap/Bonus items can roll an instant voodoo
     power drain to 0, or pin voodoo power at its live cap for a while.
     """
@@ -730,6 +748,7 @@ class TrapBonusVoodooEnabled(Toggle):
 
 class TrapBonusAmmoEnabled(Toggle):
     """
+    Only applies when Trap/Bonus Count is above 0.
     If enabled, received Trap/Bonus items can roll an instant ammo drain
     to 0 (Shotgun/Violator/9mm all at once), or fill and hold all three
     at max for a while.
@@ -740,6 +759,7 @@ class TrapBonusAmmoEnabled(Toggle):
 
 class DeathLinkThreshold(Range):
     """
+    Only applies when Death Link is on.
     How many of your own deaths it takes to send one Death Link. 1
     (default) sends on every death — the same behavior as before this
     option existed. 5 (the max) means only every 5th death of yours actually
