@@ -90,3 +90,9 @@ reference/
 
 # ── overlay_dll build output (CMake/MSVC artifacts, deps, IDE cache) ──
 overlay_dll/build/
+
+# ── Local working files ───────────────────────────────────────────
+# Location-naming logs (tools/ce_location_namer.lua); merged into
+# data/locations.csv by tools/apply_naming_log.py, never shipped.
+data/naming_log*.csv
+data/naming_log*.csv.bak
