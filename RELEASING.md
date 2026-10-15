@@ -46,6 +46,16 @@ mirror-sync and `gh release create` commands; it never runs them.
   `.apworld` keeps its name, since AP loads a world by file name) and
   `dist/release/shadow-man-randomizer-vX.Y.Z.zip` (exe + README + LICENSE).
 
+### Then publish: publish_release.py
+
+After building and testing, `python publish_release.py --ap --notes-ap <notes.md>`
+syncs `apworld/` to the mirror, tags `apworld-vX.Y.Z` here and creates the
+mirror release with the `.apworld` and Companion exe. `--standalone
+--notes-standalone <notes.md> --title "<headline>"` tags `vX.Y.Z` and creates
+the release here with the standalone exe. It checks first (on main, clean,
+matches origin, files built, versions match, release not already out),
+shows the plan and asks before publishing. `--dry-run` stops after the plan.
+
 ## Before every release: check for drift
 
 This repo and the Archipelago world checkout keep independent, hand-copied
