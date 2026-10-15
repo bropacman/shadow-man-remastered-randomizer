@@ -1,8 +1,11 @@
+# Everything both exe builds need. build.bat and build_ap_gui.bat both
+# install from this file, so a new dependency goes here once.
+pyinstaller
+pywebview
 PyYAML>=6.0
 
 # Assemble and verify the exe patches that add code (Keystone assembles,
 # Capstone re-checks): Unique Retractor Keys in both builds, plus the
-# Trap/Bonus secrets poller in the AP Companion. Both PyInstaller specs
-# bundle their native .dlls with collect_dynamic_libs().
+# Trap/Bonus secrets poller in the AP Companion.
 keystone-engine>=0.9.2
 capstone>=5.0.0
