@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gad_pickup_patch import lookup_type_id  # noqa: E402  (reuses the existing scanner)
+from exe_patches.gad_pickup_patch import lookup_type_id  # noqa: E402  (reuses the existing scanner)
 
 LORE_NAMES = [
     "RSC_X_BOOK_OF_SHADOWS",

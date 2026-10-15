@@ -47,17 +47,23 @@ mounted files; confirm content with the Read tool, not bash `grep`/`sed`.
 Several files exist both at repo root (standalone) and in `apworld/`, and
 are kept in sync by hand, not by import:
 
-- Near-identical pairs: EXE patch modules (`death_penalty_patch.py`,
+- Near-identical pairs: EXE patch modules (root copies live in
+  `exe_patches/`, AP copies flat in `apworld/`: `death_penalty_patch.py`,
   `soul_threshold_patch.py`, `health_patch.py`, `cadeaux_patch.py`,
   `gad_pickup_patch.py`, …), `kpf_handler.py`, randomizer modules.
   `python tools/check_apworld_sync.py` reports drift (defaults to
   `apworld/`; `--diff <file>` for a full diff). `apworld/gad_pickup_patch.py`
   inlines its own RSC-record injection because `rsc_utils.py` isn't
   shipped in the apworld — permanent known "drift", keep it equivalent.
+- Inside `exe_patches/`, modules import each other relatively
+  (`from .death_penalty_patch import …`), matching the AP copies so the
+  drift checker sees no difference; root modules like `rsc_utils` stay
+  absolute. Callers use `from exe_patches.X import …`; a module's own CLI
+  runs as `python -m exe_patches.X` from the repo root.
 - Deliberately divergent pairs: `fill.py`, `access_rules.py`, `regions.py`,
   `constants.py`, `locations.py`. The **root `fill.py` is canonical** for
   `CHECKABLE_LOCS`/`UNVERIFIED_LOCS` filtering.
-- `dark_engine_patch.py` and `randomizers/entrance_randomizer.py` are
+- `exe_patches/dark_engine_patch.py` and `randomizers/entrance_randomizer.py` are
   imported directly by `ap_patcher.py` — not duplicated.
 - `data/locations.csv` and `apworld/data/locations.csv` are separate copies
   kept identical (see §5).

@@ -63,7 +63,7 @@ from fill import UNVERIFIED_LOCS, CHECKABLE_LOCS
 from randomizers.entrance_randomizer import (
     UNIFIED_TRANSITIONS, UnifiedShuffle, apply_unified_shuffle, unified_spoiler_section,
 )
-from dark_engine_patch import (
+from exe_patches.dark_engine_patch import (
     randomize_dark_engine, apply_dark_engine_patch, extract_and_patch_journal,
     JOURNAL_MUP_PATH, PISTON_NAMES, VANILLA_TABLE as DARK_ENGINE_VANILLA_TABLE,
 )
@@ -1725,7 +1725,7 @@ def run_patcher(
     # Computed here (not inside the Step 7 EXE-patch block) so it's available
     # for the Step 8 JSON regardless of whether thoth_x64.exe was found.
 
-    from soul_threshold_patch import randomize_soul_thresholds, apply_soul_threshold_patch
+    from exe_patches.soul_threshold_patch import randomize_soul_thresholds, apply_soul_threshold_patch
 
     _st_mode = config.get("soul_threshold_mode", "off")
     sl_thresholds_result = None
@@ -1788,9 +1788,9 @@ def run_patcher(
         patched = src.parent / "thoth_x64_patched.exe"
         shutil.copy2(str(src), str(patched))
 
-        from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
-        from save_path_patch import apply_save_path_patch
-        from instant_pickup_patch import apply_instant_pickup_patch
+        from exe_patches.gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
+        from exe_patches.save_path_patch import apply_save_path_patch
+        from exe_patches.instant_pickup_patch import apply_instant_pickup_patch
         apply_prison_keycard_patch(str(patched))
 
         # Always on, unconditional — removes the camera-lock/DOF-blur/player
@@ -1827,10 +1827,10 @@ def run_patcher(
         print(f"\nEXE: patches written to {patched.name}")
 
         # ── Tier 2: cadeaux / health / death penalty / soul threshold ────────
-        from cadeaux_patch import apply_cadeau_step_patch, patch_levels_txt_launch_validator
-        from health_patch import apply_health_patch
-        from death_penalty_patch import apply_death_penalty_patch
-        from sprint_patch import apply_sprint_patch
+        from exe_patches.cadeaux_patch import apply_cadeau_step_patch, patch_levels_txt_launch_validator
+        from exe_patches.health_patch import apply_health_patch
+        from exe_patches.death_penalty_patch import apply_death_penalty_patch
+        from exe_patches.sprint_patch import apply_sprint_patch
 
         # DISABLED (2026-07-22 — user report): NOPing the two JNZ checks
         # here made the game launch fine, but opening the in-game inventory
@@ -1918,7 +1918,7 @@ def run_patcher(
         # nothing in ap_patcher.py's own pipeline.
         if (int(config.get("trap_bonus_count", 0)) > 0
                 and config.get("trap_bonus_secrets_enabled", True)):
-            import secret_mode_section_patch
+            from exe_patches import secret_mode_section_patch
             try:
                 secret_mode_section_patch.apply_patch(str(patched), dry_run=False)
                 print("EXE: Trap/Bonus (secrets) live-apply poller patched in.")
@@ -1962,7 +1962,7 @@ def run_patcher(
         # unique_retractor_keys_patch.py for the full mechanism.
         if config.get("unique_retractor_keys", False):
             try:
-                import unique_retractor_keys_patch
+                from exe_patches import unique_retractor_keys_patch
                 _retractor_scanned_positions = {
                     rec.loc_key: (rec.x, rec.y, rec.z, int(rec.zone))
                     for _recs in records_by_folder.values()
@@ -1983,7 +1983,7 @@ def run_patcher(
                 # gets its own try/except so a tracker-page failure never
                 # affects retractor enforcement itself.
                 try:
-                    import retractor_folder_log_patch
+                    from exe_patches import retractor_folder_log_patch
                     retractor_folder_log_patch.apply_patch(str(patched), dry_run=False)
                     print("EXE: Five Keys tracker — Nettie's folder now tracks each retractor live")
 
@@ -2036,7 +2036,7 @@ def run_patcher(
     # unconditional here rather than nested inside the thoth_x64.exe-gated
     # block above (mirrors the standalone patcher.py's own placement).
     if config.get("deadside_guns", False):
-        from kexengine_cfg_patch import apply_deadside_guns_toggle
+        from exe_patches.kexengine_cfg_patch import apply_deadside_guns_toggle
         apply_deadside_guns_toggle(True)
 
     # ── Step 8: Gate remap JSON ───────────────────────────────────────────────

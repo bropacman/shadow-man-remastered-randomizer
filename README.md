@@ -241,16 +241,20 @@ shadow-man-remastered-randomizer/
 ├── BaseClasses.py                ← Lightweight state/region base classes
 ├── constants.py                  ← File lists, level folders, EXE item type IDs
 ├── kpf_handler.py                ← KPF archive extraction and mod packing
+├── setup_gad_records.py          ← Injects RSC_X_GAD_PICKUP records into temples
 │
-├── cadeaux_patch.py              ← EXE patch for altar/door cadeaux requirement and cost
-├── health_patch.py               ← EXE patch for starting max health and altar health grant
-├── dark_engine_patch.py          ← Randomizes dark engine piston combo values; patches in-game journal
-├── soul_threshold_patch.py       ← EXE patch for SL1–SL10 soul count requirements
-├── death_penalty_patch.py        ← EXE code-cave patch for per-death health reduction
+├── exe_patches/                  ← Patches applied to a fresh copy of thoth_x64.exe
+│   ├── cadeaux_patch.py          ← Altar/door cadeaux requirement and cost
+│   ├── health_patch.py           ← Starting max health and altar health grant
+│   ├── dark_engine_patch.py      ← Randomizes dark engine piston combos; patches the journal
+│   ├── soul_threshold_patch.py   ← SL1–SL10 soul count requirements
+│   ├── death_penalty_patch.py    ← Code cave for per-death health reduction
+│   ├── gad_pickup_patch.py       ← Gad pickup type_id dispatch
+│   └── …                         ← sprint, save path, unique retractor keys, secret mode, etc.
 │
 ├── patchers/
-│   ├── gad_pickup_patch.py       ← EXE patch for gad pickup type_id dispatch
-│   └── setup_gad_records.py      ← Injects RSC_X_GAD_PICKUP records into temples
+│   ├── levels_txt_patcher.py     ← levels.txt map tracker directives
+│   └── loc_english_patcher.py    ← Map tracker labels in loc_english.txt
 │
 ├── randomizers/
 │   ├── entrance_randomizer.py    ← Hub portal shuffle logic (deadside_only / cross_hub)

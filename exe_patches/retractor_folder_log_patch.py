@@ -202,7 +202,7 @@ def _make_jmp_hook(hook_va: int, vanilla: bytes, target_va: int) -> bytes:
 
 
 def _va_to_text_file(va: int) -> int:
-    from death_penalty_patch import SECTION_DELTA
+    from .death_penalty_patch import SECTION_DELTA
     return va - IMAGE_BASE - SECTION_DELTA
 
 

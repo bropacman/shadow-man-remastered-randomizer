@@ -60,18 +60,18 @@ DEFAULT_AP_DIR = "apworld"
 
 # (path relative to this repo's root, path relative to worlds/shadowman/)
 NEAR_IDENTICAL: list[tuple[str, str]] = [
-    ("death_penalty_patch.py", "death_penalty_patch.py"),
+    ("exe_patches/death_penalty_patch.py", "death_penalty_patch.py"),
     ("extracted_enemy_locations.py", "extracted_enemy_locations.py"),
     ("extracted_locations.py", "extracted_locations.py"),
-    ("gad_pickup_patch.py", "gad_pickup_patch.py"),
-    ("health_patch.py", "health_patch.py"),
+    ("exe_patches/gad_pickup_patch.py", "gad_pickup_patch.py"),
+    ("exe_patches/health_patch.py", "health_patch.py"),
     ("patchers/levels_txt_patcher.py", "levels_txt_patcher.py"),
     ("randomizers/ambient_randomizer.py", "ambient_randomizer.py"),
     ("randomizers/enemy_randomizer.py", "enemy_randomizer.py"),
     ("randomizers/music_randomizer.py", "music_randomizer.py"),
     ("randomizers/sfx_randomizer.py", "sfx_randomizer.py"),
     ("randomizers/sky_randomizer.py", "sky_randomizer.py"),
-    ("sprint_patch.py", "sprint_patch.py"),
+    ("exe_patches/sprint_patch.py", "sprint_patch.py"),
 ]
 
 # Files in NEAR_IDENTICAL that are permanently, deliberately different
@@ -105,15 +105,15 @@ KNOWN_DIVERGENCE_BASELINE: dict[str, int] = {
 
 EXPECTED_DIVERGENT: list[tuple[str, str]] = [
     ("access_rules.py", "access_rules.py"),
-    ("cadeaux_patch.py", "cadeaux_patch.py"),
+    ("exe_patches/cadeaux_patch.py", "cadeaux_patch.py"),
     ("constants.py", "constants.py"),
     ("fill.py", "fill.py"),
     ("kpf_handler.py", "kpf_handler.py"),
     ("locations.py", "locations.py"),
     ("regions.py", "regions.py"),
-    ("save_path_patch.py", "save_path_patch.py"),
+    ("exe_patches/save_path_patch.py", "save_path_patch.py"),
     ("setup_gad_records.py", "setup_gad_records.py"),
-    ("soul_threshold_patch.py", "soul_threshold_patch.py"),
+    ("exe_patches/soul_threshold_patch.py", "soul_threshold_patch.py"),
 ]
 
 ALL_PAIRS = {name: (repo_rel, ap_rel, "near-identical")
