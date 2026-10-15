@@ -7,6 +7,7 @@ Shadow Man Remastered Archipelago World.
 from __future__ import annotations
 
 import json
+import logging
 import zipfile
 from pathlib import Path
 from typing import Dict, Any
@@ -25,7 +26,9 @@ from .regions import create_regions, DEADSIDE_PORTAL_FILES, ASYLUM_ENGINE_BLOCK,
 from .items import ShadowManItem, item_table, STACKABLE_COUNTS, AP_ITEM_TO_RSC, _UNIQUE_ITEM_RSC_NAMES, \
     is_cadeaux_item, cadeaux_bundle_item_name, CADEAUX_ITEM_NAMES, is_trap_bonus_item, \
     RETRACTOR_KEY_ITEM_NAMES
-from .locations import ShadowManLocation, location_table
+from .locations import ShadowManLocation, location_table, FRIENDLY_NAMES
+from Options import OptionGroup
+from . import options as _opts
 from .options import ShadowManOptions
 
 
@@ -80,6 +83,30 @@ class ShadowManWebWorld(WebWorld):
         authors=["you"],
     )]
 
+    option_groups = [
+        OptionGroup("Cadeaux", [
+            _opts.Cadeauxsanity, _opts.CadeauxBundleSize, _opts.CadeauxGatedContent,
+            _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
+        ]),
+        OptionGroup("Gates", [
+            _opts.GatePreset, _opts.MaxGateSL, _opts.OpenGatesN,
+        ]),
+        OptionGroup("Enemies", [
+            _opts.ShuffleEnemies, _opts.EnemyMode, _opts.EnemyMixMovement,
+            _opts.EnemyUncapCounts, _opts.DeadsideGuns, _opts.ShuffleTrueForms,
+        ]),
+        OptionGroup("Audio", [
+            _opts.ShuffleMusic, _opts.ShuffleVoices, _opts.ShuffleWeaponsSfx,
+            _opts.ShuffleEnemiesSfx, _opts.CombineVoiceAndEnemySfx,
+        ]),
+        OptionGroup("Traps & Bonuses", [
+            _opts.TrapBonusCount, _opts.TrapBonusMode, _opts.TrapBonusDuration,
+            _opts.TrapBonusSecretsEnabled, _opts.TrapBonusHealthEnabled,
+            _opts.TrapBonusVoodooEnabled, _opts.TrapBonusAmmoEnabled,
+        ]),
+        OptionGroup("Retractors", [_opts.UniqueRetractorKeys]),
+    ]
+
 
 # ── World ─────────────────────────────────────────────────────────────────────
 
@@ -104,8 +131,12 @@ class ShadowManWorld(World):
     item_name_to_id:     Dict[str, int] = {
         name: data.code for name, data in item_table.items()
     }
+    # Keyed by the friendly display name the Locations are created with
+    # (locations.py's FRIENDLY_NAMES), not the loc_key: this table is the
+    # datapackage, which the web tracker, hints and YAML location options
+    # all read names from.
     location_name_to_id: Dict[str, int] = {
-        name: data.code for name, data in location_table.items()
+        FRIENDLY_NAMES[key]: data.code for key, data in location_table.items()
     }
     # Cadeaux Bundle Size (2026-07-27): "Cadeaux Bundle x{N}" (see items.py)
     # is a distinct concrete item per denomination, since the bundle's
@@ -139,6 +170,95 @@ class ShadowManWorld(World):
     # uncapped option value in slot_data/the EXE patch).
     cadeaux_required_logic: int
 
+    # ── Option validation ─────────────────────────────────────────────────────
+
+    def _validate_options(self) -> None:
+        """
+        Enforce option-combination rules that ap_gui.py's embedded JS applies
+        but hand-written / Options Creator YAMLs bypass. Runs first in
+        generate_early(), on resolved values (random already rolled).
+        Corrects in place and logs a warning naming the player; every rule
+        is idempotent, so a Universal Tracker re-generation is harmless.
+        New option-combination rules go here AND in ap_gui.py.
+        """
+        o = self.options
+        quiet = getattr(self.multiworld, "re_gen_passthrough", None) is not None             and self.game in self.multiworld.re_gen_passthrough
+
+        def warn(msg: str) -> None:
+            if not quiet:
+                logging.warning(f"Shadow Man ({self.player_name}): {msg}")
+
+        def non_default(opt) -> bool:
+            return opt.value != opt.default
+
+        # 1. Fogometers door floor (mirrors cadeaux_patch.py's 5x altar floor).
+        _floor = min(666, 5 * int(o.altar_cadeaux_required))
+        if int(o.fogometers_cadeaux_required) < _floor:
+            warn(f"fogometers_cadeaux_required {int(o.fogometers_cadeaux_required)} "
+                 f"raised to {_floor} (must be >= 5x altar_cadeaux_required).")
+            o.fogometers_cadeaux_required.value = _floor
+
+        # 2/3. Cadeaux options that only mean something with cadeauxsanity.
+        if not bool(o.cadeauxsanity):
+            if bool(o.cadeaux_gated_content):
+                warn("cadeaux_gated_content turned off (requires cadeauxsanity).")
+                o.cadeaux_gated_content.value = 0
+            if int(o.cadeaux_bundle_size) > 1:
+                warn(f"cadeaux_bundle_size {int(o.cadeaux_bundle_size)} set to 1 "
+                     f"(requires cadeauxsanity).")
+                o.cadeaux_bundle_size.value = 1
+
+        # 4. Flat "Retractor" can't be given when unique keys are on.
+        if bool(o.unique_retractor_keys):
+            _dicts = [("start_inventory", o.start_inventory.value)]
+            _pool = getattr(o, "start_inventory_from_pool", None)
+            if _pool is not None:
+                _dicts.append(("start_inventory_from_pool", _pool.value))
+            _requested = sum(d.get("Retractor", 0) for _, d in _dicts)
+            if _requested > 0:
+                _have = {k for _, d in _dicts for k in d
+                         if k in RETRACTOR_KEY_ITEM_NAMES.values()}
+                _avail = [k for k in RETRACTOR_KEY_ITEM_NAMES.values() if k not in _have]
+                _n = min(_requested, len(_avail))
+                _picked = self.random.sample(_avail, _n)
+                if _n < _requested:
+                    warn(f"{_requested} starting Retractors requested but only {_n} "
+                         f"distinct Retractor keys remain; capped.")
+                for _optname, d in _dicts:
+                    _cnt = d.pop("Retractor", 0)
+                    for _ in range(_cnt):
+                        if _picked:
+                            d[_picked.pop(0)] = 1
+                warn("starting 'Retractor' replaced with unique Retractor keys "
+                     "(unique_retractor_keys is on).")
+
+        # 5. Trap/Bonus count with no categories enabled.
+        if int(o.trap_bonus_count) > 0 and not (
+                bool(o.trap_bonus_secrets_enabled) or bool(o.trap_bonus_health_enabled)
+                or bool(o.trap_bonus_voodoo_enabled) or bool(o.trap_bonus_ammo_enabled)):
+            warn("trap_bonus_secrets_enabled turned on (trap_bonus_count > 0 but "
+                 "every trap_bonus_*_enabled category was off).")
+            o.trap_bonus_secrets_enabled.value = 1
+
+        # 6. Combined SFX pool needs both source shuffles.
+        if bool(o.combine_voice_and_enemy_sfx) and not (
+                bool(o.shuffle_voices) and bool(o.shuffle_enemies_sfx)):
+            warn("combine_voice_and_enemy_sfx turned off (requires shuffle_voices "
+                 "and shuffle_enemies_sfx).")
+            o.combine_voice_and_enemy_sfx.value = 0
+
+        # 7-9. Ignored-option warnings (no correction).
+        if o.gate_preset.current_key == "story" and (
+                non_default(o.max_gate_sl) or non_default(o.open_gates_n)):
+            warn("max_gate_sl / open_gates_n are ignored with the story gate preset.")
+        if not bool(o.shuffle_enemies) and (
+                non_default(o.enemy_mode) or non_default(o.enemy_mix_movement)
+                or non_default(o.enemy_uncap_counts)):
+            warn("enemy_mode / enemy_mix_movement / enemy_uncap_counts are ignored "
+                 "because shuffle_enemies is off.")
+        if not bool(o.death_link) and int(o.death_link_threshold) != 1:
+            warn("death_link_threshold is ignored because death_link is off.")
+
     # ── Early generation ──────────────────────────────────────────────────────
 
     def generate_early(self) -> None:
@@ -168,24 +288,9 @@ class ShadowManWorld(World):
         passthrough mechanism, when running under UT; each block below
         uses it instead of re-randomizing whenever it's available.
         """
+        self._validate_options()
         self._ut_passthrough = None
-        # Diagnostic (2026-07-28, Jon: no crash/warning showed up in the
-        # console, so the earlier "unhandled exception" theory looks
-        # wrong -- next most likely explanation is re_gen_passthrough
-        # simply never getting populated the way this code assumes in the
-        # first place (still falling back to fresh randomization every
-        # regen, same as before this passthrough support existed at all).
-        # Unconditional so it fires on every generate_early() call --
-        # both the real one-time generation run and (if UT ever actually
-        # invokes it) each UT regen -- to see directly whether
-        # re_gen_passthrough exists at all and whether this world's game
-        # name is a key in it.
         _has_rgp = hasattr(self.multiworld, "re_gen_passthrough")
-        print(
-            f"  [UT-passthrough] hasattr(multiworld.re_gen_passthrough)="
-            f"{_has_rgp}, keys={list(self.multiworld.re_gen_passthrough.keys()) if _has_rgp else None}, "
-            f"this world's game={self.game!r}"
-        )
         if _has_rgp and self.game in self.multiworld.re_gen_passthrough:
             _pt = self.multiworld.re_gen_passthrough[self.game]
             # Defensive validation (2026-07-28, Jon's report: after this

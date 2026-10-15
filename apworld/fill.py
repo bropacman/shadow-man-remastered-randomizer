@@ -59,7 +59,7 @@ import sys
 
 from .extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
 from .access_rules import R, GATE_VANILLA_SL, CAGEWAYS_ROUTES, PLAYROOMS_ROUTES
-from .constants import GATE_PRESETS
+from .constants import GATE_PRESETS, item_display_name
 
 # ── Player constant ────────────────────────────────────────────────────────────
 
@@ -975,7 +975,7 @@ def simulate_playthrough(
             source_loc = placement[loc.loc_key]
             placed_object = source_loc.object
             category = item_category.get(placed_object, "filler")
-            item_friendly = source_loc.friendly_name or placed_object
+            item_friendly = item_display_name(placed_object, getattr(source_loc, "category", None))
 
             if category == "soul":
                 if loc.level_region in LIVESIDE_REGIONS:
@@ -1228,7 +1228,24 @@ def assumed_fill(
     # Soulswap fallback: when any non-soul item has no valid slot, swap it with
     # the next soul in the queue to grow the reachable set, then re-queue the
     # blocked item. ENG_KEY is also moved forward since it unblocks many slots.
-    fallback_soul_swaps = fallback_no_slot = 0
+    #
+    # Displacement fallback: the prog/WLB slot count equals the prog/WLB item
+    # count (zero slack), so logic-neutral items (weapons/lore/bonus/prisms —
+    # nothing in access_rules checks them) placed early can take the last
+    # reachable slots. A key item whose remaining slots all sit behind itself
+    # (e.g. Calabash with only CALABASH-gated slots left) then has nowhere to
+    # go once the souls run out, and every item after it fails too. Instead,
+    # evict a neutral item from a slot that's valid right now, put the key
+    # item there, and re-queue the neutral item at the end. Moving a neutral
+    # item never changes reachability, so the current sim stays valid. If no
+    # neutral item is in a usable slot, a placed logic item may be evicted
+    # instead, provided a re-sim shows nothing already placed becomes
+    # unreachable (see the Displacement block in the sweep).
+    fallback_soul_swaps = fallback_no_slot = fallback_displacements = fallback_deferrals = 0
+    MAX_DISPLACEMENTS = 200
+
+    def _logic_neutral(it) -> bool:
+        return getattr(it, "category", None) in {"weapon", "lore", "bonus", "prism"}
 
     for i, item in enumerate(item_pool):
 
@@ -1287,11 +1304,71 @@ def assumed_fill(
                     break
             candidates = _candidates()
 
+        # ── Displacement ───────────────────────────────────────────────────────
+        # Prefer evicting a neutral item (free: reachability can't change).
+        # Failing that, evict a placed logic item (e.g. a retractor sitting in
+        # the last open slot while ENG_KEY waits) — but only if a re-sim with
+        # the swap applied keeps every placed slot reachable, so the
+        # forward-fill invariant holds. Capped so key items can't evict each
+        # other forever.
+        if (not candidates and not _logic_neutral(item)
+                and fallback_displacements < MAX_DISPLACEMENTS):
+            displaceable = [
+                loc for loc in candidate_pool
+                if loc.loc_key in placement
+                   and placement[loc.loc_key].category != "soul"
+                   and loc.loc_key in reached_keys
+                   and not _gate_reserved(loc, st)
+                   and _slot_ok(loc)
+                   and _liveside_ok(loc)
+            ]
+            victim = _weighted_choice(
+                [loc for loc in displaceable if _logic_neutral(placement[loc.loc_key])]
+            )
+            if victim is None:
+                logic_victims = [
+                    loc for loc in displaceable
+                    if not _logic_neutral(placement[loc.loc_key])
+                ]
+                rng.shuffle(logic_victims)
+                for loc in logic_victims:
+                    trial = dict(placement)
+                    trial[loc.loc_key] = item
+                    trial_keys, _, _ = simulate_playthrough(
+                        trial,
+                        candidate_pool + active_fixed_soul_locs,
+                        level_rules,
+                        shuffle_gad_temples=shuffle_gad_temples,
+                        item_category=item_category,
+                    )
+                    if all(k in trial_keys for k in trial):
+                        victim = loc
+                        break
+            if victim is not None:
+                fallback_displacements += 1
+                displaced = placement.pop(victim.loc_key)
+                unplaced.add(victim.loc_key)
+                item_pool.append(displaced)
+                candidates = [victim]
+                if verbose:
+                    print(f"   !!  No slot for {item.object!r} -- displacing "
+                          f"{displaced.object!r}, re-queued at end")
+
+        # ── Deferral ───────────────────────────────────────────────────────────
+        # A neutral item with no slot is re-queued behind the remaining key
+        # items, which open new slots (or displace into existing ones).
+        if not candidates and _logic_neutral(item) and any(
+            not _logic_neutral(it) for it in item_pool[i + 1:]
+        ):
+            fallback_deferrals += 1
+            item_pool.append(item)
+            continue
+
         # ── No slot ────────────────────────────────────────────────────────────
         chosen = _weighted_choice(candidates)
         if chosen is None:
             fallback_no_slot += 1
-            print(f"   ❌  No slot for {item.object!r} (cat={item.category}) "
+            print(f"   [X]  No slot for {item.object!r} (cat={item.category}) "
                   f"soul_count={st.soul_count}")
             continue
         placement[chosen.loc_key] = item
@@ -1307,6 +1384,8 @@ def assumed_fill(
     if verbose:
         print("── PLACEMENT COMPLETE ──\n")
         print(f"  Fallback soul swaps : {fallback_soul_swaps}")
+        print(f"  Displacements       : {fallback_displacements}")
+        print(f"  Deferrals           : {fallback_deferrals}")
         print(f"  No slot failures    : {fallback_no_slot}")
 
         loc_by_key = {loc.loc_key: loc for loc in candidate_pool}
@@ -1432,6 +1511,10 @@ def validate_fill(
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # Verbose/spoiler output uses emoji; a piped stdout on Windows defaults to
+    # cp1252 and would raise UnicodeEncodeError without PYTHONIOENCODING=utf-8.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     import argparse, time
 
     parser = argparse.ArgumentParser()

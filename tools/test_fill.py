@@ -1,7 +1,8 @@
 """
 tools/test_fill.py
 ------------------
-Stress-tests assumed_fill over N random seeds and reports:
+Stress-tests assumed_fill over N random seeds (each placement is checked
+with validate_fill; unbeatable seeds are reported as FAIL) and reports:
   - Item placement frequency  -- which regions each key item lands in
   - Sphere depth stats        -- which sphere each key item becomes reachable
     (opt-in with --depth; adds one simulate_playthrough pass per seed)
@@ -66,9 +67,10 @@ def _run_seed(args: tuple[int, dict[str, Any]]) -> dict[str, Any]:
 
     import fill as _fill_module  # noqa: F401  (imported for side-effect / isolation)
     from fill import (
-        assumed_fill, simulate_playthrough,
-        build_gate_rules, CHECKABLE_LOCS, FIXED_SOUL_LOCS,
+        assumed_fill, validate_fill, simulate_playthrough,
+        CHECKABLE_LOCS, FIXED_SOUL_LOCS,
     )
+    import regions as _regions
 
     result: dict[str, Any] = {
         "seed":         seed,
@@ -98,7 +100,7 @@ def _run_seed(args: tuple[int, dict[str, Any]]) -> dict[str, Any]:
         entrance_shuffle = shuffle_unified(rng, mode=cfg["entrance_mode"])
 
     try:
-        placement, gate_remap = assumed_fill(
+        placement, gate_remap, retractor_level_assignment = assumed_fill(
             rng=rng,
             verbose=False,
             progression_balancing=cfg["progression_balancing"],
@@ -113,8 +115,20 @@ def _run_seed(args: tuple[int, dict[str, Any]]) -> dict[str, Any]:
             true_form_loc_remap=true_form_loc_remap,
             entrance_shuffle=entrance_shuffle,
         )
+        ok, report = validate_fill(
+            placement,
+            gate_remap=gate_remap,
+            starting_item=cfg["starting_item"],
+            true_form_loc_remap=true_form_loc_remap,
+            entrance_shuffle=entrance_shuffle,
+            retractor_level_assignment=retractor_level_assignment,
+        )
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = f"{type(exc).__name__}: {exc}"
+        return result
+
+    if not ok:
+        result["error"] = report
         return result
 
     result["ok"] = True
@@ -144,11 +158,7 @@ def _run_seed(args: tuple[int, dict[str, Any]]) -> dict[str, Any]:
 
     if cfg["depth"]:
         try:
-            if entrance_shuffle is not None:
-                from fill import build_entrance_gate_rules
-                level_rules = build_entrance_gate_rules(gate_remap, entrance_shuffle)
-            else:
-                level_rules = build_gate_rules(gate_remap)
+            level_rules = _regions.build_level_rules(gate_remap, entrance_shuffle)
             locations   = list(CHECKABLE_LOCS) + list(FIXED_SOUL_LOCS)
             _, _, spheres = simulate_playthrough(
                 placement=placement,

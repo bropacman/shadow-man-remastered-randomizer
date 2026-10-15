@@ -10,6 +10,8 @@ name: CI
 # that repo" the way there was before.
 
 on:
+  # Branches are checked through their PR (main's ruleset requires one);
+  # pushing to every branch as well ran each job twice per PR push.
   push:
     branches: [main]
   pull_request:
@@ -17,6 +19,76 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  fill-check:
+    name: Standalone fill produces beatable seeds
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Fixed seeds across vanilla/easy/medium/hard plus regression seeds
+      # (tools/ci_fill_check.py). Nothing else in CI exercises the
+      # standalone fill -- a 2026-10 bug failed ~1 in 5 seeds unnoticed.
+      # Re-run a failure locally: python fill.py --seed N --gate-preset P -v
+      - name: Run the fill smoke test
+        shell: bash
+        run: |
+          set -e
+          PYTHONIOENCODING=utf-8 python tools/ci_fill_check.py
+
+  location-data-check:
+    name: Location CSVs identical and extracted_locations.py up to date
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # CLAUDE.md §5: after any locations.csv edit, copy it to apworld/ and
+      # re-run both generators. This catches a skipped step.
+      - name: Compare the two locations.csv copies
+        shell: bash
+        run: |
+          set -e
+          if ! cmp -s data/locations.csv apworld/data/locations.csv; then
+            echo "::error::data/locations.csv and apworld/data/locations.csv differ -- copy the root one over apworld/data/"
+            exit 1
+          fi
+
+      - name: Regenerate and check for drift
+        shell: bash
+        run: |
+          set -e
+          PYTHONIOENCODING=utf-8 python tools/generate.py > /dev/null
+          PYTHONIOENCODING=utf-8 python apworld/tools/generate.py > /dev/null
+          if ! git diff --exit-code --stat; then
+            echo "::error::Generated files are stale -- run python tools/generate.py and python apworld/tools/generate.py, then commit"
+            exit 1
+          fi
+
+  gui-js-check:
+    name: Syntax-check JS embedded in gui.py / ap_gui.py
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # windows-latest ships Node; py_compile can't see JS errors inside
+      # the GUIs' _HTML strings (CLAUDE.md §4).
+      - name: node --check every inline <script>
+        shell: bash
+        run: |
+          set -e
+          python tools/check_gui_js.py
+
   compile-check:
     name: Compile-check every tracked .py file
     runs-on: windows-latest
@@ -205,3 +277,34 @@ jobs:
         run: |
           set -e
           python -m pytest worlds/shadowman/test/__init__.py -v
+
+  apworld-artifact:
+    name: Build shadowman.apworld (downloadable test build)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Same packager release builds use (build_all.py / build_apworld.bat),
+      # so every push gets an installable .apworld under the run's
+      # Artifacts. Named with COMPANION_VERSION + short SHA; the file inside
+      # stays shadowman.apworld because AP loads a world by its file name.
+      - name: Package the apworld
+        id: build
+        shell: bash
+        run: |
+          set -e
+          PYTHONIOENCODING=utf-8 python build_apworld.py --source apworld --output dist/apworld/shadowman.apworld
+          version=$(python -c "import re; print(re.search(r'COMPANION_VERSION\s*=\s*\"(v[0-9.]+)\"', open('ap_gui.py', encoding='utf-8').read()).group(1))")
+          echo "name=shadowman-apworld-${version}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the apworld
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.name }}
+          path: dist/apworld/shadowman.apworld
+          if-no-files-found: error
+          retention-days: 30

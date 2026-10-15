@@ -41,7 +41,7 @@ from constants import (
     LEVEL_FOLDERS, SOUL_RSC_FILES, ENEMY_RSC_FILES, GATE_VANILLA_SL, GATE_PRESETS,
     CADEAU_HEIGHT_DROP, GOVI_HEIGHT_BOOST, ITEM_Y_ADJUST,
     SOUL_SLOT_MARKER_FX, SOUL_SLOT_MARKER_FX_Y, DARK_SOUL_SLOT_MARKER_FX_Y, DAY_NIGHT_MIRRORS, GAD_PICKUP_EXPECTED_OFFSETS,
-    STARTING_ITEM_POOL, STARTING_ITEM_BUNDLES, SWAMPDAY_BUNDLE_SPOTS, BUNDLE_ITEMS_PER_BENCH, BUNDLE_SPOT_Z_STEP, BUNDLE_REQUIRES_SHUFFLE, ASSET_OVERRIDES, STANDALONE_ASSET_OVERRIDES, MSH_OVERRIDES, STANDALONE_MSH_OVERRIDES, BARREL_SLOT_MARKER_FX, BARREL_SLOT_MARKER_FX_Y,
+    STARTING_ITEM_POOL, item_display_name, STARTING_ITEM_BUNDLES, SWAMPDAY_BUNDLE_SPOTS, BUNDLE_ITEMS_PER_BENCH, BUNDLE_SPOT_Z_STEP, BUNDLE_REQUIRES_SHUFFLE, ASSET_OVERRIDES, STANDALONE_ASSET_OVERRIDES, MSH_OVERRIDES, STANDALONE_MSH_OVERRIDES, BARREL_SLOT_MARKER_FX, BARREL_SLOT_MARKER_FX_Y,
     GAD_BLOCKER_RSC, GAD_BLOCKER_SITES, GAD_INJECTION_SITES, GAD_ASSET_OVERRIDES,
     GATE_E2O_POSITIONS, E2O_MATCH_RADIUS, LEVEL_NAMES, BARREL_RSC_SUBSTITUTIONS,
     PROGRESSION_IN_GOVI_LIFT, DARK_SOUL_SLOT_ITEM_DROP, PROGRESSION_IN_CADEAUX_LIFT, PROGRESSION_IN_BARREL_LIFT,
@@ -119,12 +119,6 @@ ROTATION_A_OFF = 0x14  # 2-byte big-endian signed int16
 ROTATION_B_OFF = 0x16  # 4-byte big-endian signed int32
 
 _RSC_TO_FRIENDLY = {v: k for k, v in STARTING_ITEM_POOL.items()}
-# Supplement with friendly_name entries from extracted_locations (non-null only)
-_RSC_TO_FRIENDLY.update({
-    loc.object: loc.friendly_name
-    for loc in RAW_LOCATIONS
-    if loc.friendly_name and loc.object and loc.object not in _RSC_TO_FRIENDLY
-})
 
 # Per-slot friendly names keyed by loc_key — used in the spoiler log so that
 # slots/items with shared RSC names (e.g. RSC_X_GOVI, RSC_X_DARK_SOUL) are
@@ -1049,7 +1043,12 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
         **gate_kwargs,
     )
 
-    MAX_RETRIES = 5
+    # Each retry re-runs assumed_fill with a fresh rng, which also re-rolls
+    # the gate shuffle. Chaos (safe=False) produces an unbeatable gate layout
+    # ~75% of the time (e.g. both Blood gates at SL10 with only 118 souls
+    # reachable outside them), so it gets a much bigger budget: brutal gates,
+    # but always a beatable seed. 0.76^40 ~= 1 in 60,000 chance of giving up.
+    MAX_RETRIES = 40 if gate_preset == "chaos" else 5
     for attempt in range(MAX_RETRIES):
         retry_seed = rng.randint(0, 99_999_999) ^ attempt
         retry_rng = random.Random(retry_seed)
@@ -1263,10 +1262,10 @@ def write_placement_patches(
                                  BARREL_SLOT_MARKER_FX))
         k = (rec.folder, rec.source_file)
         patch = make_patch(rec, rsc_name, save_idx if save_idx is not None else rec.save_idx)
-        # Store per-instance friendly names for the spoiler log.
-        # These differ from _RSC_TO_FRIENDLY for shared RSC names (govis, souls).
+        # Spoiler labels: the slot by its per-location friendly name, the
+        # placed item by its generic item name (never the location it came from).
         patch["slot_friendly"]  = _LOC_KEY_TO_FRIENDLY.get(loc_key)
-        patch["place_friendly"] = source_loc.friendly_name or None
+        patch["place_friendly"] = item_display_name(source_loc.object, getattr(source_loc, "category", None))
         patches_by_folder.setdefault(k, {})[rec.offset] = patch
         if patch.get("y_adjust", 0.0) != 0.0:
             y_adj_map[loc_key] = patch["y_adjust"]
@@ -1449,8 +1448,9 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
             if s["new_areas"]:
                 header += f"  New areas: {', '.join(s['new_areas'])}"
             lines.append(header)
+            width = max((len(left) for _, left, _, _ in s["items"]), default=0)
             for obj, left, item_friendly, region in s["items"]:
-                lines.append(f"    {left:<80} {item_friendly}")
+                lines.append(f"    {left:<{width}} {item_friendly}")
             if s["cadeaux"]:
                 lines.append(f"    [cadeaux]  {s['cadeaux']} found")
             lines.append("")
@@ -1470,14 +1470,18 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         if not meaningful:
             continue
         lines.append(f"\n  {LEVEL_NAMES.get(folder, folder)} [{source_file}]:")
+        rows = []
         for offset, pd in sorted(meaningful.items()):
             orig      = orig_map.get(offset, "???")
             new_name  = pd["name"]
-            # Use per-instance friendly names when available (avoids "Govi - Dark Soul 60"
-            # for every soul slot — each slot/item has a unique number in the CSV).
-            orig_label = pd.get("slot_friendly") or _RSC_TO_FRIENDLY.get(orig, orig)
-            new_label  = pd.get("place_friendly") or _RSC_TO_FRIENDLY.get(new_name, new_name)
-            lines.append(f"    0x{offset:04X}: {orig_label:<35} -> {new_label}")
+            # Slot: per-location friendly name (unique within the level).
+            # Item: generic item name, so it doesn't read like a location.
+            orig_label = pd.get("slot_friendly") or item_display_name(orig)
+            new_label  = pd.get("place_friendly") or item_display_name(new_name)
+            rows.append((offset, orig_label, new_label))
+        width = max(len(r[1]) for r in rows)
+        for offset, orig_label, new_label in rows:
+            lines.append(f"    0x{offset:04X}: {orig_label:<{width}} -> {new_label}")
 
     # lines += ["", "── CADEAUX LOCATIONS ──────────────────────────────────", ""]
     # cadeaux_by_folder: dict = {}

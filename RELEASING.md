@@ -28,6 +28,24 @@ lives in this repo next to `gui.py` — it only ever talks to AP seeds
 `dist/` and `build/` are both gitignored — nothing here is meant to be
 committed, only built fresh and uploaded.
 
+## One command: build_all.py
+
+`python build_all.py` (or double-click `build_all.bat`) runs every rebuild
+in dependency order: apply a pending naming log, regenerate both
+`extracted_locations.py`, drift + compile checks (blocking), the overlay
+DLL (only when `overlay_dll/src` is newer than `apworld/ShadowManOverlay.dll`),
+the apworld, the AP Companion exe, the standalone exe, then versioned
+release folders under `dist/release/`. It ends by printing the tag,
+mirror-sync and `gh release create` commands; it never runs them.
+
+- Versions: `--ap-version patch|minor|major|X.Y.Z` sets `COMPANION_VERSION`
+  (`ap_gui.py`, also the apworld manifest); `--standalone-version ...` sets
+  `RANDOMIZER_VERSION` (`constants.py`). Both are applied before building.
+- Steps: `--only apworld,package`, `--skip standalone`, `--dll`, `--no-dll`.
+- Release names: `dist/release/shadow-man-ap-world-vX.Y.Z\` (the
+  `.apworld` keeps its name, since AP loads a world by file name) and
+  `dist/release/shadow-man-randomizer-vX.Y.Z.zip` (exe + README + LICENSE).
+
 ## Before every release: check for drift
 
 This repo and the Archipelago world checkout keep independent, hand-copied
