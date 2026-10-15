@@ -1,6 +1,6 @@
 # Scope: Gad temple rings and the CF_GOT*GAD save flags
 
-Status: research only, nothing built. Date: 2026-10-15.
+Status: predicate patch built (2026-10-15), needs an in-game check. Everything else is research.
 
 ## Question
 
@@ -21,10 +21,11 @@ the gad patch, though: most of that patch builds the shuffled
 part they overlap is the 8 temple NOPs, and the NOPs are the better tool
 for that job (static, always on, no timing).
 
-If the ring cutscene turns out to be a real problem in shuffled seeds (see
-"In-game checks"), the clean fix is a **3-site static exe patch** that
-makes the three ring-cutscene predicates return false. That gives "ring
-does nothing" for the standalone and AP builds alike, with no client
+The maintainer confirmed the ring cutscene is a real problem in shuffled
+seeds: it moves the player and throws them into lava. So
+`gad_pickup_patch.py` now also applies a **3-site static exe patch** that
+makes the three ring-cutscene predicates return false. The rings do
+nothing in the standalone and AP builds alike, with no client
 involvement.
 
 ## What the flags actually do (vanilla exe, read-only disassembly)
@@ -91,7 +92,7 @@ and the ring cutscene still plays in shuffled seeds.
   client's gad tier logic reads `GAD_1..4_RVA`, not these flags, so it
   gains nothing.
 
-## If we want the ring inert: static predicate patch (proposed, not built)
+## Ring cutscene predicate patch (built)
 
 Overwrite the first bytes of each predicate with `xor al, al ; ret`
 (`32 C0 C3`). Hard-abort if the bytes aren't vanilla (CLAUDE.md §8):
@@ -102,11 +103,17 @@ Overwrite the first bytes of each predicate with `xor al, al ; ret`
 | `0x1402ad490` (walk) | `0x2AC890` | `48 83 EC 28 E8 C7 A0 09` |
 | `0x1402ad4c0` (swim) | `0x2AC8C0` | `48 83 EC 28 83 3D 19 64` |
 
-Apply this only when temples are shuffled (always true in AP:
-`ap_patcher.py` calls `apply_gad_pickup_patch(..., shuffle_temples=True)`).
-Keep the NOPs as well, as a backstop. It belongs in `gad_pickup_patch.py`
-next to `TEMPLE_NOP_SITES`, plus the AP copy `apworld/gad_pickup_patch.py`
-(check with `tools/check_apworld_sync.py`).
+Implemented as `RING_CUTSCENE_PREDICATES` in both `exe_patches/gad_pickup_patch.py`
+and `apworld/gad_pickup_patch.py` (step 8, inside the `shuffle_temples`
+branch, after the temple NOPs, which stay as a backstop). It runs whenever
+temples are shuffled: always in AP (`ap_patcher.py` passes
+`shuffle_temples=True`), and in the standalone build when
+`shuffle_gad_temples` is on. Non-vanilla predicate bytes raise.
+
+Checked offline on a copy of the vanilla exe: both copies produce the same
+output, Capstone reads `xor al, al ; ret` at all three sites, the exe
+still parses, `shuffle_temples=False` leaves the predicates untouched, and
+a pre-modified predicate is refused.
 
 Unknowns this patch can't answer statically:
 - Is the ring cutscene also the temple's way out (the jump down)? If
@@ -137,5 +144,6 @@ location as well as the injected gad pickup.
    die? Does the HUD or gad texture flash change?
 2. Is the cutscene's jump the only practical way back out of that temple
    area?
-3. If (1) is a problem, we build the predicate patch, and you confirm the
-   ring does nothing and the temple can still be left normally.
+3. (1) is confirmed a problem and the predicate patch is built. On a newly
+   patched seed, check that finishing a ring plays no cutscene and doesn't
+   move you, and that the temple can still be left normally.
