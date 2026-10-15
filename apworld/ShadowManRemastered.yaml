@@ -68,6 +68,11 @@ Shadow Man Remastered:
   # combinations in the in-game journal before reaching Legion).
   piston_combos: false
 
+  # Split the 5 Retractors into one named key per liveside region
+  # ("Retractor - London", "Retractor - Prison", ...); each schism then
+  # needs its own key instead of any 5 of the shared stack.
+  unique_retractor_keys: false
+
   # Whether cadeaux (statue/altar) locations exist as AP checks at all.
   # Off (default): ~657 cadeaux locations are excluded entirely — no
   # checks, no hints, no "Cadeaux" item in the pool. On: they become real
@@ -138,6 +143,10 @@ Shadow Man Remastered:
   # Shuffle enemy pain/startle/attack sounds between enemy types.
   # Cosmetic only.
   shuffle_enemies_sfx: false
+
+  # Shuffle Shadow Man's voice lines and enemy sounds as one shared pool.
+  # Needs shuffle_voices and shuffle_enemies_sfx both on. Cosmetic only.
+  combine_voice_and_enemy_sfx: false
 
   # Shuffle level skyboxes between levels. Cosmetic only.
   shuffle_sky: false
@@ -220,3 +229,9 @@ Shadow Man Remastered:
   #   start_inventory_from_pool:
   #     Gad Power: 3
   start_inventory_from_pool: {}
+
+  # Keep important items off specific locations. Locations use the names
+  # shown in the tracker, hints and spoiler log ("<Region> - <spot>"):
+  #   exclude_locations:
+  #     - "Asylum: Experimentation Rooms - Level Entrance Under Cable Car Barrel 1"
+  exclude_locations: []

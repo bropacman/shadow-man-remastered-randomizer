@@ -15,7 +15,8 @@ order. Wraps the existing scripts; it doesn't replace them.
   5. apworld  dist/apworld/shadowman.apworld
   6. companion dist/ap_companion/shadow_man_ap_companion.exe (build_ap_gui.bat)
   7. standalone dist/standalone/shadow_man_randomizer.exe (build.bat)
-  8. package  versioned release folders under dist/release/, plus the tag and
+  8. package  versioned release folders under dist/release/ (the AP one also
+              gets the example apworld/ShadowManRemastered.yaml), plus the tag and
               `gh release create` commands to run yourself; opens dist/release/
               in Explorer when done (--no-open to skip)
 
@@ -62,6 +63,8 @@ ARTIFACTS = {
     "standalone": ROOT / "dist" / "standalone" / "shadow_man_randomizer.exe",
     "dll":        DLL_SHIPPED,
 }
+# Shipped as-is next to the apworld in each AP release (also bundled inside it).
+EXAMPLE_YAML = AP_DIR / "ShadowManRemastered.yaml"
 
 # (file, constant) holding each track's version, e.g. COMPANION_VERSION = "v0.1.4"
 VERSION_FILES = {
@@ -160,6 +163,7 @@ def package(done: list[str]) -> list[str]:
 
     ap_files = [ARTIFACTS[k] for k in ("apworld", "companion") if k in done]
     if ap_files:
+        ap_files.append(EXAMPLE_YAML)
         # File names stay as-is: AP loads a world by its .apworld file name.
         out = RELEASE_DIR / f"shadow-man-ap-world-{ap_ver}"
         out.mkdir(parents=True, exist_ok=True)
