@@ -586,6 +586,17 @@ _HTML = r"""<!DOCTYPE html>
       </div>
 
       <hr class="divider">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Goal</div>
+      <div class="row" style="margin-bottom:6px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Pistons required:</span>
+        <input type="range" id="yPistonsRequired" min="1" max="6" step="1" value="6"
+               oninput="document.getElementById('yPistonsRequiredVal').textContent=this.value;updateYamlPreview()">
+        <span class="slider-val" id="yPistonsRequiredVal">6</span>
+        <button class="rng-btn" id="yPistonsRequiredRng" onclick="toggleRng('yPistonsRequired')" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of the 6 Dark Engine pistons you must stop before Legion. Once that many are stopped, the rest stop on their own and the way to Legion opens. The cable-car piston always counts as one. 6 is the vanilla game.</span></span>
+      </div>
+
+      <hr class="divider">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Health</div>
       <div class="row" style="margin-bottom:8px">
         <span style="color:var(--muted);font-size:11px;white-space:nowrap">Starting:</span>
@@ -1303,6 +1314,7 @@ function buildYaml() {
   kv('shuffle_sky', yamlBool('yShuffleSky'));
   kv('entrance_mode', yamlChoice('yEntranceMode'));
   kv('piston_combos', yamlBool('yPistonCombos'));
+  kv('pistons_required', yamlNum('yPistonsRequired'));
   kv('unique_retractor_keys', yamlBool('yUniqueRetractorKeys'));
   kv('deadside_guns', yamlBool('yDeadsideGuns'));
   kv('progression_balancing', yamlNum('yProgBalance'));
@@ -1496,6 +1508,7 @@ async function importYaml() {
   // Shape 1: rng-btn fields — sliders/numbers/selects.
   ['max_gate_sl:yMaxGateSl', 'open_gates_n:yOpenGatesN', 'progression_balancing:yProgBalance',
    'starting_health:yStartingHealth', 'altar_health_grant:yAltarHealth',
+   'pistons_required:yPistonsRequired',
    'altar_cadeaux_required:yAltarCadeaux', 'fogometers_cadeaux_required:yFogCadeaux',
    'cadeaux_bundle_size:yCadeauxBundleSize',
    'soul_threshold_mode:ySoulThresholdMode', 'soul_logic_buffer:ySoulLogicBuffer',

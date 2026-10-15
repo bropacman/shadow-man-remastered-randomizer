@@ -5422,6 +5422,8 @@ class ShadowManContext(SuperContext):
     # Whether this seed's piston_combos option is on — from slot_data on
     # Connected (see on_package). Defaults False until then.
     piston_combos_on: bool
+    # PistonsRequired (1-6) from slot_data; 6 (vanilla) for older seeds.
+    pistons_required: int
     # Whether this seed's Unique Retractor Keys option is on (2026-08-18) —
     # from slot_data on Connected, same pattern as piston_combos_on. Used by
     # _go_mode_prerequisites() to show the 5 named keys individually instead
@@ -5541,6 +5543,7 @@ class ShadowManContext(SuperContext):
         self._ut_in_logic_regions = set()
         self._ut_in_logic_locations = set()
         self.piston_combos_on     = False
+        self.pistons_required     = 6
         self.unique_retractor_keys_on = False
         self._last_gad_resync_level = None
         self.trap_bonus_mode     = "always_temporary"
@@ -5764,6 +5767,7 @@ class ShadowManContext(SuperContext):
             # pattern as piston_combos_on just above (see fill_slot_data()'s
             # matching write in __init__.py).
             self.unique_retractor_keys_on = bool(slot_data.get("unique_retractor_keys", False))
+            self.pistons_required = int(slot_data.get("pistons_required", 6))
             # Trap/Bonus (2026-08-01, renamed + generalized from "Secret
             # Trap" 2026-08-03) — see options.py's TrapBonusMode/
             # TrapBonusDuration/TrapBonus{Secrets,Health,Voodoo,Ammo}Enabled
@@ -9819,7 +9823,11 @@ class ShadowManContext(SuperContext):
                 prereq_total = len(prereqs)
                 prereq_done  = sum(1 for _, ok, _ in prereqs if ok)
 
-                if reached == len(blocks) and schematic_ok:
+                # PistonsRequired: the cable-car piston is free, so N
+                # pistons need N-1 of the 5 Engine Block sections
+                # (access_rules.py's pistons()).
+                blocks_needed = max(0, min(len(blocks), ctx.pistons_required - 1))
+                if reached >= blocks_needed and schematic_ok:
                     self.summary_lbl.text = "[color=00FA9A][b]Go Mode: Yes[/b][/color]"
                 else:
                     self.summary_lbl.text = (
@@ -9836,10 +9844,12 @@ class ShadowManContext(SuperContext):
                 # global item, not per-region, so it either unlocks all 5
                 # at once or none of them.
                 beatable_n = sum(1 for _, ok in blocks if ok and schematic_ok)
-                header_color = "00FA9A" if beatable_n == len(blocks) else "FFA500"
+                header_color = "00FA9A" if beatable_n >= blocks_needed else "FFA500"
+                _needed_note = ("" if blocks_needed == len(blocks)
+                                else f", {blocks_needed} needed for {ctx.pistons_required}/6 pistons")
                 self.engine_header_lbl.text = (
                     f"[b]Engine Block regions[/b]  "
-                    f"([color={header_color}]{beatable_n}/{len(blocks)}[/color] beatable)"
+                    f"([color={header_color}]{beatable_n}/{len(blocks)}[/color] beatable{_needed_note})"
                 )
                 for lbl, (name, ok) in zip(self.region_lbls, blocks):
                     if ok and schematic_ok:

@@ -599,6 +599,20 @@ class PistonCombos(Toggle):
     default = 0
 
 
+class PistonsRequired(Range):
+    """
+    How many of the 6 Dark Engine pistons you must stop before Legion.
+    Once that many are stopped, the remaining pistons stop on their own
+    (EXE patch) and the way down to Legion opens as in vanilla. 6 is the
+    vanilla game. The cable-car piston always counts as one of them.
+    EXE patch — applied by running apply_ap_seed.py against your generated seed.
+    """
+    display_name = "Pistons Required"
+    range_start = 1
+    range_end   = 6
+    default     = 6
+
+
 class UniqueRetractorKeys(Toggle):
     """
     Replaces any starting "Retractor" with unique Retractor keys.
@@ -829,6 +843,7 @@ class ShadowManOptions(PerGameCommonOptions):
     soul_threshold_mode:   SoulThresholdMode
     soul_logic_buffer:     SoulLogicBuffer
     piston_combos:         PistonCombos
+    pistons_required:      PistonsRequired
     unique_retractor_keys: UniqueRetractorKeys
     # patch_tracker (formerly "In-Game Tracker Hints" / GUI "Teddy Bear
     # Hints") removed 2026-08-05 per Jon: turning it on could break AP
