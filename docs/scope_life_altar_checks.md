@@ -1,6 +1,7 @@
 # Scope: Life Altar offerings as AP location checks
 
-Status: scoped 2026-10-14, not started. AP world only.
+Status: phase A built 2026-10-15 (`life_altar_checks` option). AP world only. Both in-game
+questions answered by the maintainer 2026-10-15 (see Logic and "To verify").
 
 ## Goal
 
@@ -36,7 +37,8 @@ the CLAUDE.md rule that GUI and backend rules stay in step.
 
 Five locations, `Deadside - Wasteland - Life Altar Offering 1`..`5`.
 Offering N is sent when **N or more** of flags 35–39 are set, regardless
-of which physical altar was used. Reasons:
+of which physical altar was used. (Maintainer confirmed 2026-10-15: each
+altar costs the same Cadeaux and they can be used in any order.) Reasons:
 
 - Logic for "offering N" is simple and order-independent: it needs
   N × altar cost Cadeaux.
@@ -54,10 +56,10 @@ when the option is on. Same "reserve the superset" pattern as cadeaux IDs.
 
 ### Logic
 
-- Region: Wasteland. **Verify** whether any of the 5 altars sits behind a
-  Wasteland sub-gate. If so, offering N must require access to N altars;
-  simplest safe version: every offering requires access to all altar
-  spots, refine later.
+- Region: Wasteland. The life altars share the Baton Altar's requirement
+  (maintainer, 2026-10-15). The Baton Altar's CSV row is `wastland`, zone
+  24, requirement `N`, so no sub-gate: reaching Deadside - Wasteland is
+  enough. Every offering uses the same region access.
 - Rule: `count_group("Cadeaux") weighted by bundle size >= N × altar_cost`
   (reuse the weighting `cadeaux_666()` already does).
 - Fogometers door: the game already assumes all 5 altars get used (door
@@ -116,13 +118,22 @@ Exe patches. Save files. Existing location IDs.
 
 ## To verify in game before relying on it
 
-- Using an altar sets the expected `CF_LIFEALTAR0x` flag (read with the
-  client's existing flag debug tooling) and the flags survive save/reload.
-- Whether any altar is behind a Wasteland sub-gate.
+- Using an altar sets the expected `CF_LIFEALTAR0x` flag and the flags
+  survive save/reload. Not tested yet; the build assumes it (maintainer,
+  2026-10-15). Confirm with `/debug` and the client's flag reads during the
+  first test seed: if offerings don't send, check this first.
+- ~~Whether any altar is behind a Wasteland sub-gate.~~ Answered: no, same
+  as the Baton Altar (`N`).
 
 ## Later (phase B / C)
 
-- B: Cadeaux as progression (see table).
+- B: Cadeaux as progression (see table). Client note: an altar check can
+  then hold a real item from your own world, which has no physical pickup.
+  `client.py` `_inject_item()` skips self-found items (`source_player ==
+  self.slot`) for most methods, assuming the game already granted them;
+  items from altar locations (`item.location` in `life_altar_ap_ids`) must
+  bypass that skip. Phase A is safe without it: altars hold only filler,
+  and Cadeaux/Trap-Bonus items are always injected.
 - C: shuffle the health reward: patch altar grant to 0, add 5 "Life
   Upgrade" items applied by the client (writes max health).
 
