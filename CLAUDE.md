@@ -32,6 +32,9 @@ One repo, three shipped artifacts (see `RELEASING.md`):
 - `../Archipelago/worlds/shadowman/` is an outdated July 2026 copy. Ignore it.
 - Archived history mentions `Archipelago-0.6.7/worlds/shadowman/`,
   `Archipelago/worlds/shadowman/` or "both checkouts" — read those as `apworld/`.
+- Both exe builds install from `requirements.txt` and take their bundled
+  folders, native DLLs and hidden imports from `tools/pyinstaller_shared.py`;
+  add new ones there, not to one `.spec` or `.bat`.
 - Commit or push only when asked. Releases follow `RELEASING.md`.
 
 ## 2. File integrity protocol

@@ -11,44 +11,22 @@
 # IT imports -- ap_patcher.py, every *_patch.py module, rsc_utils.py,
 # constants.py, etc.) bundled into this same exe, since the frozen build
 # re-invokes itself as a plain apply_ap_seed.py CLI process rather than
-# shelling out to a second exe. The blanket root_py glob below already
-# covers this the same way it does for gui.py -- no separate accounting
-# needed, new patch/helper files are picked up automatically here too.
-import glob
-from PyInstaller.utils.hooks import collect_dynamic_libs
+# shelling out to a second exe. tools/pyinstaller_shared.py bundles every
+# root .py file and the exe_patches/ package for both builds.
+import os
+import sys
 
-# Auto-include all root-level .py files except ap_gui.py (the entry point).
-root_py = [(f, '.') for f in glob.glob('*.py') if f != 'ap_gui.py']
-
-# keystone-engine and capstone each ship a native shared library
-# (keystone.dll / capstone.dll on Windows) loaded at runtime via ctypes
-# from inside the installed package directory -- not through a normal
-# Python import, so PyInstaller's static import analysis can't see it.
-# collect_dynamic_libs() finds and bundles the actual .dll; hiddenimports
-# alone (below) would only cover the pure-Python wrapper and still fail at
-# runtime. Only needed here, not in "Shadow Man Randomizer.spec" -- see
-# requirements.txt and RELEASING.md for why.
-keystone_binaries = collect_dynamic_libs('keystone')
-capstone_binaries = collect_dynamic_libs('capstone')
+# Folders, native libraries and hidden imports shared with
+# "Shadow Man Randomizer.spec" (the standalone exe) live in tools/pyinstaller_shared.py, so both exes always get the same ones.
+sys.path.insert(0, os.path.join(SPECPATH, "tools"))
+from pyinstaller_shared import datas, binaries, HIDDEN_IMPORTS
 
 a = Analysis(
     ['ap_gui.py'],
     pathex=['.'],
-    binaries=keystone_binaries + capstone_binaries,
-    datas=root_py + [
-        ('data', 'data'),
-        ('randomizers', 'randomizers'),
-        ('patchers', 'patchers'),
-        ('exe_patches', 'exe_patches'),
-        ('assets', 'assets'),
-    ],
-    hiddenimports=[
-        'webview.platforms.winforms',
-        'clr',
-        'yaml',
-        'keystone',
-        'capstone',
-    ],
+    binaries=binaries(),
+    datas=datas('ap_gui.py'),
+    hiddenimports=HIDDEN_IMPORTS,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
