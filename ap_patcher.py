@@ -280,8 +280,8 @@ def parse_rsc_file(filepath: str, folder: str = "") -> list:
 
     use_scanning = len(fixed_records) == 0 or body_rsc_count < n_fixed * 0.3
 
+    import re
     if use_scanning:
-        import re
         seen = set()
         for m in re.finditer(b'RSC_', data):
             name_pos = m.start()
@@ -307,6 +307,33 @@ def parse_rsc_file(filepath: str, folder: str = "") -> list:
             ))
     else:
         records = fixed_records
+        # Supplemental scan: catch any RSC_ strings the stride parser missed
+        # (e.g. records after a mid-file section header that shifts alignment,
+        # like salvage/resource.rsc's overflow section). Mirrors patcher.py.
+        stride_offsets = {r.offset for r in records}
+        seen = set(stride_offsets)
+        for m in re.finditer(b'RSC_', data):
+            name_pos = m.start()
+            if name_pos in seen:
+                continue
+            seen.add(name_pos)
+            rec_start = name_pos - NAME_OFF
+            if rec_start < HEADER_SIZE:
+                continue
+            name_bytes = data[name_pos:name_pos + NAME_MAXLEN].split(b'\x00')[0]
+            if not name_bytes:
+                continue
+            name = name_bytes.decode("ascii", errors="replace")
+            x, y, z = struct.unpack_from("<fff", data, rec_start + XYZ_OFF)
+            records.append(QuestRecord(
+                offset=name_pos,
+                name=name,
+                zone=data[rec_start + ZONE_OFF],
+                instance_id=struct.unpack_from(">I", data, rec_start + SAVE_IDX_OFF)[0],
+                x=x, y=y, z=z,
+                raw=data[rec_start:rec_start + RECORD_SIZE],
+                folder=folder,
+            ))
 
     return records
 
