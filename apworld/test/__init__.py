@@ -301,22 +301,50 @@ class TestCrossHubSeed2(TestCrossHub):
     seed = 4
 
 
+class TestCrossHubLargeCadeauxPool(ShadowManTestBase):
+    """With enough cadeaux locations, Prophecy and Cageways shuffle freely."""
+    options = {
+        "entrance_mode": "cross_hub",
+        "cadeauxsanity": True,
+        "cadeaux_bundle_size": 5,
+    }
+    seed = 1
+
+    def test_small_pool_pins_dropped(self) -> None:
+        from ..regions import CROSS_HUB_UNPIN_CADEAUX_LOCATIONS
+        world = self.multiworld.worlds[1]
+        self.assertGreaterEqual(world._cadeaux_location_count(),
+                                CROSS_HUB_UNPIN_CADEAUX_LOCATIONS)
+        self.assertEqual(world._cadeaux_location_count(),
+                         len(world.cadeaux_bundle_representatives))
+
+
 class TestEntranceShuffleTable(unittest.TestCase):
     """Pure checks on regions.py's shuffle helpers (no generation)."""
 
     def test_cross_hub_bijection_and_pins(self) -> None:
         import random
         from ..regions import (shuffle_entrances, ALL_PORTAL_IDS,
-                               DEADSIDE_PORTAL_IDS, CROSS_HUB_PINNED_SPOKES)
+                               DEADSIDE_PORTAL_IDS, CROSS_HUB_PINNED_SPOKES,
+                               CROSS_HUB_SMALL_POOL_PINS)
         self.assertEqual(len(ALL_PORTAL_IDS), 14)
-        for seed in range(300):
-            shuffle = shuffle_entrances(random.Random(seed), "cross_hub")
-            self.assertEqual(set(shuffle), set(ALL_PORTAL_IDS))
-            self.assertEqual(sorted(shuffle.values()), sorted(ALL_PORTAL_IDS))
-            behind = {dest: portal for portal, dest in shuffle.items()}
-            for spoke in CROSS_HUB_PINNED_SPOKES:
-                self.assertIn(behind[spoke], DEADSIDE_PORTAL_IDS,
-                              f"seed {seed}: {spoke} behind {behind[spoke]}")
+        small_pins_moved = 0
+        for pin_small in (True, False):
+            pinned = CROSS_HUB_PINNED_SPOKES + (CROSS_HUB_SMALL_POOL_PINS if pin_small else ())
+            for seed in range(300):
+                shuffle = shuffle_entrances(random.Random(seed), "cross_hub",
+                                            pin_small_pool_spokes=pin_small)
+                self.assertEqual(set(shuffle), set(ALL_PORTAL_IDS))
+                self.assertEqual(sorted(shuffle.values()), sorted(ALL_PORTAL_IDS))
+                behind = {dest: portal for portal, dest in shuffle.items()}
+                for spoke in pinned:
+                    self.assertIn(behind[spoke], DEADSIDE_PORTAL_IDS,
+                                  f"seed {seed}: {spoke} behind {behind[spoke]}")
+                if not pin_small:
+                    small_pins_moved += any(behind[s] not in DEADSIDE_PORTAL_IDS
+                                            for s in CROSS_HUB_SMALL_POOL_PINS)
+        # Unpinned, Prophecy/Cageways really can land behind a soul gate.
+        self.assertGreater(small_pins_moved, 0)
 
     def test_deadside_only_stays_deadside(self) -> None:
         import random
