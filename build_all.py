@@ -6,7 +6,7 @@ order. Wraps the existing scripts; it doesn't replace them.
 
   0. version  --ap-version / --standalone-version: set COMPANION_VERSION
               (ap_gui.py; also the apworld manifest) / RANDOMIZER_VERSION
-              (constants.py) before anything is built
+              (constants.py, plus README.md's Version line) before anything is built
   1. naming   apply data/naming_log.csv, if there is one (tools/apply_naming_log.py)
   2. data     regenerate both extracted_locations.py from data/locations.csv
   3. checks   drift check (blocking) + compile check of every tracked .py
@@ -110,6 +110,13 @@ def write_version(track: str, new: str) -> None:
     if n != 1:
         sys.exit(f"ABORTED: couldn't update {const} in {path.name}")
     path.write_bytes(raw.encode("utf-8"))
+    if track == "standalone":
+        readme = ROOT / "README.md"
+        text, n = re.subn(r"(\*\*Version: )v\d+\.\d+\.\d+(\*\*)", rf"\g<1>{new}\g<2>",
+                          readme.read_bytes().decode("utf-8"), count=1)
+        if n != 1:
+            sys.exit("ABORTED: no **Version: vX.Y.Z** line in README.md")
+        readme.write_bytes(text.encode("utf-8"))
 
 
 # ── Build helpers ─────────────────────────────────────────────────────────────
