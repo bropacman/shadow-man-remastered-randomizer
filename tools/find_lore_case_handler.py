@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gad_pickup_patch import _find_case_handler, IMAGE_BASE  # noqa: E402
+from exe_patches.gad_pickup_patch import _find_case_handler, IMAGE_BASE  # noqa: E402
 
 DUMP_BYTES = 96  # how many raw bytes to hex-dump from the case start, for a quick sanity look
 

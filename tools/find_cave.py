@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from death_penalty_patch import IMAGE_BASE, SECTION_DELTA  # noqa: E402
+from exe_patches.death_penalty_patch import IMAGE_BASE, SECTION_DELTA  # noqa: E402
 
 # .text section bounds, from the PE section table (Ghidra Memory Map):
 #   .text   140001000 - 14064a3ff   (VA, inclusive)

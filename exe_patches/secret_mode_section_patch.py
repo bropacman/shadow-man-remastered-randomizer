@@ -623,7 +623,7 @@ def verify_with_capstone(code: bytes, tick_va: int, check_va: int):
 
 def _va_to_text_file(va: int) -> int:
     # .text SECTION_DELTA convention shared across this codebase
-    from death_penalty_patch import SECTION_DELTA
+    from .death_penalty_patch import SECTION_DELTA
     return va - IMAGE_BASE - SECTION_DELTA
 
 

@@ -69,18 +69,18 @@ from randomizers.entrance_randomizer import (
 from randomizers.music_randomizer import shuffle_music
 from randomizers.sfx_randomizer import shuffle_sfx, sfx_spoiler_section
 from randomizers.sky_randomizer import shuffle_sky, sky_spoiler_section
-from gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
-from save_path_patch import apply_save_path_patch
-from cadeaux_patch import apply_cadeau_step_patch
-from health_patch import apply_health_patch
-from death_penalty_patch import apply_death_penalty_patch
-from sprint_patch import apply_sprint_patch
-from kexengine_cfg_patch import apply_deadside_guns_toggle
-from dark_engine_patch import (
+from exe_patches.gad_pickup_patch import apply_gad_pickup_patch, apply_prison_keycard_patch
+from exe_patches.save_path_patch import apply_save_path_patch
+from exe_patches.cadeaux_patch import apply_cadeau_step_patch
+from exe_patches.health_patch import apply_health_patch
+from exe_patches.death_penalty_patch import apply_death_penalty_patch
+from exe_patches.sprint_patch import apply_sprint_patch
+from exe_patches.kexengine_cfg_patch import apply_deadside_guns_toggle
+from exe_patches.dark_engine_patch import (
     apply_dark_engine_patch, randomize_dark_engine, extract_and_patch_journal,
     JOURNAL_MUP_PATH,
 )
-from soul_threshold_patch import (
+from exe_patches.soul_threshold_patch import (
     SOUL_THRESHOLD_MODES,
     VANILLA_SOUL_THRESHOLDS as _VANILLA_SL_THRESH_PATCH,
     randomize_soul_thresholds,
@@ -892,7 +892,7 @@ def _spoiler_soul_threshold_section(thresholds: dict) -> list[str]:
 
 def _spoiler_piston_combos_section(table: dict) -> list[str]:
     """Format the piston combination table for the spoiler log."""
-    from dark_engine_patch import PISTON_NAMES, VANILLA_TABLE as _DE_VAN
+    from exe_patches.dark_engine_patch import PISTON_NAMES, VANILLA_TABLE as _DE_VAN
     lines = [
         "",
         "── DARK ENGINE COMBINATIONS ────────────────────────────",
@@ -2457,7 +2457,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                           f"per-level retractors, but nothing in-game will enforce it this run.")
                 else:
                     try:
-                        import unique_retractor_keys_patch
+                        from exe_patches import unique_retractor_keys_patch
                         _rk_table = unique_retractor_keys_patch.build_retractor_table(
                             retractor_level_assignment, progression_placement,
                             retractor_scanned_positions,
@@ -2475,7 +2475,7 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                         # in-folder tracker pages, so it gets its own try/except
                         # rather than being folded into the one above.
                         try:
-                            import retractor_folder_log_patch
+                            from exe_patches import retractor_folder_log_patch
                             retractor_folder_log_patch.apply_patch(str(patched), dry_run=dry_run)
                             print(f"  Five Keys tracker — Nettie's folder now tracks each retractor live")
                             if not dry_run:
