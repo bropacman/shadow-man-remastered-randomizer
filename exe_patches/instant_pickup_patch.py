@@ -93,8 +93,7 @@ import struct
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gad_pickup_patch import IMAGE_BASE, _va_to_file  # noqa: E402  (reuse the same section table)
+from .gad_pickup_patch import IMAGE_BASE, _va_to_file  # reuse the same section table
 
 # ── Patch 1: camera-lock + FUN_1401ae3c0 + player-freeze block ──────────────
 BLOCK1_VA     = 0x140446987

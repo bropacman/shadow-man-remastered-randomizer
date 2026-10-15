@@ -833,7 +833,7 @@ def verify_with_capstone(code: bytes, portal_va: int, pickup_va: int, use_va: in
 
 
 def _va_to_text_file(va: int) -> int:
-    from death_penalty_patch import SECTION_DELTA
+    from .death_penalty_patch import SECTION_DELTA
     return va - IMAGE_BASE - SECTION_DELTA
 
 

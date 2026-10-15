@@ -20,6 +20,7 @@ a = Analysis(
         ('data', 'data'),
         ('randomizers', 'randomizers'),
         ('patchers', 'patchers'),
+        ('exe_patches', 'exe_patches'),
         ('assets', 'assets'),
     ],
     hiddenimports=[

@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from gad_pickup_patch import IMAGE_BASE, CASE16_VA, CASE16_VANILLA  # noqa: E402
+from exe_patches.gad_pickup_patch import IMAGE_BASE, CASE16_VA, CASE16_VANILLA  # noqa: E402
 
 TARGET_TABLE_VA = 0x14064A368
 SWITCH_DATA_VA  = 0x14064A398
