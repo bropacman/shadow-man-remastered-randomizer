@@ -1638,9 +1638,19 @@ class ShadowManWorld(World):
 
         # cross_hub (2026-10-15): a soul gate can lead to a Deadside spoke or
         # to another liveside's Engine Block room. Whatever it leads to sits
-        # behind that gate's own Night + item + Retractor, so ban those from
-        # the destination the same way as above.
-        if self.entrance_shuffle:
+        # behind that gate's own Night + item + Retractor (+ Engineers Key,
+        # for the Cathedral), so ban those from the destination the same
+        # way as above. The vanilla per-room bans above assume each room
+        # sits behind its own soul gate; under cross_hub a room can sit
+        # behind a Deadside portal instead and be an early region, so they
+        # are dropped first and rebuilt from the real soul-gate edges only.
+        # Keeping them cost early slack for nothing and showed up as extra
+        # FillErrors (ap-cross-hub-fill-tightness).
+        if any(_pid in SOUL_GATE_PORTALS for _pid in (self.entrance_shuffle or {})):
+            _region_item_bans = {
+                _item: _regions - _engine_block_subregions
+                for _item, _regions in _region_item_bans.items()
+            }
             _soul_gate_extra_items = {
                 "Gardelle County Jail, Texas": ("Prison Key Card",),
                 "Mordant Street, Queens, NY":  ("Poigne",),
@@ -1651,7 +1661,7 @@ class ShadowManWorld(World):
                     continue
                 _liveside = SOUL_GATE_PORTALS[_pid][0]
                 _dest_region = portal_destination_region(_dest_id)
-                _items = ["La Lune", "La Lame", "Le Soleil",
+                _items = ["La Lune", "La Lame", "Le Soleil", "Engineers Key",
                           *_soul_gate_extra_items.get(_liveside, ()),
                           RETRACTOR_KEY_ITEM_NAMES[_liveside]
                           if bool(self.options.unique_retractor_keys) else "Retractor"]

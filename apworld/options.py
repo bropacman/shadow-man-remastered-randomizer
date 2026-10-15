@@ -480,13 +480,16 @@ class EntranceMode(Choice):
       shuffled together as one pool of 14, matching the standalone
       randomizer. A Deadside portal can lead into a Dark Engine room, and a
       liveside soul gate can lead to a Deadside level. Each return trip
-      goes back to the portal you came from. Asylum: Gateways, Wasteland
-      and Temple of Fire always stay behind a Deadside portal (Asylum
-      because liveside needs its Cathedral; the other two keep the early
-      game from depending on Night + a liveside item). The Cageways tram
-      into the Engine Block is not shuffled. With a small location pool
-      (mostly default options) cross_hub fails generation more often than
-      the other modes; turning on more shuffles adds locations and helps.
+      goes back to the portal you came from. Asylum: Gateways, Wasteland,
+      Cageways and the Temples of Fire and Prophecy always stay behind a
+      Deadside portal (Asylum because liveside needs its Cathedral;
+      Wasteland and Temple of Fire keep the early game from depending on
+      Night + a liveside item; Cageways and Temple of Prophecy are the
+      biggest levels, and behind a soul gate they made generation fail
+      far more often). The Cageways tram into the Engine Block is not
+      shuffled. As with deadside_only, a small location pool (mostly
+      default options) fails generation now and then; turning on more
+      shuffles adds locations and helps.
     """
     display_name = "Entrance Mode"
     option_off = 0

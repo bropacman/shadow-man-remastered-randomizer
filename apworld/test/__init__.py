@@ -266,14 +266,38 @@ class TestCrossHub(ShadowManTestBase):
             self.assertTrue(any(f"[{portal_id} {kind}," in n for n in names),
                             f"no entrance for {portal_id}")
 
+    def test_engine_room_bans_follow_shuffle(self) -> None:
+        """An Engine Block room behind a Deadside portal is not behind Night,
+        so it can hold an Eclipser; whatever a soul gate leads to can't."""
+        from ..regions import (SOUL_GATE_PORTALS, DEADSIDE_PORTAL_IDS,
+                               portal_destination_region)
+        world = self.multiworld.worlds[self.player]
+        eclipser = world.create_item("La Lune")
+        checked = 0
+        for portal_id, dest_id in world.entrance_shuffle.items():
+            if portal_id in SOUL_GATE_PORTALS:
+                allowed = False
+            elif portal_id in DEADSIDE_PORTAL_IDS and dest_id in SOUL_GATE_PORTALS:
+                allowed = True
+            else:
+                continue
+            region = portal_destination_region(dest_id)
+            for loc in self.multiworld.get_region(region, self.player).locations:
+                if loc.item is None and getattr(loc, "raw", None) is not None                         and loc.raw.category != "barrel":
+                    self.assertEqual(loc.item_rule(eclipser), allowed,
+                                     f"{loc.name} via {portal_id}")
+                    checked += 1
+        self.assertGreater(checked, 0)
+
 
 class TestCrossHubSeed2(TestCrossHub):
     options = {
         "entrance_mode": "cross_hub",
         "unique_retractor_keys": True,
     }
-    # seed 2 hits a FillError here: cross_hub fails fill on roughly 1 in 8
-    # seeds with default-sized location pools (see options.py EntranceMode).
+    # seed 2 hits a FillError here: cross_hub fails fill on roughly 1 in 30
+    # seeds with default-sized location pools (see options.py EntranceMode
+    # and regions.py CROSS_HUB_PINNED_SPOKES).
     seed = 4
 
 

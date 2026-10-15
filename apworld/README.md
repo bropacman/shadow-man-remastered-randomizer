@@ -60,8 +60,8 @@ randomized too. Full option list and detailed behavior notes live in
 - `entrance_mode` — shuffle which portal leads where: `deadside_only` (the
   9 Deadside hub portals) or `cross_hub` (those plus the 5 liveside soul
   gates, so a Deadside portal can lead into a Dark Engine room and a soul
-  gate can lead to a Deadside level; Asylum, Wasteland and Temple of Fire
-  always stay behind Deadside portals).
+  gate can lead to a Deadside level; Asylum, Wasteland, Cageways and the
+  Temples of Fire and Prophecy always stay behind Deadside portals).
 - `soul_threshold_mode` / `soul_logic_buffer` — randomize real in-game
   soul-level requirements and/or pad AP's own logic with extra slack.
 - `progression_balancing` — how aggressively key items are pushed toward

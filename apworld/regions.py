@@ -130,12 +130,26 @@ ALL_PORTAL_IDS: tuple[str, ...] = DEADSIDE_PORTAL_IDS + tuple(SOUL_GATE_PORTALS)
 #     gates guarding these three early regions low. Behind a soul gate
 #     they'd need Night + a liveside item instead, which can shrink
 #     sphere 1 badly; pinning them keeps that gate-safety logic valid.
+#   - Temple of Prophecy and Cageways — fill tightness, not logic. These
+#     are the two richest spokes (15 and 12 locations; Cageways is also the
+#     only way to the Engine Block hub). Behind a soul gate they need
+#     Night + 5 Retractors + an item, and generation hit FillError far
+#     more often: over 80 seeds each of default options and
+#     unique_retractor_keys, every default-options failure had Prophecy
+#     behind a soul gate, and most unique_retractor_keys failures had
+#     Cageways there. Pinning both (plus the per-room item-ban fix in
+#     __init__.py's set_rules) took cross_hub from 14/160 to 5/160
+#     FillErrors; deadside_only is 9/160, off 3/160. The other 4 spokes
+#     and the 5 Engine Block rooms still shuffle across the remaining 9
+#     portals.
 # (The standalone's Salvage-can't-lead-to-a-Gad-Temple constraint is
 # dropped: Gad powers are always shuffled items in AP, so logic covers it.)
 CROSS_HUB_PINNED_SPOKES: tuple[str, ...] = (
     "deadside/LE_Asy1.cut",
     "deadside/LE_Wast.cut",
     "deadside/LE_Gad1.cut",
+    "deadside/LE_Gad2.cut",
+    "deadside/LE_Cage.cut",
 )
 
 
