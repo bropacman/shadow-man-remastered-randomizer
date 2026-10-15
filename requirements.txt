@@ -1,10 +1,8 @@
 PyYAML>=6.0
 
-# Only needed by the AP Companion build (ap_gui.py -> build_ap_gui.bat), via
-# apply_ap_seed.py -> ap_patcher.py -> secret_mode_section_patch.py's live
-# PE-section cvar patch (assembled with Keystone, re-verified with
-# Capstone). The standalone patcher.py never imports
-# secret_mode_section_patch, so build.bat's own pip install doesn't need
-# these -- see RELEASING.md.
+# Assemble and verify the exe patches that add code (Keystone assembles,
+# Capstone re-checks): Unique Retractor Keys in both builds, plus the
+# Trap/Bonus secrets poller in the AP Companion. Both PyInstaller specs
+# bundle their native .dlls with collect_dynamic_libs().
 keystone-engine>=0.9.2
 capstone>=5.0.0

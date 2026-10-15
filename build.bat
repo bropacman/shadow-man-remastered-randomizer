@@ -11,7 +11,7 @@ echo.
 echo [1/3] Checking dependencies...
 :: We ensure pyinstaller and pywebview are present. 
 :: 'yaml' is often required if you use config files.
-pip install --quiet --upgrade pywebview pyinstaller pyyaml
+pip install --quiet --upgrade pywebview pyinstaller pyyaml keystone-engine capstone
 if errorlevel 1 (
     echo.
     echo ERROR: Dependency installation failed. 
