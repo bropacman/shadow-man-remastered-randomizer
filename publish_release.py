@@ -6,7 +6,8 @@ build_all.py). Shows the plan and asks before doing anything.
 
   --ap          sync apworld/ to the mirror repo (sync_apworld_mirror.py),
                 tag apworld-vX.Y.Z here, and create release vX.Y.Z on the
-                mirror with shadowman.apworld + the AP Companion exe
+                mirror with shadowman.apworld, the AP Companion exe and the
+                example ShadowManRemastered.yaml
   --standalone  tag vX.Y.Z here and create the release here with the
                 standalone exe
 
@@ -32,7 +33,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from build_all import read_version, ARTIFACTS, RELEASE_DIR, MIRROR_REPO, STANDALONE_REPO
+from build_all import read_version, ARTIFACTS, EXAMPLE_YAML, RELEASE_DIR, MIRROR_REPO, STANDALONE_REPO
 
 ROOT = Path(__file__).resolve().parent
 
@@ -122,7 +123,8 @@ def main() -> None:
     if args.ap:
         ver = read_version("ap")
         tag = f"apworld-{ver}"
-        assets = [str(ARTIFACTS["apworld"].relative_to(ROOT)), str(ARTIFACTS["companion"].relative_to(ROOT))]
+        assets = [str(p.relative_to(ROOT))
+                  for p in (ARTIFACTS["apworld"], ARTIFACTS["companion"], EXAMPLE_YAML)]
         plan.append(("sync apworld/ to the mirror",
                      [sys.executable, "sync_apworld_mirror.py"]))
         if not tag_exists(tag):

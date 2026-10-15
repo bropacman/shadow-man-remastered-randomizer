@@ -43,14 +43,17 @@ mirror-sync and `gh release create` commands; it never runs them.
   `RANDOMIZER_VERSION` (`constants.py`). Both are applied before building.
 - Steps: `--only apworld,package`, `--skip standalone`, `--dll`, `--no-dll`.
 - Release names: `dist/release/shadow-man-ap-world-vX.Y.Z\` (the
-  `.apworld` keeps its name, since AP loads a world by file name) and
+  `.apworld` keeps its name, since AP loads a world by file name; the example
+  `ShadowManRemastered.yaml` from `apworld/` goes in alongside it) and
   `dist/release/shadow-man-randomizer-vX.Y.Z.zip` (exe + README + LICENSE).
 
 ### Then publish: publish_release.py
 
 After building and testing, `python publish_release.py --ap --notes-ap <notes.md>`
 syncs `apworld/` to the mirror, tags `apworld-vX.Y.Z` here and creates the
-mirror release with the `.apworld` and Companion exe. `--standalone
+mirror release with the `.apworld`, the Companion exe and the example
+`apworld/ShadowManRemastered.yaml`. Keep that YAML listing every option: the
+world test `TestExampleYaml` fails when one is missing. `--standalone
 --notes-standalone <notes.md> --title "<headline>"` tags `vX.Y.Z` and creates
 the release here with the standalone exe. It checks first (on main, clean,
 matches origin, files built, versions match, release not already out),
@@ -127,7 +130,8 @@ editing it by hand would just get overwritten by the next sync.
    (`shadow-man-remastered-ap-world`), not this one — `gh release
    create vX.Y.Z ... --repo bropacman/shadow-man-remastered-ap-world`,
    attaching `shadowman.apworld` and `shadow_man_ap_companion.exe` (both
-   built in step 2, from this repo's `dist/`).
+   built in step 2, from this repo's `dist/`) and the example
+   `apworld/ShadowManRemastered.yaml`.
 
 `build_apworld.bat`/`build_ap_gui.bat` still exist and still work
 standalone (e.g. if you only need one artifact rebuilt) — `release_

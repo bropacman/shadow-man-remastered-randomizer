@@ -223,3 +223,24 @@ class TestBropacmanYaml(ShadowManTestBase):
         "death_link": True,
         "death_link_threshold": 1,
     }
+
+
+def _example_yaml_options() -> dict:
+    from pathlib import Path
+    from Utils import parse_yaml
+    path = Path(__file__).resolve().parent.parent / "ShadowManRemastered.yaml"
+    return parse_yaml(path.read_text(encoding="utf-8"))["Shadow Man Remastered"]
+
+
+class TestExampleYaml(ShadowManTestBase):
+    """The example YAML shipped with each AP release generates, and lists
+    every option this world adds."""
+    options = _example_yaml_options()
+    seed = 1
+
+    def test_lists_every_option(self) -> None:
+        from Options import PerGameCommonOptions
+        from ..options import ShadowManOptions
+        ours = set(ShadowManOptions.type_hints) - set(PerGameCommonOptions.type_hints)
+        self.assertEqual(sorted(ours - set(self.options)), [],
+                         "ShadowManRemastered.yaml is missing these options")
