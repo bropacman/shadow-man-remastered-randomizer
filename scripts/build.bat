@@ -1,6 +1,8 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+:: Lives in scripts\; run from the repo root so the .spec files and
+:: requirements.txt resolve.
+cd /d "%~dp0.."
 
 echo ====================================================
 echo   Shadow Man Remastered Randomizer - Build System
@@ -24,7 +26,7 @@ echo.
 :: Using --clean ensures we don't use stale data from previous failed builds.
 :: We point directly to the .spec file to preserve your custom configuration.
 :: --distpath/--workpath keep this build fully separate from the apworld
-:: build's own output (see build_apworld.bat) -- the two ship independently,
+:: build's own output (see scripts\build_apworld.bat) -- the two ship independently,
 :: see RELEASING.md.
 pyinstaller --noconfirm --clean --distpath "dist\standalone" --workpath "build\standalone" "Shadow Man Randomizer.spec"
 

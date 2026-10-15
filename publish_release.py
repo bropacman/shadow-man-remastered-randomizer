@@ -4,7 +4,7 @@ publish_release.py
 Publish already-built releases in one command (build first with
 build_all.py). Shows the plan and asks before doing anything.
 
-  --ap          sync apworld/ to the mirror repo (sync_apworld_mirror.py),
+  --ap          sync apworld/ to the mirror repo (scripts/sync_apworld_mirror.py),
                 tag apworld-vX.Y.Z here, and create release vX.Y.Z on the
                 mirror with shadowman.apworld, the AP Companion exe and the
                 example ShadowManRemastered.yaml
@@ -36,6 +36,7 @@ from pathlib import Path
 from build_all import read_version, ARTIFACTS, EXAMPLE_YAML, RELEASE_DIR, MIRROR_REPO, STANDALONE_REPO
 
 ROOT = Path(__file__).resolve().parent
+MIRROR_SYNC = str(Path("scripts") / "sync_apworld_mirror.py")
 
 
 def sh(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -126,7 +127,7 @@ def main() -> None:
         assets = [str(p.relative_to(ROOT))
                   for p in (ARTIFACTS["apworld"], ARTIFACTS["companion"], EXAMPLE_YAML)]
         plan.append(("sync apworld/ to the mirror",
-                     [sys.executable, "sync_apworld_mirror.py"]))
+                     [sys.executable, MIRROR_SYNC]))
         if not tag_exists(tag):
             plan.append((f"tag {tag}", ["git", "tag", tag]))
         plan.append((f"push tag {tag}", ["git", "push", "origin", tag]))
@@ -149,8 +150,10 @@ def main() -> None:
     for i, (label, cmd) in enumerate(plan, 1):
         print(f"  {i}. {label}")
     if args.dry_run:
-        print("\n--dry-run: nothing published. Mirror diff preview:")
-        run([sys.executable, "sync_apworld_mirror.py", "--dry-run"]) if args.ap else None
+        print("\n--dry-run: nothing published.")
+        if args.ap:
+            print("Mirror diff preview:")
+            run([sys.executable, MIRROR_SYNC, "--dry-run"])
         return
     if not args.yes and input("\nPublish now? This is public. [y/N] ").strip().lower() != "y":
         sys.exit("Cancelled; nothing published.")

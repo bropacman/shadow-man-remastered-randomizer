@@ -1,6 +1,6 @@
 """
-build_apworld.py
-=================
+scripts/build_apworld.py
+=========================
 Packages apworld/ (this repo's own copy of the AP world's source, merged
 in 2026-09-16 via `git subtree` — see docs/PHASE4_ARCHITECTURE_SCOPING.md;
 pass --source to build from somewhere else, e.g. a separate Archipelago
@@ -127,10 +127,10 @@ name in __init__.py's WebWorld.tutorials — required, not just documentation),
 README.md, ShadowManRemastered.yaml (example player options file).
 
 Usage:
-    python build_apworld.py --source "C:/path/to/Archipelago/worlds/shadowman" \\
+    python scripts/build_apworld.py --source "C:/path/to/Archipelago/worlds/shadowman" \\
                              --output "dist/apworld/shadowman.apworld"
 
-(or just run build_apworld.bat, which also runs tools/check_apworld_sync.py
+(or just run scripts/build_apworld.bat, which also runs tools/check_apworld_sync.py
 first as a non-fatal pre-flight drift check)
 """
 
@@ -143,6 +143,7 @@ import re
 import zipfile
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent  # repo root; this file lives in scripts/
 MODULE_NAME = "shadowman"
 
 EXCLUDE_DIRS = {"__pycache__", "tools", "data", ".git", ".github", "docs", "_to_delete", "test"}
@@ -184,7 +185,7 @@ def _world_version() -> str:
     at module level, real GUI-app dependencies this packaging script has
     no other reason to require.
     """
-    text = (Path(__file__).parent / "ap_gui.py").read_text(encoding="utf-8")
+    text = (ROOT / "ap_gui.py").read_text(encoding="utf-8")
     match = re.search(r'^COMPANION_VERSION\s*=\s*"v?([^"]+)"', text, re.MULTILINE)
     if not match:
         raise SystemExit("Could not find COMPANION_VERSION in ap_gui.py")
@@ -241,12 +242,12 @@ def build(source: Path, output: Path) -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--source", type=Path,
-                         default=Path(__file__).resolve().parent / "apworld",
+                         default=ROOT / "apworld",
                          help="Path to worlds/shadowman's own files (default: "
                               "apworld/, this repo's own copy since the 2026-09-16 "
                               "monorepo merge -- see docs/PHASE4_ARCHITECTURE_SCOPING.md. "
                               "Pass a different path to build from elsewhere.")
-    parser.add_argument("--output", type=Path, default=Path("dist") / "apworld" / f"{MODULE_NAME}.apworld",
+    parser.add_argument("--output", type=Path, default=ROOT / "dist" / "apworld" / f"{MODULE_NAME}.apworld",
                          help="Output .apworld path (default: dist/apworld/shadowman.apworld -- "
                               "kept in its own subfolder, separate from dist/standalone/, since "
                               "the two ship independently; see RELEASING.md)")

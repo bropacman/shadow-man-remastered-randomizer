@@ -1,6 +1,6 @@
 """
-sync_apworld_mirror.py
-=======================
+scripts/sync_apworld_mirror.py
+==============================
 One-way publish: apworld/ (this repo, the real source of truth) -->
 shadow-man-remastered-ap-world (the public-facing mirror repo).
 
@@ -31,7 +31,7 @@ Does NOT tag or publish a release -- that stays a separate, deliberate
 step (see RELEASING.md).
 
 Usage:
-    python sync_apworld_mirror.py [--dry-run]
+    python scripts/sync_apworld_mirror.py [--dry-run]
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # repo root; this file lives in scripts/
 APWORLD_SRC = ROOT / "apworld"
 MIRROR_REPO_URL = "https://github.com/bropacman/shadow-man-remastered-ap-world.git"
 

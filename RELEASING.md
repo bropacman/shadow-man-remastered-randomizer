@@ -19,7 +19,7 @@ lives in this repo next to `gui.py` — it only ever talks to AP seeds
 
 | | Standalone | AP world | AP Companion |
 |---|---|---|---|
-| Build script | `build.bat` | `build_apworld.bat` | `build_ap_gui.bat` |
+| Build script | `scripts\build.bat` | `scripts\build_apworld.bat` | `scripts\build_ap_gui.bat` |
 | Output | `dist\standalone\shadow_man_randomizer.exe` | `dist\apworld\shadowman.apworld` | `dist\ap_companion\shadow_man_ap_companion.exe` |
 | Entry point | `gui.py` / `patcher.py` | `worlds/shadowman/__init__.py` (in your Archipelago checkout) + `ap_patcher.py`/`ap_gui.py` (in this repo) | `ap_gui.py` (same file the AP world's own `ap_patcher.py`/`apply_ap_seed.py` path uses) |
 | Version lives in | `gui.py`'s embedded HTML (`v1.2.0` as of this writing) | `ap_gui.py`'s `COMPANION_VERSION` (`v0.1.1` as of this writing — its own independent track, starting over at 0.x since this is the first release with the AP Companion exe and it's still genuinely beta) — bump this for companion-app changes; check whether the AP world itself should carry its own version marker separately | Same `COMPANION_VERSION` as the AP world row — one bump covers both |
@@ -27,6 +27,11 @@ lives in this repo next to `gui.py` — it only ever talks to AP seeds
 
 `dist/` and `build/` are both gitignored — nothing here is meant to be
 committed, only built fresh and uploaded.
+
+The per-artifact build scripts and `sync_apworld_mirror.py` live in
+`scripts/`; `build_all.py`, `build_all.bat` and `publish_release.py` stay
+at the repo root as the front door. Each `scripts\*.bat` switches to the
+repo root itself, so it works from any folder or by double-click.
 
 ## One command: build_all.py
 
@@ -72,8 +77,9 @@ CLAUDE.md's "Cross-Repo Drift & Port Review" section). Run:
 python tools\check_apworld_sync.py
 ```
 
-`build_apworld.bat` already runs this automatically as a non-fatal
-pre-flight step — read its output before you actually ship. Anything it
+`build_all.py` runs it as a blocking check, and `scripts\build_apworld.bat`
+runs it as a non-fatal pre-flight step — read its output before you
+actually ship. Anything it
 flags with `!!` is worth a look with `--diff <filename>` before cutting
 the apworld. Files it doesn't flag are either byte-identical or expected
 to diverge (they carry real AP-specific logic on top of shared core) —
@@ -81,7 +87,7 @@ see the script's own docstring for the full breakdown of which is which.
 
 ## Cutting a standalone release
 
-1. `build.bat` — installs/updates `pyinstaller`/`pywebview`/`pyyaml`/`keystone-engine`/`capstone`,
+1. `scripts\build.bat` — installs/updates `pyinstaller`/`pywebview`/`pyyaml`/`keystone-engine`/`capstone`,
    builds from `Shadow Man Randomizer.spec`, output lands in
    `dist\standalone\shadow_man_randomizer.exe`.
 2. Bump the version string in `gui.py`'s HTML header if this is a real
@@ -105,24 +111,25 @@ doc's own progress log has the full history if you want the reasoning
 behind the reasoning.
 
 **Never edit `shadow-man-remastered-ap-world` directly.** It's a
-one-way publish target, kept in sync by `sync_apworld_mirror.py` —
+one-way publish target, kept in sync by `scripts/sync_apworld_mirror.py` —
 editing it by hand would just get overwritten by the next sync.
 
 1. Bump `COMPANION_VERSION` in `ap_gui.py` if this is a real release —
    covers both the AP world row and the AP Companion exe below, one bump.
    Do this *before* the next step so the built manifest/UI embed the
    right version.
-2. `python release_apworld.py` — regenerates `extracted_locations.py`
+2. `python build_all.py --skip standalone` — regenerates `extracted_locations.py`
    (this repo's own copy and `apworld/`'s), runs the drift check between
    root-level and `apworld/`-level shared files as a **hard abort** (not
-   `build_apworld.bat`'s own non-fatal version of this step — reminder:
+   `scripts\build_apworld.bat`'s own non-fatal version of this step — reminder:
    the "expected-divergent" files this checks are genuinely, permanently
    different implementations by design, not accidental drift to
    eliminate — see `docs/PHASE4_ARCHITECTURE_SCOPING.md`'s correction on
    this), compile-checks the whole repo, then builds
    `dist\apworld\shadowman.apworld` and
-   `dist\ap_companion\shadow_man_ap_companion.exe`.
-3. `python sync_apworld_mirror.py` — publishes `apworld/`'s current
+   `dist\ap_companion\shadow_man_ap_companion.exe`, and packages them
+   under `dist/release/`.
+3. `python scripts/sync_apworld_mirror.py` — publishes `apworld/`'s current
    contents to `shadow-man-remastered-ap-world` (fresh clone each run,
    never a possibly-stale local checkout; only commits if there's an
    actual diff). Run `--dry-run` first if you want to see what would
@@ -134,9 +141,11 @@ editing it by hand would just get overwritten by the next sync.
    built in step 2, from this repo's `dist/`) and the example
    `apworld/ShadowManRemastered.yaml`.
 
-`build_apworld.bat`/`build_ap_gui.bat` still exist and still work
-standalone (e.g. if you only need one artifact rebuilt) — `release_
-apworld.py` calls the same underlying `build_apworld.py`/`build_ap_gui.bat`
+`publish_release.py --ap` does steps 3 and 4 in one go.
+
+`scripts\build_apworld.bat`/`scripts\build_ap_gui.bat` still work on
+their own (e.g. if you only need one artifact rebuilt) — `build_all.py`
+calls the same `scripts/build_apworld.py`/`scripts\build_ap_gui.bat`
 internally, it doesn't replace them, just the manual plumbing *around*
 them.
 

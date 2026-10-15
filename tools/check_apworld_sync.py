@@ -13,8 +13,8 @@ UNVERIFIED_LOCS filter missing from the AP world's fill.py for weeks,
 the True Form enemy-shuffle fix landing in one copy of enemy_randomizer.py
 and not the other, etc). This script doesn't fix anything -- it's a
 read-only pre-release check. Run it before cutting an apworld build
-(build_apworld.bat already runs it automatically, non-fatally) and
-eyeball anything it flags before shipping.
+(build_all.py runs it as a blocking check; scripts/build_apworld.bat
+runs it non-fatally) and eyeball anything it flags before shipping.
 
 Two categories of pair, because not every same-named file is meant to be
 a byte-for-byte copy:
