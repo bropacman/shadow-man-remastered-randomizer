@@ -9,13 +9,8 @@ echo.
 
 :: 1. Environment Preparation
 echo [1/3] Checking dependencies...
-:: Same toolchain as build.bat (gui.py's own build) -- pywebview/pyinstaller/
-:: pyyaml cover both GUIs -- PLUS keystone-engine/capstone, which build.bat
-:: does NOT need: ap_gui.py's frozen exe re-invokes itself as
-:: apply_ap_seed.py, which pulls in ap_patcher.py -> secret_mode_section_patch.py,
-:: the only place in this repo that imports keystone/capstone. See
-:: requirements.txt and RELEASING.md.
-pip install --quiet --upgrade pywebview pyinstaller pyyaml keystone-engine capstone
+:: Same list as build.bat: both install from requirements.txt.
+pip install --quiet --upgrade -r requirements.txt
 if errorlevel 1 (
     echo.
     echo ERROR: Dependency installation failed.

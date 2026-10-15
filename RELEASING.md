@@ -80,7 +80,7 @@ see the script's own docstring for the full breakdown of which is which.
 
 ## Cutting a standalone release
 
-1. `build.bat` — installs/updates `pyinstaller`/`pywebview`/`pyyaml`,
+1. `build.bat` — installs/updates `pyinstaller`/`pywebview`/`pyyaml`/`keystone-engine`/`capstone`,
    builds from `Shadow Man Randomizer.spec`, output lands in
    `dist\standalone\shadow_man_randomizer.exe`.
 2. Bump the version string in `gui.py`'s HTML header if this is a real

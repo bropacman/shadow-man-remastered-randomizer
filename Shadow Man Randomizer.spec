@@ -1,26 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
-import glob
+import os
+import sys
 
-# Auto-include all root-level .py files except gui.py (the entry point).
-# New patch/helper files are picked up automatically — no manual spec edits needed.
-root_py = [(f, '.') for f in glob.glob('*.py') if f != 'gui.py']
+# Folders, native libraries and hidden imports shared with ap_gui.spec
+# (the AP Companion) live in tools/pyinstaller_shared.py, so both exes always get the same ones.
+sys.path.insert(0, os.path.join(SPECPATH, "tools"))
+from pyinstaller_shared import datas, binaries, HIDDEN_IMPORTS
 
 a = Analysis(
     ['gui.py'],
     pathex=['.'],
-    binaries=[],
-    datas=root_py + [
-        ('data', 'data'),
-        ('randomizers', 'randomizers'),
-        ('patchers', 'patchers'),
-        ('exe_patches', 'exe_patches'),
-        ('assets', 'assets'),
-    ],
-    hiddenimports=[
-        'webview.platforms.winforms',
-        'clr',
-        'yaml',
-    ],
+    binaries=binaries(),
+    datas=datas('gui.py'),
+    hiddenimports=HIDDEN_IMPORTS,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

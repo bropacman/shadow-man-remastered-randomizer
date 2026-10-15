@@ -9,9 +9,8 @@ echo.
 
 :: 1. Environment Preparation
 echo [1/3] Checking dependencies...
-:: We ensure pyinstaller and pywebview are present. 
-:: 'yaml' is often required if you use config files.
-pip install --quiet --upgrade pywebview pyinstaller pyyaml
+:: Same list as build_ap_gui.bat: both install from requirements.txt.
+pip install --quiet --upgrade -r requirements.txt
 if errorlevel 1 (
     echo.
     echo ERROR: Dependency installation failed. 
