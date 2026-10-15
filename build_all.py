@@ -2,7 +2,7 @@
 build_all.py
 ============
 One command for every rebuild after a code or data change, in dependency
-order. Wraps the existing scripts; it doesn't replace them.
+order. Wraps the scripts in scripts/; it doesn't replace them.
 
   0. version  --ap-version / --standalone-version: set COMPANION_VERSION
               (ap_gui.py; also the apworld manifest) / RANDOMIZER_VERSION
@@ -13,8 +13,8 @@ order. Wraps the existing scripts; it doesn't replace them.
   4. dll      rebuild the overlay DLL, only if overlay_dll/src is newer than
               apworld/ShadowManOverlay.dll (or --dll); copied into apworld/
   5. apworld  dist/apworld/shadowman.apworld
-  6. companion dist/ap_companion/shadow_man_ap_companion.exe (build_ap_gui.bat)
-  7. standalone dist/standalone/shadow_man_randomizer.exe (build.bat)
+  6. companion dist/ap_companion/shadow_man_ap_companion.exe (scripts/build_ap_gui.bat)
+  7. standalone dist/standalone/shadow_man_randomizer.exe (scripts/build.bat)
   8. package  versioned release folders under dist/release/ (the AP one also
               gets the example apworld/ShadowManRemastered.yaml), plus the tag and
               `gh release create` commands to run yourself; opens dist/release/
@@ -43,9 +43,8 @@ import time
 import zipfile
 from pathlib import Path
 
-from release_apworld import run, compile_check
-
 ROOT = Path(__file__).resolve().parent
+SCRIPTS = ROOT / "scripts"
 AP_DIR = ROOT / "apworld"
 DLL_SRC = ROOT / "overlay_dll"
 DLL_BUILD = DLL_SRC / "build"
@@ -121,11 +120,29 @@ def write_version(track: str, new: str) -> None:
 
 # ── Build helpers ─────────────────────────────────────────────────────────────
 
+def run(cmd: list, cwd: Path | None = None) -> None:
+    print(f"\n$ {' '.join(str(c) for c in cmd)}")
+    result = subprocess.run(cmd, cwd=cwd)
+    if result.returncode != 0:
+        sys.exit(f"\nABORTED: command failed with exit code {result.returncode} "
+                 f"(cwd={cwd or Path.cwd()})")
+
+
+def compile_check(repo_root: Path) -> None:
+    """Same as CI's compile check: git ls-files, so only committed files count."""
+    listed = subprocess.run(["git", "ls-files", "*.py"], cwd=repo_root,
+                            capture_output=True, text=True, check=True)
+    py_files = [line for line in listed.stdout.splitlines() if line.strip()]
+    if not py_files:
+        sys.exit(f"ABORTED: git ls-files found no .py files under {repo_root}")
+    run([sys.executable, "-m", "py_compile", *py_files], cwd=repo_root)
+
+
 def run_bat(name: str) -> None:
     # stdin=DEVNULL lets the .bat's trailing `pause` return instead of
     # waiting for a key press.
-    print(f"\n$ {name}")
-    result = subprocess.run(["cmd", "/c", str(ROOT / name)], cwd=ROOT,
+    print(f"\n$ scripts\\{name}")
+    result = subprocess.run(["cmd", "/c", str(SCRIPTS / name)], cwd=ROOT,
                             stdin=subprocess.DEVNULL)
     if result.returncode != 0:
         sys.exit(f"\nABORTED: {name} failed with exit code {result.returncode}")
@@ -180,7 +197,7 @@ def package(done: list[str]) -> list[str]:
         assets = " ".join(f'"{(out / f.name).relative_to(ROOT)}"' for f in ap_files)
         cmds += [
             f"git tag apworld-{ap_ver}",
-            f"python sync_apworld_mirror.py",
+            f"python scripts/sync_apworld_mirror.py",
             f'gh release create {ap_ver} {assets} --repo {MIRROR_REPO} --prerelease '
             f'--title "Shadow Man Remastered AP World {ap_ver} - Beta" --notes-file <notes.md>',
         ]
@@ -287,17 +304,17 @@ def main() -> None:
 
     if "apworld" in steps:
         header("apworld", "packaging shadowman.apworld")
-        run([sys.executable, "build_apworld.py", "--source", str(AP_DIR),
+        run([sys.executable, str(SCRIPTS / "build_apworld.py"), "--source", str(AP_DIR),
              "--output", str(ARTIFACTS["apworld"])], cwd=ROOT)
         done.append("apworld")
 
     if "companion" in steps:
-        header("companion", "building the AP Companion exe (build_ap_gui.bat)")
+        header("companion", "building the AP Companion exe (scripts/build_ap_gui.bat)")
         run_bat("build_ap_gui.bat")
         done.append("companion")
 
     if "standalone" in steps:
-        header("standalone", "building the standalone exe (build.bat)")
+        header("standalone", "building the standalone exe (scripts/build.bat)")
         run_bat("build.bat")
         done.append("standalone")
 
@@ -318,7 +335,7 @@ def main() -> None:
         for c in cmds:
             print(f"  {c}")
     else:
-        print("\nNot automated: commit/tag, sync_apworld_mirror.py, publishing (see RELEASING.md).")
+        print("\nNot automated: commit/tag, scripts/sync_apworld_mirror.py, publishing (see RELEASING.md).")
 
     if "package" in done:
         print(f"\nRelease files: {RELEASE_DIR}")

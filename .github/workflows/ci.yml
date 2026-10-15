@@ -288,7 +288,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Same packager release builds use (build_all.py / build_apworld.bat),
+      # Same packager release builds use (build_all.py / scripts/build_apworld.bat),
       # so every push gets an installable .apworld under the run's
       # Artifacts. Named with COMPANION_VERSION + short SHA; the file inside
       # stays shadowman.apworld because AP loads a world by its file name.
@@ -297,7 +297,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          PYTHONIOENCODING=utf-8 python build_apworld.py --source apworld --output dist/apworld/shadowman.apworld
+          PYTHONIOENCODING=utf-8 python scripts/build_apworld.py --source apworld --output dist/apworld/shadowman.apworld
           version=$(python -c "import re; print(re.search(r'COMPANION_VERSION\s*=\s*\"(v[0-9.]+)\"', open('ap_gui.py', encoding='utf-8').read()).group(1))")
           echo "name=shadowman-apworld-${version}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 

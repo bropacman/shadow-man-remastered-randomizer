@@ -117,7 +117,7 @@ python patcher.py --game-dir "C:\Program Files (x86)\Steam\steamapps\common\Shad
 
 ### Building the exe yourself
 
-Run `build.bat` from the randomizer folder. It installs PyInstaller automatically and produces `dist/shadow_man_randomizer.exe`.
+Run `scripts\build.bat` (double-click works). It installs PyInstaller automatically and produces `dist/standalone/shadow_man_randomizer.exe`. `python build_all.py` rebuilds everything; see `RELEASING.md`.
 
 The GUI covers all available settings and is the recommended way to generate seeds. The CLI is available for scripting or advanced use — run `python patcher.py --help` or see [All Options](#all-options) below.
 
@@ -233,7 +233,8 @@ shadow-man-remastered-randomizer/
 ├── patcher.py                    ← Main entry point, orchestrates all steps
 ├── gui.py                        ← pywebview GUI wrapper (runs patcher.py as a subprocess)
 ├── Launch Randomizer.bat         ← Double-click to open the GUI (no terminal needed)
-├── build.bat                     ← Builds a standalone .exe via PyInstaller
+├── build_all.py                  ← Rebuilds every artifact in order (see RELEASING.md)
+├── publish_release.py            ← Publishes built releases (asks first)
 ├── fill.py                       ← Assumed-fill placement algorithm + simulation (entrance-aware)
 ├── access_rules.py               ← All logic rules (gates, items, soul levels)
 ├── regions.py                    ← Region graph and connections
@@ -242,6 +243,8 @@ shadow-man-remastered-randomizer/
 ├── constants.py                  ← File lists, level folders, EXE item type IDs
 ├── kpf_handler.py                ← KPF archive extraction and mod packing
 ├── setup_gad_records.py          ← Injects RSC_X_GAD_PICKUP records into temples
+│
+├── scripts/                      ← Per-artifact build scripts (build.bat, build_apworld.py, …) and the AP mirror sync
 │
 ├── exe_patches/                  ← Patches applied to a fresh copy of thoth_x64.exe
 │   ├── cadeaux_patch.py          ← Altar/door cadeaux requirement and cost

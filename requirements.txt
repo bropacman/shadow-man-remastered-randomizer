@@ -1,4 +1,4 @@
-# Everything both exe builds need. build.bat and build_ap_gui.bat both
+# Everything both exe builds need. scripts/build.bat and scripts/build_ap_gui.bat both
 # install from this file, so a new dependency goes here once.
 pyinstaller
 pywebview

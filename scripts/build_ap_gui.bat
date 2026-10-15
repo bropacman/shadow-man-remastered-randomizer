@@ -1,6 +1,8 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+:: Lives in scripts\; run from the repo root so the .spec files and
+:: requirements.txt resolve.
+cd /d "%~dp0.."
 
 echo ====================================================
 echo   Shadow Man Remastered - AP Companion - Build System

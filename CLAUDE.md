@@ -22,12 +22,13 @@ One repo, three shipped artifacts (see `RELEASING.md`):
 - **`apworld/` is the only place to edit AP world code.** It was merged in
   with `git subtree` on 2026-09-16 (`docs/PHASE4_ARCHITECTURE_SCOPING.md`):
   ordinary tracked files, not a nested repo or submodule.
-- Build: `python build_apworld.py` → `dist/apworld/shadowman.apworld`.
+- Build: `python scripts/build_apworld.py` → `dist/apworld/shadowman.apworld`
+  (or `python build_all.py --only apworld`).
   To test, back up then replace `custom_worlds/shadowman.apworld` in the
   local Archipelago install (sibling folder `../Archipelago-0.6.7`). That
   install has no `worlds/shadowman/` source folder.
 - Public mirror repo `shadow-man-remastered-ap-world` is published from
-  `apworld/` only by the maintainer running `python sync_apworld_mirror.py`.
+  `apworld/` only by the maintainer running `python scripts/sync_apworld_mirror.py`.
   Never edit the mirror; never run the sync unasked.
 - `../Archipelago/worlds/shadowman/` is an outdated July 2026 copy. Ignore it.
 - Archived history mentions `Archipelago-0.6.7/worlds/shadowman/`,
@@ -35,6 +36,10 @@ One repo, three shipped artifacts (see `RELEASING.md`):
 - Both exe builds install from `requirements.txt` and take their bundled
   folders, native DLLs and hidden imports from `tools/pyinstaller_shared.py`;
   add new ones there, not to one `.spec` or `.bat`.
+- Build/release tooling: `build_all.py`, `build_all.bat` and
+  `publish_release.py` at the root; per-artifact build scripts
+  (`build.bat`, `build_ap_gui.bat`, `build_apworld.bat/.py`) and
+  `sync_apworld_mirror.py` in `scripts/`.
 - Commit or push only when asked. Releases follow `RELEASING.md`.
 
 ## 2. File integrity protocol

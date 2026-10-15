@@ -23,14 +23,14 @@ the only place to edit. Do **not** edit:
 
 - `C:\Users\jonat\Documents\Archipelago\worlds\shadowman\` (outdated July copy)
 - the installed `Archipelago-0.6.7\custom_worlds\shadowman.apworld` directly
-- the public mirror repo (published only via `sync_apworld_mirror.py`, by Jon)
+- the public mirror repo (published only via `scripts/sync_apworld_mirror.py`, by Jon)
 
 Some `CLAUDE.md` sections still say the source lives in
 `Archipelago-0.6.7/worlds/shadowman/` or `Archipelago/worlds/shadowman/`;
 those are stale — `apworld/` wins. Line numbers below refer to
 `apworld/__init__.py` as of 2026-09-16 and may drift; search, don't trust them.
 
-To test, build with `python build_apworld.py` (writes
+To test, build with `python scripts/build_apworld.py` (writes
 `dist/apworld/shadowman.apworld`). Before installing it, copy the existing
 `Archipelago-0.6.7\custom_worlds\shadowman.apworld` to
 `shadowman.apworld.bak-<YYYYMMDD>` so Jon can roll back, then copy the new
@@ -83,7 +83,7 @@ Options" or `python -c "from Options import generate_yaml_templates; ..."`).
 - Changing `ap_gui.py` behaviour. Optional stretch only if Phase 1–2 are
   done: expose the Python rule list so the GUI could reuse the same messages.
 - `ap_patcher.py`, `client.py`, the standalone `patcher.py`/`gui.py`.
-- Committing, running `sync_apworld_mirror.py`, or making a release — Jon
+- Committing, running `scripts/sync_apworld_mirror.py`, or making a release — Jon
   reviews and does those.
 
 ## Verification (required, report results honestly)
