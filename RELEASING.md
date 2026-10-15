@@ -40,7 +40,8 @@ mirror-sync and `gh release create` commands; it never runs them.
 
 - Versions: `--ap-version patch|minor|major|X.Y.Z` sets `COMPANION_VERSION`
   (`ap_gui.py`, also the apworld manifest); `--standalone-version ...` sets
-  `RANDOMIZER_VERSION` (`constants.py`). Both are applied before building.
+  `RANDOMIZER_VERSION` (`constants.py`) and README's **Version** line. Both are
+  applied before building.
 - Steps: `--only apworld,package`, `--skip standalone`, `--dll`, `--no-dll`.
 - Release names: `dist/release/shadow-man-ap-world-vX.Y.Z\` (the
   `.apworld` keeps its name, since AP loads a world by file name; the example
