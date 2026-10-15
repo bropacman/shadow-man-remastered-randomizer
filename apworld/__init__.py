@@ -2098,6 +2098,7 @@ class ShadowManWorld(World):
             "altar_health_grant":    int(self.options.altar_health_grant),
             "altar_cadeaux_required":      int(self.options.altar_cadeaux_required),
             "fogometers_cadeaux_required": int(self.options.fogometers_cadeaux_required),
+            "life_altar_checks":     bool(self.options.life_altar_checks),
             "death_penalty":         int(self.options.death_penalty) / 10,
             "sprint_multiplier":     int(self.options.sprint_multiplier) / 10,
             # 2026-07-21 (entrance randomizer) — informational only; the

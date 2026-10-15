@@ -1,6 +1,15 @@
 # Scope: Life Altar offerings as AP location checks
 
-Status: phase A built 2026-10-15 (`life_altar_checks` option). AP world only. Both in-game
+Status: phase A built 2026-10-15 (`life_altar_checks` option). AP world +
+one exe patch (`exe_patches/life_altar_patch.py`).
+
+**Max-health refusal (found in testing 2026-10-15):** the altar handler
+`FUN_14043f2f0` refuses when max health is exactly 10000 (`cmp eax, 0x2710`
+/ `je` at 0x14043F4E3); the grant is a separate add-then-clamp. With a big
+Altar Health Grant or high Starting Health the cap is hit before all five
+altars, which would strand offering checks. When the option is on,
+`ap_patcher.py` NOPs that `je`: altars stay usable at the cap (they spend
+Cadeaux and set their flag, adding no health). The cap itself is unchanged. Both in-game
 questions answered by the maintainer 2026-10-15 (see Logic and "To verify").
 
 ## Goal

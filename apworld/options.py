@@ -535,7 +535,9 @@ class LifeAltarChecks(Toggle):
     Adds 5 checks for offering Cadeaux at the Wasteland life altars:
     "Life Altar Offering 1" is sent after your first offering at any altar,
     "Offering 2" after your second, and so on. The altars work as normal
-    (they still cost Altar Cadeaux Required each and grant health).
+    (they still cost Altar Cadeaux Required each and grant health), except
+    they stay usable at max health (vanilla refuses at 10000), so every
+    offering can always be made; at the cap they just add no health.
 
     In logic, offering N needs Deadside - Wasteland plus N x Altar Cadeaux
     Required worth of Cadeaux. These checks only hold filler items.
