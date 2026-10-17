@@ -12,7 +12,7 @@ import random
 import zipfile
 from pathlib import Path
 from typing import Dict, Any
-from BaseClasses import ItemClassification, Tutorial
+from BaseClasses import ItemClassification, LocationProgressType, Tutorial
 from worlds.AutoWorld import World, WebWorld
 from worlds.LauncherComponents import components, Component, launch_subprocess, Type, icon_paths
 
@@ -27,8 +27,9 @@ from .regions import create_regions, ASYLUM_ENGINE_BLOCK, \
     normalize_entrance_shuffle, shuffle_entrances, SOUL_GATE_PORTALS, portal_destination_region,     CROSS_HUB_UNPIN_CADEAUX_LOCATIONS
 from .items import ShadowManItem, item_table, STACKABLE_COUNTS, AP_ITEM_TO_RSC, _UNIQUE_ITEM_RSC_NAMES, \
     is_cadeaux_item, cadeaux_bundle_item_name, CADEAUX_ITEM_NAMES, is_trap_bonus_item, \
-    RETRACTOR_KEY_ITEM_NAMES
-from .locations import ShadowManLocation, location_table, FRIENDLY_NAMES
+    RETRACTOR_KEY_ITEM_NAMES, cadeaux_item_weight
+from .locations import ShadowManLocation, ShadowManFlagLocation, location_table, FRIENDLY_NAMES, \
+    LIFE_ALTAR_LOCATIONS, LIFE_ALTAR_REGION
 from Options import OptionGroup
 from . import options as _opts
 from .options import ShadowManOptions
@@ -88,7 +89,7 @@ class ShadowManWebWorld(WebWorld):
     option_groups = [
         OptionGroup("Cadeaux", [
             _opts.Cadeauxsanity, _opts.CadeauxBundleSize, _opts.CadeauxGatedContent,
-            _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
+            _opts.LifeAltarChecks, _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
         ]),
         OptionGroup("Gates", [
             _opts.GatePreset, _opts.MaxGateSL, _opts.OpenGatesN,
@@ -138,7 +139,8 @@ class ShadowManWorld(World):
     # datapackage, which the web tracker, hints and YAML location options
     # all read names from.
     location_name_to_id: Dict[str, int] = {
-        FRIENDLY_NAMES[key]: data.code for key, data in location_table.items()
+        **{FRIENDLY_NAMES[key]: data.code for key, data in location_table.items()},
+        **LIFE_ALTAR_LOCATIONS,
     }
     # Cadeaux Bundle Size (2026-07-27): "Cadeaux Bundle x{N}" (see items.py)
     # is a distinct concrete item per denomination, since the bundle's
@@ -209,6 +211,9 @@ class ShadowManWorld(World):
                 warn(f"cadeaux_bundle_size {int(o.cadeaux_bundle_size)} set to 1 "
                      f"(requires cadeauxsanity).")
                 o.cadeaux_bundle_size.value = 1
+            if bool(o.life_altar_checks):
+                warn("life_altar_checks turned off (requires cadeauxsanity).")
+                o.life_altar_checks.value = 0
 
         # 4. Flat "Retractor" can't be given when unique keys are on.
         if bool(o.unique_retractor_keys):
@@ -725,7 +730,11 @@ class ShadowManWorld(World):
             len(self.cadeaux_bundle_representatives))
 
         _CADEAUX_SLACK = 20
-        if bool(self.options.cadeauxsanity) and bool(self.options.cadeaux_gated_content):
+        # Life Altar Checks gate on Cadeaux the same way, so they get the same
+        # cushion (once, not twice when both options are on).
+        if bool(self.options.cadeauxsanity) and (
+                bool(self.options.cadeaux_gated_content)
+                or bool(self.options.life_altar_checks)):
             _cadeaux_checkable = len(self.cadeaux_bundle_representatives)
             _cadeaux_deficit = (max(0, self.cadeaux_required_logic - _cadeaux_checkable)
                                 + _CADEAUX_SLACK)
@@ -754,6 +763,9 @@ class ShadowManWorld(World):
             barrel_promoted_locs = self.barrel_promoted_locs,
             unique_retractor_keys = bool(self.options.unique_retractor_keys),
         )
+
+        if bool(self.options.life_altar_checks):
+            self._create_life_altar_locations()
 
         # "Defeat Legion" -> "Victory" event (2026-07-21). Standard AP
         # event-location/event-item idiom (BaseClasses.Region.add_event) —
@@ -1126,6 +1138,8 @@ class ShadowManWorld(World):
         open_location_count -= (total_barrel_in_table - len(self.barrel_promoted_locs))
         if not cadeaux_gated_content:
             open_location_count -= cadeaux_666_loc_count
+        if bool(self.options.life_altar_checks):
+            open_location_count += len(LIFE_ALTAR_LOCATIONS)
 
         # Trap/Bonus (2026-08-01, renamed from "Secret Trap" 2026-08-03):
         # one item per promoted barrel location (self.barrel_promoted_locs,
@@ -1153,6 +1167,32 @@ class ShadowManWorld(World):
                 "Dark Soul", ItemClassification.useful, data.code, self.player))
 
         self.multiworld.itempool += pool
+
+    def _create_life_altar_locations(self) -> None:
+        """
+        Life Altar Checks: 5 count-based offering checks in Wasteland (see
+        docs/scope_life_altar_checks.md). Offering N = any N altars used, in
+        any order; the altars share the Baton Altar's requirement (region
+        access only). Logic needs N x altar cost worth of Cadeaux, summed by
+        real worth (a "Cadeaux Bundle x5" counts 5), capped at what the pool
+        holds. EXCLUDED like the Fogometers Light Soul: fill's simulations
+        never collect filler Cadeaux, so these may only hold filler.
+        """
+        wasteland = self.multiworld.get_region(LIFE_ALTAR_REGION, self.player)
+        cost = int(self.options.altar_cadeaux_required)
+        pool_worth = sum(self.cadeaux_bundle_representatives.values())
+        player = self.player
+
+        def cadeaux_worth(state) -> int:
+            return sum(state.count(name, player) * cadeaux_item_weight(name)
+                       for name in CADEAUX_ITEM_NAMES)
+
+        for n, (name, code) in enumerate(LIFE_ALTAR_LOCATIONS.items(), start=1):
+            loc = ShadowManFlagLocation(player, name, code, wasteland)
+            need = min(n * cost, pool_worth)
+            loc.access_rule = lambda state, need=need: cadeaux_worth(state) >= need
+            loc.progress_type = LocationProgressType.EXCLUDED
+            wasteland.locations.append(loc)
 
     def create_item(self, name: str) -> ShadowManItem:
         data = item_table[name]
@@ -1425,7 +1465,8 @@ class ShadowManWorld(World):
         # any other displaced cadeaux-family item.
         self_cadeaux_loc_names = {
             loc.raw.loc_key for loc in self.multiworld.get_locations(self.player)
-            if loc.item is not None
+            if hasattr(loc, "raw")
+            and loc.item is not None
             and loc.item.player == self.player
             and is_cadeaux_item(loc.item.name)
         }
@@ -1437,7 +1478,8 @@ class ShadowManWorld(World):
         # donor supply on placements that don't need one).
         placed = sorted(
             loc.raw.loc_key for loc in self.multiworld.get_locations(self.player)
-            if loc.item is not None
+            if hasattr(loc, "raw")
+            and loc.item is not None
             and loc.item.player == self.player
             and is_cadeaux_item(loc.item.name)
             and loc.raw.loc_key in location_table
@@ -2111,6 +2153,7 @@ class ShadowManWorld(World):
             "altar_health_grant":    int(self.options.altar_health_grant),
             "altar_cadeaux_required":      int(self.options.altar_cadeaux_required),
             "fogometers_cadeaux_required": int(self.options.fogometers_cadeaux_required),
+            "life_altar_checks":     bool(self.options.life_altar_checks),
             "death_penalty":         int(self.options.death_penalty) / 10,
             "sprint_multiplier":     int(self.options.sprint_multiplier) / 10,
             # 2026-07-21 (entrance randomizer) — informational only; the
@@ -2427,6 +2470,7 @@ class ShadowManWorld(World):
                     and item.player == self.player
                     and item.name in _UNIQUE_ITEM_RSC_NAMES
                     and item.name not in inventory_flag_locs
+                    and hasattr(loc, "raw")
                     and loc.raw.loc_key in location_map):
                 inventory_flag_locs[item.name] = loc.raw.loc_key
 
@@ -2469,6 +2513,11 @@ class ShadowManWorld(World):
             # would always misreport 0/5 in this mode — there's no fungible
             # "Retractor" item in the pool at all when this option is on).
             "unique_retractor_keys": bool(self.options.unique_retractor_keys),
+            # Life Altar Checks: the 5 offering location IDs, in order (empty
+            # when off). client.py sends the first N once N CF_LIFEALTAR
+            # flags are set.
+            "life_altar_ap_ids": (list(LIFE_ALTAR_LOCATIONS.values())
+                                  if bool(self.options.life_altar_checks) else []),
             # Universal Tracker support (2026-07-28, see generate_early()'s
             # UT-passthrough comment and interpret_slot_data() below for
             # the full rationale). Neither of these two keys existed in

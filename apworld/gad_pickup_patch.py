@@ -19,6 +19,7 @@ Six patches total, no .data writes:
   5. case 0x16 (gad pickup): JMP -> stub1
   6. case 0x13 (Poigne):     JMP -> stub2
   7. NOP all 8 writes in FUN_140459c00 switch (temple absolute gad sets)
+  8. Ring cutscene predicates return false (temple rings stay inert)
 
 MODEL PICKER
 ------------
@@ -203,6 +204,22 @@ TEMPLE_NOP_SITES = [
     ("gad6_caseb",   0x4590D8, bytes([0xC7, 0x03, 0x06, 0x00, 0x00, 0x00]), 6),
     ("gad7_casef",   0x4590E0, bytes([0xC7, 0x03, 0x07, 0x00, 0x00, 0x00]), 6),
     ("gad0_default", 0x4590E8, bytes([0xC7, 0x03, 0x00, 0x00, 0x00, 0x00]), 6),
+]
+
+# Each temple ring cutscene (t1tchgad/getgad.cut, t2wlkgad/wlkgad.cut,
+# t3swmgad/swmgad.cut) is registered in the static cutscene table with a
+# predicate; the cutscene only starts while it returns true:
+#   touch: ring stage [0x140D838E0] == 5 && !CF_GOTTOUCHGAD
+#   walk:  !CF_GOTWALKGAD
+#   swim:  ring stage [0x140D838E4] == 5 && !CF_GOTSWIMGAD
+# The cutscene moves the player and throws them into lava/coals, so with
+# temples shuffled each predicate becomes `xor al, al ; ret` and the ring
+# never starts it. See docs/scope_gad_ring_flags.md.
+RING_PREDICATE_PATCH = bytes([0x32, 0xC0, 0xC3])   # xor al, al ; ret
+RING_CUTSCENE_PREDICATES = [
+    ("touch_ring", 0x2AC850, bytes.fromhex("4883EC28833D8564")),   # 0x1402AD450
+    ("walk_ring",  0x2AC890, bytes.fromhex("4883EC28E8C7A009")),   # 0x1402AD490
+    ("swim_ring",  0x2AC8C0, bytes.fromhex("4883EC28833D1964")),   # 0x1402AD4C0
 ]
 
 # NOP the JZ that skips FUN_140331970 for RSC_X_PRISON_KEY_CARD (type_id 0x15)
@@ -525,6 +542,18 @@ def patch_gad_pickup(
                 print(f"  [gad_pickup] {name} already NOPed")
             else:
                 print(f"  [gad_pickup] WARNING: {name} unexpected bytes {actual.hex(' ')}")
+
+        # 8. Ring cutscene predicates -> always false
+        for name, off, vanilla in RING_CUTSCENE_PREDICATES:
+            actual = bytes(data[off : off + len(vanilla)])
+            if actual != vanilla:
+                raise RuntimeError(
+                    f"gad_pickup: unexpected bytes at {name} predicate "
+                    f"(file offset {off:#x}): {actual.hex(' ')} "
+                    f"(expected vanilla {vanilla.hex(' ')})"
+                )
+            data[off : off + len(RING_PREDICATE_PATCH)] = RING_PREDICATE_PATCH
+            print(f"  [gad_pickup] {name} cutscene disabled @ 0x{off:X}")
     else:
         print("  [gad_pickup] Temple NOPs skipped")
 

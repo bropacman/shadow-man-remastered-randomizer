@@ -683,6 +683,12 @@ _HTML = r"""<!DOCTYPE html>
           <button class="rng-btn" id="yCadeauxGatedContentRng" onclick="event.preventDefault();toggleRng('yCadeauxGatedContent')" title="Randomize per seed">&#127922;</button>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls whether the Fogometers Light Soul location (gated behind SL10 + collecting the Fog door&rsquo;s worth of Cadeaux, above) exists as an AP check at all. Off (default): excluded from AP entirely &mdash; stays vanilla, same treatment as barrels/enemy checks. On: it becomes a real check, gated in logic by that Fog door requirement, backed by a precollected-Cadeaux fix so it stays solvable. Requires Cadeaux Key Items above to also be on (greyed out otherwise) &mdash; Cadeaux isn&rsquo;t an AP-tracked item at all unless that&rsquo;s on.</span></span>
         </label>
+        <label class="check-label" style="grid-column:1/-1;margin-top:6px">
+          <input type="checkbox" id="yLifeAltarChecks" onchange="updateYamlPreview()">
+          Life Altar Checks
+          <button class="rng-btn" id="yLifeAltarChecksRng" onclick="event.preventDefault();toggleRng('yLifeAltarChecks')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. These checks only hold filler. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
+        </label>
       </div>
 
       <hr class="divider">
@@ -1101,16 +1107,19 @@ function syncCadeauxConstraints() {
 // it — the backend already treats cadeaux_gated_content as a no-op
 // whenever insanity actually resolves off for that seed).
 function syncCadeauxGatedDependency() {
-  const cgcEl    = document.getElementById('yCadeauxGatedContent');
-  const cgcBtn   = document.getElementById('yCadeauxGatedContentRng');
   const insanityOff = !isRng('yInsanity') && !document.getElementById('yInsanity').checked;
-
-  if (insanityOff) {
-    applyRng('yCadeauxGatedContent', false);
-    cgcEl.checked = false;
-  }
-  cgcEl.disabled = insanityOff || isRng('yCadeauxGatedContent');
-  if (cgcBtn) cgcBtn.disabled = insanityOff;
+  // Fog Door Check and Life Altar Checks share this rule (both are
+  // Cadeaux-gated checks; the backend turns both off without cadeauxsanity).
+  ['yCadeauxGatedContent', 'yLifeAltarChecks'].forEach(id => {
+    const el  = document.getElementById(id);
+    const btn = document.getElementById(id + 'Rng');
+    if (insanityOff) {
+      applyRng(id, false);
+      el.checked = false;
+    }
+    el.disabled = insanityOff || isRng(id);
+    if (btn) btn.disabled = insanityOff;
+  });
   updateYamlPreview();
 }
 
@@ -1314,6 +1323,7 @@ function buildYaml() {
   kv('altar_cadeaux_required', yamlNum('yAltarCadeaux'));
   kv('fogometers_cadeaux_required', yamlNum('yFogCadeaux'));
   kv('cadeaux_gated_content', yamlBool('yCadeauxGatedContent'));
+  kv('life_altar_checks', yamlBool('yLifeAltarChecks'));
   kv('death_penalty', yamlDeathPenalty());
   kv('sprint_multiplier', yamlSprintMultiplier());
   kv('soul_threshold_mode', yamlChoiceRng('ySoulThresholdMode'));
@@ -1369,12 +1379,14 @@ function updateCheckEstimate() {
   const insanityOn      = document.getElementById('yInsanity').checked;
   const bundleSize       = Math.max(1, parseInt(document.getElementById('yCadeauxBundleSize').value, 10) || 1);
   const gatedContentOn   = document.getElementById('yCadeauxGatedContent').checked;
+  const lifeAltarsOn     = insanityOn && document.getElementById('yLifeAltarChecks').checked;
   const trapCount        = Math.max(0, parseInt(document.getElementById('yTrapBonusCount').value, 10) || 0);
 
   let total = CHECK_BASE.base;
   total += insanityOn ? Math.ceil(CHECK_BASE.cadeaux_total / bundleSize) : 0;
   total += Math.min(trapCount, CHECK_BASE.barrel_candidates);
   if (!gatedContentOn) total -= CHECK_BASE.gated_bonus;
+  if (lifeAltarsOn) total += 5;
 
   el.textContent = total.toLocaleString();
 
@@ -1383,7 +1395,7 @@ function updateCheckEstimate() {
   // 4 independently-randomizable fields would need each slider's own
   // min/max attributes and isn't worth the complexity for a live estimate).
   // Flag it instead so the number is clearly labeled as approximate.
-  const varies = ['yInsanity', 'yCadeauxBundleSize', 'yCadeauxGatedContent', 'yTrapBonusCount'].some(isRng);
+  const varies = ['yInsanity', 'yCadeauxBundleSize', 'yCadeauxGatedContent', 'yLifeAltarChecks', 'yTrapBonusCount'].some(isRng);
   if (noteEl) noteEl.textContent = varies ? 'varies — some settings are random' : '';
 }
 
@@ -1513,6 +1525,7 @@ async function importYaml() {
    'unique_retractor_keys:yUniqueRetractorKeys',
    'deadside_guns:yDeadsideGuns',
    'cadeauxsanity:yInsanity', 'cadeaux_gated_content:yCadeauxGatedContent',
+   'life_altar_checks:yLifeAltarChecks',
    'death_link:yDeathLink',
    'shuffle_ambients:yShuffleAmbients', 'shuffle_music:yShuffleMusic',
    'shuffle_voices:yShuffleVoices', 'shuffle_weapons_sfx:yShuffleWeaponsSfx',
