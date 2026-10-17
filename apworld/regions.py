@@ -130,6 +130,20 @@ ALL_PORTAL_IDS: tuple[str, ...] = DEADSIDE_PORTAL_IDS + tuple(SOUL_GATE_PORTALS)
 #     gates guarding these three early regions low. Behind a soul gate
 #     they'd need Night + a liveside item instead, which can shrink
 #     sphere 1 badly; pinning them keeps that gate-safety logic valid.
+#   - Temple of Prophecy and Cageways (CROSS_HUB_SMALL_POOL_PINS, only when
+#     cadeauxsanity adds fewer than CROSS_HUB_UNPIN_CADEAUX_LOCATIONS
+#     locations) — fill tightness, not logic. These
+#     are the two richest spokes (15 and 12 locations; Cageways is also the
+#     only way to the Engine Block hub). Behind a soul gate they need
+#     Night + 5 Retractors + an item, and generation hit FillError far
+#     more often: over 80 seeds each of default options and
+#     unique_retractor_keys, every default-options failure had Prophecy
+#     behind a soul gate, and most unique_retractor_keys failures had
+#     Cageways there. Pinning both (plus the per-room item-ban fix in
+#     __init__.py's set_rules) took cross_hub from 14/160 to 5/160
+#     FillErrors; deadside_only is 9/160, off 3/160. The other 4 spokes
+#     and the 5 Engine Block rooms still shuffle across the remaining 9
+#     portals.
 # (The standalone's Salvage-can't-lead-to-a-Gad-Temple constraint is
 # dropped: Gad powers are always shuffled items in AP, so logic covers it.)
 CROSS_HUB_PINNED_SPOKES: tuple[str, ...] = (
@@ -137,6 +151,18 @@ CROSS_HUB_PINNED_SPOKES: tuple[str, ...] = (
     "deadside/LE_Wast.cut",
     "deadside/LE_Gad1.cut",
 )
+CROSS_HUB_SMALL_POOL_PINS: tuple[str, ...] = (
+    "deadside/LE_Gad2.cut",
+    "deadside/LE_Cage.cut",
+)
+# Cadeaux locations (cadeauxsanity, ~653 / bundle size) at or above which
+# Prophecy and Cageways shuffle freely under cross_hub. Measured 2026-10-15,
+# 30 seeds each, default options otherwise: bundle size 10 (62 locations)
+# unpinned 3/30 FillError vs 0/30 pinned; bundle size 5 (123) 0/30 either
+# way. 120 = bundle size 5 or smaller. Trap/bonus barrels don't count (no
+# progression on barrels): 100 of them unpinned was 1/30 vs 3/30 pinned,
+# i.e. no real change. See _cadeaux_location_count() in __init__.py.
+CROSS_HUB_UNPIN_CADEAUX_LOCATIONS = 120
 
 
 def portal_destination_region(portal_id: str) -> str:
@@ -179,14 +205,15 @@ def deadside_portal_shuffle(entrance_shuffle: dict | None) -> dict[str, str]:
     return out
 
 
-def shuffle_entrances(rng, mode: str) -> dict[str, str] | None:
+def shuffle_entrances(rng, mode: str, pin_small_pool_spokes: bool = True) -> dict[str, str] | None:
     """
     Build this seed's entrance_shuffle for entrance_mode `mode`.
 
     deadside_only: a free bijection over the 9 Deadside portals (same rng
       calls as before cross_hub existed).
     cross_hub: one bijection over all 14 portals (9 Deadside + 5 soul
-      gates), with CROSS_HUB_PINNED_SPOKES on Deadside portals. Port of the
+      gates), with CROSS_HUB_PINNED_SPOKES on Deadside portals, plus
+      CROSS_HUB_SMALL_POOL_PINS when pin_small_pool_spokes. Port of the
       standalone's shuffle_unified(mode="cross_hub").
     """
     if mode == "off":
@@ -198,10 +225,11 @@ def shuffle_entrances(rng, mode: str) -> dict[str, str] | None:
     if mode != "cross_hub":
         raise ValueError(f"Unknown entrance mode: {mode!r}")
 
-    pinned_portals = rng.sample(list(DEADSIDE_PORTAL_IDS), len(CROSS_HUB_PINNED_SPOKES))
-    shuffle = dict(zip(pinned_portals, CROSS_HUB_PINNED_SPOKES))
+    pinned = CROSS_HUB_PINNED_SPOKES + (CROSS_HUB_SMALL_POOL_PINS if pin_small_pool_spokes else ())
+    pinned_portals = rng.sample(list(DEADSIDE_PORTAL_IDS), len(pinned))
+    shuffle = dict(zip(pinned_portals, pinned))
     rest_portals = [p for p in ALL_PORTAL_IDS if p not in shuffle]
-    rest_dests   = [d for d in ALL_PORTAL_IDS if d not in CROSS_HUB_PINNED_SPOKES]
+    rest_dests   = [d for d in ALL_PORTAL_IDS if d not in pinned]
     rng.shuffle(rest_dests)
     shuffle.update(zip(rest_portals, rest_dests))
 

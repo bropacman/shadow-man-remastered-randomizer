@@ -483,10 +483,14 @@ class EntranceMode(Choice):
       goes back to the portal you came from. Asylum: Gateways, Wasteland
       and Temple of Fire always stay behind a Deadside portal (Asylum
       because liveside needs its Cathedral; the other two keep the early
-      game from depending on Night + a liveside item). The Cageways tram
-      into the Engine Block is not shuffled. With a small location pool
-      (mostly default options) cross_hub fails generation more often than
-      the other modes; turning on more shuffles adds locations and helps.
+      game from depending on Night + a liveside item). Cageways and Temple
+      of Prophecy also stay behind Deadside portals unless Cadeauxsanity
+      is on with a Cadeaux Bundle Size of 5 or less: they're the biggest
+      levels, and with a small location pool, putting them behind a soul
+      gate made generation fail far more often. The Cageways tram into the
+      Engine Block is not shuffled. As with deadside_only, a small location pool (mostly
+      default options) fails generation now and then; turning on more
+      shuffles adds locations and helps.
     """
     display_name = "Entrance Mode"
     option_off = 0

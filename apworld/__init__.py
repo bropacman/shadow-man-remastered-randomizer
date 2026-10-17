@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import zipfile
 from pathlib import Path
 from typing import Dict, Any
@@ -23,7 +24,7 @@ from .regions import create_regions, ASYLUM_ENGINE_BLOCK, \
     ASYLUM_ENGINE_BLOCK_LONDON, ASYLUM_ENGINE_BLOCK_PRISON, ASYLUM_ENGINE_BLOCK_FLORIDA, \
     ASYLUM_ENGINE_BLOCK_SALVAGE, ASYLUM_ENGINE_BLOCK_QUEENS, \
     compute_cadeaux_bundle_representatives, nested_round_robin_by_group, \
-    normalize_entrance_shuffle, shuffle_entrances, SOUL_GATE_PORTALS, portal_destination_region
+    normalize_entrance_shuffle, shuffle_entrances, SOUL_GATE_PORTALS, portal_destination_region,     CROSS_HUB_UNPIN_CADEAUX_LOCATIONS
 from .items import ShadowManItem, item_table, STACKABLE_COUNTS, AP_ITEM_TO_RSC, _UNIQUE_ITEM_RSC_NAMES, \
     is_cadeaux_item, cadeaux_bundle_item_name, CADEAUX_ITEM_NAMES, is_trap_bonus_item, \
     RETRACTOR_KEY_ITEM_NAMES, cadeaux_item_weight
@@ -267,6 +268,22 @@ class ShadowManWorld(World):
 
     # ── Early generation ──────────────────────────────────────────────────────
 
+    def _cadeaux_location_count(self) -> int:
+        """
+        How many cadeaux AP locations this seed will have (0 with
+        cadeauxsanity off), counted before the bundle set is picked and
+        without touching self.random: the bundle count only depends on the
+        bundle size, so a throwaway rng gives the same number. Decides
+        whether cross_hub needs its small-pool pins (regions.py
+        CROSS_HUB_SMALL_POOL_PINS). Promoted trap/bonus barrels don't count:
+        progression items are never placed on barrels, so they don't ease
+        the progression fill that the pins protect.
+        """
+        if not bool(self.options.cadeauxsanity):
+            return 0
+        return len(compute_cadeaux_bundle_representatives(
+            int(self.options.cadeaux_bundle_size), random.Random(0)))
+
     def generate_early(self) -> None:
         """
         Run gate shuffle before fill begins so gate_values is available
@@ -368,9 +385,12 @@ class ShadowManWorld(World):
         else:
             # deadside_only / cross_hub (2026-10-15): see shuffle_entrances()
             # in regions.py -- cross_hub keeps Asylum: Gateways, Wasteland
-            # and Temple of Fire on Deadside portals.
+            # and Temple of Fire on Deadside portals, and Temple of Prophecy
+            # and Cageways too unless cadeauxsanity adds enough locations.
             self.entrance_shuffle = shuffle_entrances(
-                self.random, self.options.entrance_mode.current_key)
+                self.random, self.options.entrance_mode.current_key,
+                pin_small_pool_spokes=(self._cadeaux_location_count()
+                                       < CROSS_HUB_UNPIN_CADEAUX_LOCATIONS))
 
         preset_name = self.options.gate_preset.current_key
         preset      = GATE_PRESETS.get(preset_name, {})
@@ -1680,9 +1700,19 @@ class ShadowManWorld(World):
 
         # cross_hub (2026-10-15): a soul gate can lead to a Deadside spoke or
         # to another liveside's Engine Block room. Whatever it leads to sits
-        # behind that gate's own Night + item + Retractor, so ban those from
-        # the destination the same way as above.
-        if self.entrance_shuffle:
+        # behind that gate's own Night + item + Retractor (+ Engineers Key,
+        # for the Cathedral), so ban those from the destination the same
+        # way as above. The vanilla per-room bans above assume each room
+        # sits behind its own soul gate; under cross_hub a room can sit
+        # behind a Deadside portal instead and be an early region, so they
+        # are dropped first and rebuilt from the real soul-gate edges only.
+        # Keeping them cost early slack for nothing and showed up as extra
+        # FillErrors (ap-cross-hub-fill-tightness).
+        if any(_pid in SOUL_GATE_PORTALS for _pid in (self.entrance_shuffle or {})):
+            _region_item_bans = {
+                _item: _regions - _engine_block_subregions
+                for _item, _regions in _region_item_bans.items()
+            }
             _soul_gate_extra_items = {
                 "Gardelle County Jail, Texas": ("Prison Key Card",),
                 "Mordant Street, Queens, NY":  ("Poigne",),
@@ -1693,7 +1723,7 @@ class ShadowManWorld(World):
                     continue
                 _liveside = SOUL_GATE_PORTALS[_pid][0]
                 _dest_region = portal_destination_region(_dest_id)
-                _items = ["La Lune", "La Lame", "Le Soleil",
+                _items = ["La Lune", "La Lame", "Le Soleil", "Engineers Key",
                           *_soul_gate_extra_items.get(_liveside, ()),
                           RETRACTOR_KEY_ITEM_NAMES[_liveside]
                           if bool(self.options.unique_retractor_keys) else "Retractor"]
