@@ -1886,6 +1886,7 @@ def run_patcher(
         # ── Tier 2: cadeaux / health / death penalty / soul threshold ────────
         from exe_patches.cadeaux_patch import apply_cadeau_step_patch, patch_levels_txt_launch_validator
         from exe_patches.health_patch import apply_health_patch
+        from exe_patches.life_altar_patch import apply_life_altar_patch
         from exe_patches.death_penalty_patch import apply_death_penalty_patch
         from exe_patches.sprint_patch import apply_sprint_patch
 
@@ -1910,6 +1911,11 @@ def run_patcher(
 
         apply_cadeau_step_patch(str(patched), rng, config)
         apply_health_patch(str(patched), rng, config)
+
+        # Life Altar Checks: keep the altars usable at max health, so every
+        # offering check stays reachable (see life_altar_patch.py).
+        if config.get("life_altar_checks"):
+            apply_life_altar_patch(str(patched))
 
         if config.get("death_penalty", 0):
             apply_death_penalty_patch(str(patched), step=config["death_penalty"])

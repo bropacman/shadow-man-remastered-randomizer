@@ -92,6 +92,12 @@ Shadow Man Remastered:
   # exists as an AP check. Only meaningful when cadeauxsanity is also on.
   cadeaux_gated_content: false
 
+  # 5 checks for offering Cadeaux at the Wasteland life altars, sent as
+  # you make your 1st..5th offering (any altar, any order). Each needs N x
+  # altar_cadeaux_required Cadeaux in logic; filler only. Only meaningful
+  # when cadeauxsanity is also on.
+  life_altar_checks: false
+
   # ── Cosmetic / optional shuffles ─────────────────────────────────────
   # Shuffle weapons into the pool. Off leaves them at vanilla locations.
   shuffle_weapons: true
