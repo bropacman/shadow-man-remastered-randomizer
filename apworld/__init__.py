@@ -11,7 +11,7 @@ import logging
 import zipfile
 from pathlib import Path
 from typing import Dict, Any
-from BaseClasses import ItemClassification, Tutorial
+from BaseClasses import ItemClassification, LocationProgressType, Tutorial
 from worlds.AutoWorld import World, WebWorld
 from worlds.LauncherComponents import components, Component, launch_subprocess, Type, icon_paths
 
@@ -19,14 +19,16 @@ from .access_rules import R, make_location_rule, make_entrance_rule
 from .constants import GATE_VANILLA_SL, GATE_PRESETS, COFFIN_GATE_ORDER
 from .fill import _shuffle_gates, FIXED_SOUL_LOCS, CHECKABLE_LOCS, LIVESIDE_REGIONS, CADEAUX_666_LOCS, \
     DEPTH_BUCKETS
-from .regions import create_regions, DEADSIDE_PORTAL_FILES, ASYLUM_ENGINE_BLOCK, \
+from .regions import create_regions, ASYLUM_ENGINE_BLOCK, \
     ASYLUM_ENGINE_BLOCK_LONDON, ASYLUM_ENGINE_BLOCK_PRISON, ASYLUM_ENGINE_BLOCK_FLORIDA, \
     ASYLUM_ENGINE_BLOCK_SALVAGE, ASYLUM_ENGINE_BLOCK_QUEENS, \
-    compute_cadeaux_bundle_representatives, nested_round_robin_by_group
+    compute_cadeaux_bundle_representatives, nested_round_robin_by_group, \
+    normalize_entrance_shuffle, shuffle_entrances, SOUL_GATE_PORTALS, portal_destination_region
 from .items import ShadowManItem, item_table, STACKABLE_COUNTS, AP_ITEM_TO_RSC, _UNIQUE_ITEM_RSC_NAMES, \
     is_cadeaux_item, cadeaux_bundle_item_name, CADEAUX_ITEM_NAMES, is_trap_bonus_item, \
-    RETRACTOR_KEY_ITEM_NAMES
-from .locations import ShadowManLocation, location_table, FRIENDLY_NAMES
+    RETRACTOR_KEY_ITEM_NAMES, cadeaux_item_weight
+from .locations import ShadowManLocation, ShadowManFlagLocation, location_table, FRIENDLY_NAMES, \
+    LIFE_ALTAR_LOCATIONS, LIFE_ALTAR_REGION
 from Options import OptionGroup
 from . import options as _opts
 from .options import ShadowManOptions
@@ -86,7 +88,7 @@ class ShadowManWebWorld(WebWorld):
     option_groups = [
         OptionGroup("Cadeaux", [
             _opts.Cadeauxsanity, _opts.CadeauxBundleSize, _opts.CadeauxGatedContent,
-            _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
+            _opts.LifeAltarChecks, _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
         ]),
         OptionGroup("Gates", [
             _opts.GatePreset, _opts.MaxGateSL, _opts.OpenGatesN,
@@ -136,7 +138,8 @@ class ShadowManWorld(World):
     # datapackage, which the web tracker, hints and YAML location options
     # all read names from.
     location_name_to_id: Dict[str, int] = {
-        FRIENDLY_NAMES[key]: data.code for key, data in location_table.items()
+        **{FRIENDLY_NAMES[key]: data.code for key, data in location_table.items()},
+        **LIFE_ALTAR_LOCATIONS,
     }
     # Cadeaux Bundle Size (2026-07-27): "Cadeaux Bundle x{N}" (see items.py)
     # is a distinct concrete item per denomination, since the bundle's
@@ -207,6 +210,9 @@ class ShadowManWorld(World):
                 warn(f"cadeaux_bundle_size {int(o.cadeaux_bundle_size)} set to 1 "
                      f"(requires cadeauxsanity).")
                 o.cadeaux_bundle_size.value = 1
+            if bool(o.life_altar_checks):
+                warn("life_altar_checks turned off (requires cadeauxsanity).")
+                o.life_altar_checks.value = 0
 
         # 4. Flat "Retractor" can't be given when unique keys are on.
         if bool(o.unique_retractor_keys):
@@ -328,9 +334,8 @@ class ShadowManWorld(World):
                     f"for this regen rather than risk crashing it."
                 )
 
-        # Entrance randomizer (2026-07-21) — deadside_only mode only so far
-        # (see options.py EntranceMode docstring; cross_hub, which also mixes
-        # in the 5 Dark Engine soul gates, is not implemented yet). A pure
+        # Entrance randomizer (2026-07-21; cross_hub added 2026-10-15, see
+        # docs/scope_ap_cross_hub_entrances.md). For deadside_only: a pure
         # random bijection over the 9 Deadside portal files — deadside_only
         # has no extra placement constraints in the standalone either (its
         # two hard constraints, Asylum-behind-a-coffin-gate and Salvage's
@@ -355,14 +360,17 @@ class ShadowManWorld(World):
             # before, so there was previously no way for UT to recover
             # this even in principle). None (entrance_mode was "off" this
             # seed) round-trips through JSON as None correctly.
-            _es = self._ut_passthrough.get("entrance_shuffle")
-            self.entrance_shuffle = dict(_es) if _es else None
-        elif self.options.entrance_mode.current_key == "deadside_only":
-            dest_files = list(DEADSIDE_PORTAL_FILES)
-            self.random.shuffle(dest_files)
-            self.entrance_shuffle = dict(zip(DEADSIDE_PORTAL_FILES, dest_files))
+            # normalize_entrance_shuffle() also accepts the pre-cross_hub
+            # deadside-only format ({"LE_Wast.cut": "LE_Gad1.cut"}), so
+            # slot data from older seeds still regenerates.
+            self.entrance_shuffle = normalize_entrance_shuffle(
+                self._ut_passthrough.get("entrance_shuffle"))
         else:
-            self.entrance_shuffle = None
+            # deadside_only / cross_hub (2026-10-15): see shuffle_entrances()
+            # in regions.py -- cross_hub keeps Asylum: Gateways, Wasteland
+            # and Temple of Fire on Deadside portals.
+            self.entrance_shuffle = shuffle_entrances(
+                self.random, self.options.entrance_mode.current_key)
 
         preset_name = self.options.gate_preset.current_key
         preset      = GATE_PRESETS.get(preset_name, {})
@@ -702,7 +710,11 @@ class ShadowManWorld(World):
             len(self.cadeaux_bundle_representatives))
 
         _CADEAUX_SLACK = 20
-        if bool(self.options.cadeauxsanity) and bool(self.options.cadeaux_gated_content):
+        # Life Altar Checks gate on Cadeaux the same way, so they get the same
+        # cushion (once, not twice when both options are on).
+        if bool(self.options.cadeauxsanity) and (
+                bool(self.options.cadeaux_gated_content)
+                or bool(self.options.life_altar_checks)):
             _cadeaux_checkable = len(self.cadeaux_bundle_representatives)
             _cadeaux_deficit = (max(0, self.cadeaux_required_logic - _cadeaux_checkable)
                                 + _CADEAUX_SLACK)
@@ -732,6 +744,9 @@ class ShadowManWorld(World):
             unique_retractor_keys = bool(self.options.unique_retractor_keys),
             pistons_required = int(self.options.pistons_required),
         )
+
+        if bool(self.options.life_altar_checks):
+            self._create_life_altar_locations()
 
         # "Defeat Legion" -> "Victory" event (2026-07-21). Standard AP
         # event-location/event-item idiom (BaseClasses.Region.add_event) —
@@ -1106,6 +1121,8 @@ class ShadowManWorld(World):
         open_location_count -= (total_barrel_in_table - len(self.barrel_promoted_locs))
         if not cadeaux_gated_content:
             open_location_count -= cadeaux_666_loc_count
+        if bool(self.options.life_altar_checks):
+            open_location_count += len(LIFE_ALTAR_LOCATIONS)
 
         # Trap/Bonus (2026-08-01, renamed from "Secret Trap" 2026-08-03):
         # one item per promoted barrel location (self.barrel_promoted_locs,
@@ -1133,6 +1150,32 @@ class ShadowManWorld(World):
                 "Dark Soul", ItemClassification.useful, data.code, self.player))
 
         self.multiworld.itempool += pool
+
+    def _create_life_altar_locations(self) -> None:
+        """
+        Life Altar Checks: 5 count-based offering checks in Wasteland (see
+        docs/scope_life_altar_checks.md). Offering N = any N altars used, in
+        any order; the altars share the Baton Altar's requirement (region
+        access only). Logic needs N x altar cost worth of Cadeaux, summed by
+        real worth (a "Cadeaux Bundle x5" counts 5), capped at what the pool
+        holds. EXCLUDED like the Fogometers Light Soul: fill's simulations
+        never collect filler Cadeaux, so these may only hold filler.
+        """
+        wasteland = self.multiworld.get_region(LIFE_ALTAR_REGION, self.player)
+        cost = int(self.options.altar_cadeaux_required)
+        pool_worth = sum(self.cadeaux_bundle_representatives.values())
+        player = self.player
+
+        def cadeaux_worth(state) -> int:
+            return sum(state.count(name, player) * cadeaux_item_weight(name)
+                       for name in CADEAUX_ITEM_NAMES)
+
+        for n, (name, code) in enumerate(LIFE_ALTAR_LOCATIONS.items(), start=1):
+            loc = ShadowManFlagLocation(player, name, code, wasteland)
+            need = min(n * cost, pool_worth)
+            loc.access_rule = lambda state, need=need: cadeaux_worth(state) >= need
+            loc.progress_type = LocationProgressType.EXCLUDED
+            wasteland.locations.append(loc)
 
     def create_item(self, name: str) -> ShadowManItem:
         data = item_table[name]
@@ -1405,7 +1448,8 @@ class ShadowManWorld(World):
         # any other displaced cadeaux-family item.
         self_cadeaux_loc_names = {
             loc.raw.loc_key for loc in self.multiworld.get_locations(self.player)
-            if loc.item is not None
+            if hasattr(loc, "raw")
+            and loc.item is not None
             and loc.item.player == self.player
             and is_cadeaux_item(loc.item.name)
         }
@@ -1417,7 +1461,8 @@ class ShadowManWorld(World):
         # donor supply on placements that don't need one).
         placed = sorted(
             loc.raw.loc_key for loc in self.multiworld.get_locations(self.player)
-            if loc.item is not None
+            if hasattr(loc, "raw")
+            and loc.item is not None
             and loc.item.player == self.player
             and is_cadeaux_item(loc.item.name)
             and loc.raw.loc_key in location_table
@@ -1635,6 +1680,28 @@ class ShadowManWorld(World):
                 )
         else:
             _region_item_bans["Retractor"] = frozenset(LIVESIDE_REGIONS) | _engine_block_subregions
+
+        # cross_hub (2026-10-15): a soul gate can lead to a Deadside spoke or
+        # to another liveside's Engine Block room. Whatever it leads to sits
+        # behind that gate's own Night + item + Retractor, so ban those from
+        # the destination the same way as above.
+        if self.entrance_shuffle:
+            _soul_gate_extra_items = {
+                "Gardelle County Jail, Texas": ("Prison Key Card",),
+                "Mordant Street, Queens, NY":  ("Poigne",),
+                "Salvage Yard, Mojave Desert": ("Gad Power",),
+            }
+            for _pid, _dest_id in self.entrance_shuffle.items():
+                if _pid not in SOUL_GATE_PORTALS:
+                    continue
+                _liveside = SOUL_GATE_PORTALS[_pid][0]
+                _dest_region = portal_destination_region(_dest_id)
+                _items = ["La Lune", "La Lame", "Le Soleil",
+                          *_soul_gate_extra_items.get(_liveside, ()),
+                          RETRACTOR_KEY_ITEM_NAMES[_liveside]
+                          if bool(self.options.unique_retractor_keys) else "Retractor"]
+                for _item in _items:
+                    _region_item_bans[_item] = _region_item_bans.get(_item, frozenset()) | {_dest_region}
 
         # BARREL / PROGRESSION-ITEM GUARD (2026-08-07, generalized from
         # Jon's follow-up: "any progression item that would allow someone
@@ -2059,6 +2126,7 @@ class ShadowManWorld(World):
             "altar_health_grant":    int(self.options.altar_health_grant),
             "altar_cadeaux_required":      int(self.options.altar_cadeaux_required),
             "fogometers_cadeaux_required": int(self.options.fogometers_cadeaux_required),
+            "life_altar_checks":     bool(self.options.life_altar_checks),
             "death_penalty":         int(self.options.death_penalty) / 10,
             "sprint_multiplier":     int(self.options.sprint_multiplier) / 10,
             # 2026-07-21 (entrance randomizer) — informational only; the
@@ -2182,10 +2250,13 @@ class ShadowManWorld(World):
             "player": self.multiworld.get_file_safe_player_name(self.player),
             "config": config,
             "gate_remap": dict(self.gate_values),
-            # 2026-07-21 (entrance randomizer, Task 20) — dict[portal_file,
-            # dest_portal_file] over the 9 Deadside "LE_*.cut" filenames (see
-            # DEADSIDE_PORTAL_FILES in regions.py), or None when
-            # entrance_mode is "off". ap_patcher.py's run_patcher() consumes
+            # 2026-07-21 (entrance randomizer, Task 20) — dict[portal_id,
+            # dest_portal_id] of "folder/file" ids (2026-10-15: e.g.
+            # "deadside/LE_Wast.cut": "prison/soulexit.cut"; 9 Deadside
+            # entries for deadside_only, 14 for cross_hub — see
+            # ALL_PORTAL_IDS in regions.py), or None when entrance_mode is
+            # "off". Seeds before 2026-10-15 used bare "LE_*.cut" names;
+            # ap_patcher.py reads both. ap_patcher.py's run_patcher() consumes
             # this directly to drive apply_unified_shuffle() (ported from the
             # standalone's randomizers/entrance_randomizer.py) against the
             # extracted cutscene/scripts/*.cut files. Top-level (not nested
@@ -2374,6 +2445,7 @@ class ShadowManWorld(World):
                     and item.player == self.player
                     and item.name in _UNIQUE_ITEM_RSC_NAMES
                     and item.name not in inventory_flag_locs
+                    and hasattr(loc, "raw")
                     and loc.raw.loc_key in location_map):
                 inventory_flag_locs[item.name] = loc.raw.loc_key
 
@@ -2419,6 +2491,11 @@ class ShadowManWorld(World):
             # would always misreport 0/5 in this mode — there's no fungible
             # "Retractor" item in the pool at all when this option is on).
             "unique_retractor_keys": bool(self.options.unique_retractor_keys),
+            # Life Altar Checks: the 5 offering location IDs, in order (empty
+            # when off). client.py sends the first N once N CF_LIFEALTAR
+            # flags are set.
+            "life_altar_ap_ids": (list(LIFE_ALTAR_LOCATIONS.values())
+                                  if bool(self.options.life_altar_checks) else []),
             # Universal Tracker support (2026-07-28, see generate_early()'s
             # UT-passthrough comment and interpret_slot_data() below for
             # the full rationale). Neither of these two keys existed in

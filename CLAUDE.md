@@ -238,8 +238,11 @@ check in game.
 ## 11. Open threads
 
 - AP option validation in `generate_early()` — `docs/scope_yaml_option_validation.md`.
-- "N of 6 pistons required" goal option — blocked on capturing the piston
-  completion flags (`dumpsaveflags` before/after one piston).
+- "N of 6 pistons required" goal option — flags found (`CF_DARKENG_STOPPED1..6`,
+  98–103, set by `kexShadowManPistonControl`); design and in-game checks in
+  `docs/scope_pistons_required.md`.
+- Gad rings vs. `CF_GOT*GAD` flags — keep the gad patch; optional predicate
+  patch in `docs/scope_gad_ring_flags.md`.
 - Book of Shadows pickup animation — kill it or make it an instant grant;
   start from `gad_pickup_patch.py`'s dispatch-table work.
 - 2x item meshes: MP-909 and Light Soul meshes not yet identified.

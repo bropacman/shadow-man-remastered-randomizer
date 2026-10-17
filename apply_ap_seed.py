@@ -147,8 +147,9 @@ def main() -> None:
     progression_placement = build_progression_placement(data["progression_placement"])
     config = build_config(data["config"])
     gate_remap = data["gate_remap"]
-    # Added 2026-07-21 (entrance randomizer, Task 20) — dict[portal_file,
-    # dest_portal_file] or None. .get() (not []) for backward compatibility
+    # Added 2026-07-21 (entrance randomizer, Task 20) — dict[portal_id,
+    # dest_portal_id] or None (either format; see ap_patcher's
+    # build_unified_shuffle()). .get() (not []) for backward compatibility
     # with .apshadowman files written before this key existed.
     entrance_shuffle = data.get("entrance_shuffle")
     # Unique Retractor Keys (2026-08-18) — {liveside_region_name: loc_key},

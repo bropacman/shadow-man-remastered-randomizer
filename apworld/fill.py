@@ -463,10 +463,18 @@ def _shuffle_gates(
                4. PATH_3: SL <= 5    (Temple of Fire must open mid-game)
              Caps are enforced in this order so tighter constraints don't
              get undone by looser ones running after them.
-    entrance_shuffle: this world's resolved Deadside portal-file shuffle
-             (dict[native_portal_file, dest_portal_file] from __init__.py's
-             generate_early(), see regions.py's DEADSIDE_PORTAL_REGION), or
-             None when entrance_mode is "off".
+    entrance_shuffle: this world's resolved entrance shuffle (the
+             "folder/file" portal-id dict from __init__.py's
+             generate_early(), see regions.py's ALL_PORTAL_IDS; the old
+             bare "LE_*.cut" form is accepted too), or None when
+             entrance_mode is "off". Only its Deadside-to-Deadside part
+             matters here (regions.deadside_portal_shuffle()): under
+             cross_hub a Deadside spoke that lands behind a soul gate has
+             no coffin gate guarding it and keeps its vanilla REGION_GATES
+             entry, as the standalone does. cross_hub never puts the three
+             protected regions (Wasteland, Asylum, Temple of Fire) behind a
+             soul gate (regions.CROSS_HUB_PINNED_SPOKES), so the overrides
+             below still cover them.
 
              FIXED 2026-08-07 (Jon's report of recurring "Marrow Gates /
              Wasteland" AP accessibility failures under
@@ -559,7 +567,8 @@ def _shuffle_gates(
         # dest_portal_file vanilla-led. Invert it so, for a region R
         # normally reached via its own native portal NP, we can find which
         # portal ACTUALLY leads there this seed.
-        _dest_to_native = {dest: native for native, dest in entrance_shuffle.items()}
+        _dest_to_native = {dest: native for native, dest in
+                           _regions_module.deadside_portal_shuffle(entrance_shuffle).items()}
         for native_portal, region in _regions_module.DEADSIDE_PORTAL_REGION.items():
             real_portal = _dest_to_native.get(native_portal)
             if real_portal is not None and region in real_region_gates:

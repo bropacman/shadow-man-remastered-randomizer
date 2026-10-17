@@ -100,6 +100,115 @@ DEADSIDE_PORTAL_REGION: dict[str, str] = {
 }
 DEADSIDE_PORTAL_FILES: tuple[str, ...] = tuple(DEADSIDE_PORTAL_REGION.keys())
 
+# ── Entrance shuffle portal ids (2026-10-15, cross_hub) ──────────────────────
+# entrance_shuffle maps portal id -> destination portal id, both
+# "folder/file" strings: walking through the key's door now leads wherever
+# the value's door led in vanilla. The folder is needed because four of the
+# soul-gate portals share the filename soulexit.cut. Matches the standalone's
+# (portal_folder, portal_file) ids in randomizers/entrance_randomizer.py.
+# Slot data and .apshadowman files written before cross_hub used bare
+# "LE_*.cut" keys/values (Deadside only); normalize_entrance_shuffle()
+# accepts both.
+DEADSIDE_PORTAL_IDS: tuple[str, ...] = tuple(f"deadside/{f}" for f in DEADSIDE_PORTAL_FILES)
+
+# Each liveside level's soul-gate portal -> (liveside region it sits in,
+# the Engine Block section it leads to in vanilla).
+SOUL_GATE_PORTALS: dict[str, tuple[str, str]] = {
+    "tenement/soulgate.cut": (LIVESIDE_QUEENS,  ASYLUM_ENGINE_BLOCK_QUEENS),
+    "prison/soulexit.cut":   (LIVESIDE_PRISON,  ASYLUM_ENGINE_BLOCK_PRISON),
+    "uground/soulexit.cut":  (LIVESIDE_LONDON,  ASYLUM_ENGINE_BLOCK_LONDON),
+    "florida/soulexit.cut":  (LIVESIDE_FLORIDA, ASYLUM_ENGINE_BLOCK_FLORIDA),
+    "salvage/soulexit.cut":  (LIVESIDE_SALVAGE, ASYLUM_ENGINE_BLOCK_SALVAGE),
+}
+ALL_PORTAL_IDS: tuple[str, ...] = DEADSIDE_PORTAL_IDS + tuple(SOUL_GATE_PORTALS)
+
+# cross_hub: these spokes always sit behind a Deadside portal.
+#   - Asylum: Gateways — liveside needs the Cathedral, which is inside
+#     Asylum, so Asylum behind a soul gate is circular (the standalone's
+#     constraint A).
+#   - Wasteland and Temple of Fire — fill.py's _shuffle_gates() keeps the
+#     gates guarding these three early regions low. Behind a soul gate
+#     they'd need Night + a liveside item instead, which can shrink
+#     sphere 1 badly; pinning them keeps that gate-safety logic valid.
+# (The standalone's Salvage-can't-lead-to-a-Gad-Temple constraint is
+# dropped: Gad powers are always shuffled items in AP, so logic covers it.)
+CROSS_HUB_PINNED_SPOKES: tuple[str, ...] = (
+    "deadside/LE_Asy1.cut",
+    "deadside/LE_Wast.cut",
+    "deadside/LE_Gad1.cut",
+)
+
+
+def portal_destination_region(portal_id: str) -> str:
+    """The region a portal id's door leads to in vanilla."""
+    if portal_id in SOUL_GATE_PORTALS:
+        return SOUL_GATE_PORTALS[portal_id][1]
+    return DEADSIDE_PORTAL_REGION[portal_id.split("/", 1)[1]]
+
+
+def normalize_entrance_shuffle(entrance_shuffle: dict | None) -> dict[str, str] | None:
+    """
+    Return entrance_shuffle in the "folder/file" format, accepting the old
+    deadside-only format too (a key or value without "/" means deadside/).
+    None/empty stays None. Raises ValueError on an unknown portal id.
+    """
+    if not entrance_shuffle:
+        return None
+
+    def _id(p: str) -> str:
+        p = str(p)
+        pid = p if "/" in p else f"deadside/{p}"
+        if pid not in ALL_PORTAL_IDS:
+            raise ValueError(f"entrance_shuffle: unknown portal {p!r}")
+        return pid
+
+    return {_id(k): _id(v) for k, v in entrance_shuffle.items()}
+
+
+def deadside_portal_shuffle(entrance_shuffle: dict | None) -> dict[str, str]:
+    """
+    The Deadside-to-Deadside part of an entrance shuffle, as bare
+    {"LE_*.cut": "LE_*.cut"} (the shape fill.py's gate-safety code works
+    in). Deadside portals that lead into a Dark Engine room, and Deadside
+    spokes reached through a soul gate, are left out.
+    """
+    out: dict[str, str] = {}
+    for k, v in (normalize_entrance_shuffle(entrance_shuffle) or {}).items():
+        if k in DEADSIDE_PORTAL_IDS and v in DEADSIDE_PORTAL_IDS:
+            out[k.split("/", 1)[1]] = v.split("/", 1)[1]
+    return out
+
+
+def shuffle_entrances(rng, mode: str) -> dict[str, str] | None:
+    """
+    Build this seed's entrance_shuffle for entrance_mode `mode`.
+
+    deadside_only: a free bijection over the 9 Deadside portals (same rng
+      calls as before cross_hub existed).
+    cross_hub: one bijection over all 14 portals (9 Deadside + 5 soul
+      gates), with CROSS_HUB_PINNED_SPOKES on Deadside portals. Port of the
+      standalone's shuffle_unified(mode="cross_hub").
+    """
+    if mode == "off":
+        return None
+    if mode == "deadside_only":
+        dest = list(DEADSIDE_PORTAL_IDS)
+        rng.shuffle(dest)
+        return dict(zip(DEADSIDE_PORTAL_IDS, dest))
+    if mode != "cross_hub":
+        raise ValueError(f"Unknown entrance mode: {mode!r}")
+
+    pinned_portals = rng.sample(list(DEADSIDE_PORTAL_IDS), len(CROSS_HUB_PINNED_SPOKES))
+    shuffle = dict(zip(pinned_portals, CROSS_HUB_PINNED_SPOKES))
+    rest_portals = [p for p in ALL_PORTAL_IDS if p not in shuffle]
+    rest_dests   = [d for d in ALL_PORTAL_IDS if d not in CROSS_HUB_PINNED_SPOKES]
+    rng.shuffle(rest_dests)
+    shuffle.update(zip(rest_portals, rest_dests))
+
+    assert set(shuffle) == set(ALL_PORTAL_IDS) == set(shuffle.values()), \
+        "shuffle_entrances(cross_hub): not a 14-way bijection"
+    return shuffle
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -611,12 +720,15 @@ def create_regions(
                    None means every rule falls back to vanilla thresholds.
                    Threaded through so soul_threshold_mode is respected by
                    the logic graph, not just the EXE patch/client slot_data.
-    entrance_shuffle: this world's resolved Deadside portal→portal mapping
-                   (see __init__.py's generate_early(), self.entrance_shuffle)
+    entrance_shuffle: this world's resolved portal→portal mapping in
+                   "folder/file" form (see __init__.py's generate_early(),
+                   self.entrance_shuffle, and normalize_entrance_shuffle())
                    — None (entrance_mode "off") builds the fixed vanilla
                    marrow→region connections; otherwise the 9 marrow
                    connections are built from this mapping instead (see the
-                   "Marrow → deadside/temple regions" block below).
+                   "Marrow → deadside/temple regions" block below), and
+                   under cross_hub so are the 5 liveside soul-gate edges
+                   (see "Liveside → Engine Block sections").
     piston_combos: this world's PistonCombos option (see options.py) — when
                    True, the as4dkeng barrels/Legion locations whose
                    gate_expr is "R.pistons(state, player)" require Jack's
@@ -793,16 +905,22 @@ def create_regions(
             name=f"{TEMPLE_PROPHECY} [Path 7, or Cageways+Playrooms+Path 6, or Asylum+Baton+Gad2]",
         )
     else:
-        for portal_file, dest_portal_file in entrance_shuffle.items():
+        # Deadside portals in the shuffle (all 9 in both modes). Soul-gate
+        # portals in the shuffle (cross_hub) are built with the liveside
+        # edges further down, since their rule is Night + item, not a gate.
+        for portal_id, dest_id in entrance_shuffle.items():
+            if portal_id not in DEADSIDE_PORTAL_IDS:
+                continue
+            portal_file = portal_id.split("/", 1)[1]
             gate        = DEADSIDE_PORTAL_GATE[portal_file]
-            dest_region = DEADSIDE_PORTAL_REGION[dest_portal_file]
+            dest_region = portal_destination_region(dest_id)
             rule        = make_portal_rule(gate, gate_values, player, sl_thresholds)
             gate_label  = gate if isinstance(gate, str) else "lower-Deadside routes"
             _connect(
                 marrow,
                 regions[dest_region],
                 rule=rule,
-                name=f"{dest_region} [{portal_file} portal, {gate_label}]",
+                name=f"{dest_region} [{portal_id} portal, {gate_label}]",
             )
 
     # Asylum Gateways → Cathedral / Experimentation Rooms (eng_key-gated,
@@ -926,13 +1044,33 @@ def create_regions(
         LIVESIDE_QUEENS:  "Night + Poigne",
         LIVESIDE_SALVAGE: "Night + Gad3 Swim",
     }
+    # cross_hub: a soul gate in the shuffle leads wherever its entry says
+    # (a Deadside spoke or another Engine Block section) instead of its own
+    # section. Same Night + item rule either way: that's what it takes to
+    # use the gate. Reaching the liveside region itself already covers
+    # SL2 + Retractors.
+    _shuffled_soul_gates = {
+        SOUL_GATE_PORTALS[pid][0]: (pid, dest_id)
+        for pid, dest_id in (entrance_shuffle or {}).items()
+        if pid in SOUL_GATE_PORTALS
+    }
     for level, section in engine_sections.items():
-        _connect(
-            regions[level],
-            regions[section],
-            rule=engine_rules[level],
-            name=f"{section} [{engine_tags[level]}]",
-        )
+        if level in _shuffled_soul_gates:
+            portal_id, dest_id = _shuffled_soul_gates[level]
+            dest_region = portal_destination_region(dest_id)
+            _connect(
+                regions[level],
+                regions[dest_region],
+                rule=engine_rules[level],
+                name=f"{dest_region} [{portal_id} soul gate, {engine_tags[level]}]",
+            )
+        else:
+            _connect(
+                regions[level],
+                regions[section],
+                rule=engine_rules[level],
+                name=f"{section} [{engine_tags[level]}]",
+            )
 
     # ── Populate locations ────────────────────────────────────────────────────
     for name in ALL_REGIONS:
