@@ -29,7 +29,8 @@ Tier 1 (cosmetic) and Tier 2 (EXE-patch knobs) are done, except
 `soul_threshold_mode`, which stays OFF by default because enabling it desyncs
 `access_rules.py` from the patched EXE (needs an `access_rules.py` change,
 not made — ask before touching that file). Of Tier 3: `entrance_mode` is done
-for `deadside_only` (`cross_hub` not ported), `piston_combos` is done,
+for `deadside_only` and (2026-10-15) `cross_hub` (see
+`docs/scope_ap_cross_hub_entrances.md`), `piston_combos` is done,
 `shuffle_prisms` is not ported.
 
 `Insanity` was relabeled `Cadeaux Key Items` — it was never a "graded tier"
@@ -636,8 +637,8 @@ fogometers_cadeaux_required, death_penalty, soul_threshold_mode.
 ~~piston_combos~~ — **DONE (2026-07-21).** See status update at top.
 
 **Logic-affecting** (needs AP region/rule work, not just wiring):
-~~entrance_mode~~ — **DONE for deadside_only (2026-07-21)**, cross_hub still
-not ported. See "Current state" at top. `shuffle_prisms` also remains.
+~~entrance_mode~~ — **DONE for deadside_only (2026-07-21) and cross_hub
+(2026-10-15).** See "Current state" at top. `shuffle_prisms` remains.
 Graded insanity (1–3) is **not** a gap — see "Current state": `Insanity`
 (now `Cadeaux Key Items`) is a deliberately cadeaux-only toggle, not a
 truncated tier ladder.

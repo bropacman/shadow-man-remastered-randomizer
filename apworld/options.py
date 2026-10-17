@@ -476,12 +476,22 @@ class EntranceMode(Choice):
       threshold (fixed by where it actually sits in Deadside) — only where
       it leads changes.
 
-    cross_hub mode (mixing in the 5 Dark Engine soul gates too, matching the
-    standalone randomizer) is not implemented yet.
+    - cross_hub: the 9 Deadside portals and the 5 liveside soul gates are
+      shuffled together as one pool of 14, matching the standalone
+      randomizer. A Deadside portal can lead into a Dark Engine room, and a
+      liveside soul gate can lead to a Deadside level. Each return trip
+      goes back to the portal you came from. Asylum: Gateways, Wasteland
+      and Temple of Fire always stay behind a Deadside portal (Asylum
+      because liveside needs its Cathedral; the other two keep the early
+      game from depending on Night + a liveside item). The Cageways tram
+      into the Engine Block is not shuffled. With a small location pool
+      (mostly default options) cross_hub fails generation more often than
+      the other modes; turning on more shuffles adds locations and helps.
     """
     display_name = "Entrance Mode"
     option_off = 0
     option_deadside_only = 1
+    option_cross_hub = 2
     default = 0
 
 
@@ -526,6 +536,23 @@ class Cadeauxsanity(Toggle):
     now. Old YAMLs using `insanity:` need updating to `cadeauxsanity:`.
     """
     display_name = "Cadeauxsanity"
+    default = 0
+
+
+class LifeAltarChecks(Toggle):
+    """
+    Only applies when Cadeauxsanity is on (turned off otherwise).
+    Adds 5 checks for offering Cadeaux at the Wasteland life altars:
+    "Life Altar Offering 1" is sent after your first offering at any altar,
+    "Offering 2" after your second, and so on. The altars work as normal
+    (they still cost Altar Cadeaux Required each and grant health), except
+    they stay usable at max health (vanilla refuses at 10000), so every
+    offering can always be made; at the cap they just add no health.
+
+    In logic, offering N needs Deadside - Wasteland plus N x Altar Cadeaux
+    Required worth of Cadeaux. These checks only hold filler items.
+    """
+    display_name = "Life Altar Checks"
     default = 0
 
 
@@ -824,7 +851,8 @@ class ShadowManOptions(PerGameCommonOptions):
     altar_cadeaux_required:      AltarCadeauxRequired
     fogometers_cadeaux_required: FogometersCadeauxRequired
     cadeaux_gated_content:       CadeauxGatedContent
-    death_penalty:         DeathPenalty
+    life_altar_checks:           LifeAltarChecks
+    death_penalty:        DeathPenalty
     sprint_multiplier:     SprintMultiplier
     soul_threshold_mode:   SoulThresholdMode
     soul_logic_buffer:     SoulLogicBuffer

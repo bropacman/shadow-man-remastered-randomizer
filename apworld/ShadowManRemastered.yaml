@@ -43,8 +43,11 @@ Shadow Man Remastered:
   # -1 leaves the preset's own baked-in value alone.
   open_gates_n: -1
 
-  # Shuffles which Deadside portal leads where. off (vanilla) |
-  # deadside_only (the 9 Deadside hub portals shuffled among themselves).
+  # Shuffles which portal leads where. off (vanilla) |
+  # deadside_only (the 9 Deadside hub portals shuffled among themselves) |
+  # cross_hub (the 9 Deadside portals and the 5 liveside soul gates
+  # shuffled together; Asylum, Wasteland and Temple of Fire stay behind
+  # Deadside portals).
   entrance_mode: "off"
 
   # How aggressively key items are pushed toward deeper locations (0-100).
@@ -88,6 +91,12 @@ Shadow Man Remastered:
   # Whether the Fogometers Light Soul location (SL10 + enough Cadeaux)
   # exists as an AP check. Only meaningful when cadeauxsanity is also on.
   cadeaux_gated_content: false
+
+  # 5 checks for offering Cadeaux at the Wasteland life altars, sent as
+  # you make your 1st..5th offering (any altar, any order). Each needs N x
+  # altar_cadeaux_required Cadeaux in logic; filler only. Only meaningful
+  # when cadeauxsanity is also on.
+  life_altar_checks: false
 
   # ── Cosmetic / optional shuffles ─────────────────────────────────────
   # Shuffle weapons into the pool. Off leaves them at vanilla locations.

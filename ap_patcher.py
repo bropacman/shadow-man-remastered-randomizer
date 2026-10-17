@@ -68,17 +68,12 @@ from exe_patches.dark_engine_patch import (
     JOURNAL_MUP_PATH, PISTON_NAMES, VANILLA_TABLE as DARK_ENGINE_VANILLA_TABLE,
 )
 
-# ── Entrance randomizer (2026-07-21, Task 19) ────────────────────────────────
-# AP's ShadowManWorld currently only implements EntranceMode.deadside_only
-# (see options.py's EntranceMode docstring — cross_hub, which also mixes in
-# the 5 Dark Engine soul gates, is not implemented on the AP side yet). This
-# repo's randomizers/entrance_randomizer.py models both modes via one
-# UNIFIED_TRANSITIONS table of 14 hub-portal <-> spoke pairs; restrict to the
-# 9 Deadside entries here so ap_patcher.py only ever touches the files an AP
-# seed can actually have shuffled. If AP ever gains cross_hub support, widen
-# this back to UNIFIED_TRANSITIONS and thread the extra DKE constraint data
-# through instead of filtering it out.
-DEADSIDE_UNIFIED_TRANSITIONS = [t for t in UNIFIED_TRANSITIONS if t.spoke_folder != "as4dkeng"]
+# ── Entrance randomizer (2026-07-21, Task 19; cross_hub 2026-10-15) ─────────
+# randomizers/entrance_randomizer.py models both AP entrance modes
+# (deadside_only, cross_hub) via one UNIFIED_TRANSITIONS table of 14
+# hub-portal <-> spoke pairs. build_unified_shuffle() below turns an AP
+# seed's entrance_shuffle into the UnifiedShuffle that module patches.
+_TRANSITION_BY_ID = {(t.portal_folder, t.portal_file): t for t in UNIFIED_TRANSITIONS}
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1136,26 +1131,55 @@ def inject_special_item_fx(marker_sites: list, levels_path) -> int:
 
 # ── Unified entrance shuffle (.cut patches) ──────────────────────────────────
 # Ported from the standalone's patcher.py Step 4e (2026-07-21, Task 19).
-# Applies AP's deadside_only portal shuffle by rewriting ExitLevelPos() calls
-# in the extracted cutscene .cut script files — the same mechanism the
-# standalone's own randomizer uses (randomizers/entrance_randomizer.py),
-# reused here rather than reimplemented so both tools share one source of
-# truth for the transition table and the regex patch logic.
+# Applies AP's portal shuffle by rewriting ExitLevelPos() calls in the
+# extracted cutscene .cut script files — the same mechanism the standalone's
+# own randomizer uses (randomizers/entrance_randomizer.py), reused here
+# rather than reimplemented so both tools share one source of truth for the
+# transition table and the regex patch logic.
 
-def build_deadside_unified_shuffle(entrance_shuffle: dict[str, str]) -> UnifiedShuffle:
-    """
-    Convert AP's plain dict[portal_file, dest_portal_file] (both "LE_*.cut"
-    filenames, folder always "deadside" — see DEADSIDE_PORTAL_FILES in the
-    AP world's regions.py) into the (portal_folder, portal_file)-keyed
-    UnifiedShuffle apply_unified_shuffle() expects.
+def _parse_portal_id(portal: str) -> tuple[str, str]:
+    """"prison/soulexit.cut" -> ("prison", "soulexit.cut"); a bare
+    "LE_Wast.cut" (pre-cross_hub .apshadowman files) means deadside/."""
+    folder, _, file = str(portal).rpartition("/")
+    pid = (folder or "deadside", file)
+    if pid not in _TRANSITION_BY_ID:
+        raise ValueError(f"entrance_shuffle: unknown portal {portal!r}")
+    return pid
 
-    outbound[("deadside", portal_file)] = ("deadside", dest_portal_file)
-    inbound is the exact inverse — deadside_only is a pure bijection over the
-    9 Deadside spokes, no cross-hub coupling, so inverting is always safe.
+
+def build_unified_shuffle(entrance_shuffle: dict[str, str]) -> UnifiedShuffle:
     """
-    outbound = {("deadside", pf): ("deadside", dpf) for pf, dpf in entrance_shuffle.items()}
-    inbound  = {spoke: portal for portal, spoke in outbound.items()}
-    return UnifiedShuffle(mode="deadside_only", outbound=outbound, inbound=inbound)
+    Convert an AP seed's entrance_shuffle into the full 14-portal
+    UnifiedShuffle apply_unified_shuffle() expects. Accepts both formats:
+      - "folder/file" ids (2026-10-15+, both modes), e.g.
+        {"deadside/LE_Wast.cut": "prison/soulexit.cut", ...}
+      - bare Deadside filenames (older deadside_only seeds), e.g.
+        {"LE_Wast.cut": "LE_Gad1.cut", ...}
+    Portals missing from the dict stay vanilla (the 5 soul gates under
+    deadside_only). The result must be a bijection over all 14 portals;
+    inbound is its exact inverse, so each return trip goes back to the
+    portal you came from.
+    """
+    outbound = {pid: pid for pid in _TRANSITION_BY_ID}
+    for portal, dest in entrance_shuffle.items():
+        outbound[_parse_portal_id(portal)] = _parse_portal_id(dest)
+    if set(outbound.values()) != set(_TRANSITION_BY_ID):
+        raise ValueError("entrance_shuffle is not a bijection over the 14 portals")
+    inbound = {spoke: portal for portal, spoke in outbound.items()}
+    cross = any(_TRANSITION_BY_ID[p].spoke_folder == "as4dkeng" and p != d
+                for p, d in outbound.items())
+    return UnifiedShuffle(mode="cross_hub" if cross else "deadside_only",
+                          outbound=outbound, inbound=inbound)
+
+
+def _touched_only(shuffle: UnifiedShuffle) -> UnifiedShuffle:
+    """The same shuffle minus vanilla (identity) entries, so
+    apply_unified_shuffle() never opens a file that wasn't extracted."""
+    return UnifiedShuffle(
+        mode=shuffle.mode,
+        outbound={p: d for p, d in shuffle.outbound.items() if p != d},
+        inbound={s: p for s, p in shuffle.inbound.items() if s != p},
+    )
 
 
 def apply_entrance_shuffle_patches(
@@ -1166,8 +1190,8 @@ def apply_entrance_shuffle_patches(
     kpf_index=None,
 ) -> dict[str, str]:
     """
-    Extract the 9 Deadside portal .cut files (+ their spoke exit.cut files)
-    from the KPF if needed, apply the shuffle, and return a dict of
+    Extract the portal .cut files (+ their spoke exit .cut files) the
+    shuffle touches from the KPF if needed, apply it, and return a dict of
     {kpf_internal_path: local_path} ready for repack_after_patch()'s
     extra_mod_files. No-ops (returns {}) if entrance_shuffle is falsy.
     """
@@ -1180,14 +1204,18 @@ def apply_entrance_shuffle_patches(
     scripts_dir = work_path / CUT_PREFIX
     scripts_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\nThe portals between worlds tremble -- entrances reshuffled (deadside_only)...")
+    shuffle = build_unified_shuffle(entrance_shuffle)
+    # Only the transitions that change get patched; vanilla soul gates under
+    # deadside_only are left alone (and not extracted).
+    touched = [_TRANSITION_BY_ID[pid] for pid in _TRANSITION_BY_ID
+               if shuffle.outbound[pid] != pid or shuffle.inbound[pid] != pid]
+
+    print(f"\nThe portals between worlds tremble -- entrances reshuffled ({shuffle.mode})...")
 
     if using_kpf and kpf_index is not None:
         cut_paths_needed = (
-            [f"{CUT_PREFIX}/{t.portal_folder}/{t.portal_file}"
-             for t in DEADSIDE_UNIFIED_TRANSITIONS if t.portal_file is not None]
-            + [f"{CUT_PREFIX}/{t.spoke_folder}/{t.spoke_exit_file}"
-               for t in DEADSIDE_UNIFIED_TRANSITIONS]
+            [f"{CUT_PREFIX}/{t.portal_folder}/{t.portal_file}" for t in touched]
+            + [f"{CUT_PREFIX}/{t.spoke_exit_folder}/{t.spoke_exit_file}" for t in touched]
         )
         for kpf_rel in cut_paths_needed:
             local = work_path / kpf_rel
@@ -1204,16 +1232,16 @@ def apply_entrance_shuffle_patches(
             else:
                 print(f"  WARNING: {kpf_rel} not found in KPF -- entrance patch may be incomplete")
 
-    shuffle = build_deadside_unified_shuffle(entrance_shuffle)
-    apply_unified_shuffle(shuffle, scripts_dir, verbose=False)
-    print(f"  {len(shuffle.outbound)} outbound + {len(shuffle.inbound)} return "
+    apply_unified_shuffle(_touched_only(shuffle), scripts_dir, verbose=False)
+    n_out = sum(1 for p, d in shuffle.outbound.items() if p != d)
+    n_ret = sum(1 for s_, p in shuffle.inbound.items() if s_ != p)
+    print(f"  {n_out} outbound + {n_ret} return "
           f"route(s) patched (see spoiler log for the mapping)")
 
     entrance_cut_files: dict[str, str] = {}
-    for t in DEADSIDE_UNIFIED_TRANSITIONS:
-        rels = [f"{CUT_PREFIX}/{t.spoke_folder}/{t.spoke_exit_file}"]
-        if t.portal_file is not None:
-            rels.append(f"{CUT_PREFIX}/{t.portal_folder}/{t.portal_file}")
+    for t in touched:
+        rels = [f"{CUT_PREFIX}/{t.spoke_exit_folder}/{t.spoke_exit_file}",
+                f"{CUT_PREFIX}/{t.portal_folder}/{t.portal_file}"]
         for rel in rels:
             local = work_path / rel
             if local.exists():
@@ -1393,10 +1421,12 @@ def run_patcher(
     gate_remap: dict[gate_id, sl]
         Gate soul-level assignments computed during generate_early().
 
-    entrance_shuffle: dict[portal_file, dest_portal_file] | None
-        Deadside portal shuffle computed during generate_early() when
-        EntranceMode is deadside_only (see options.py). None when the mode
-        is off (default) — added 2026-07-21, Task 19/20.
+    entrance_shuffle: dict[portal_id, dest_portal_id] | None
+        Portal shuffle computed during generate_early() when EntranceMode
+        is deadside_only or cross_hub (see options.py). "folder/file" ids
+        since 2026-10-15; bare "LE_*.cut" names from older seeds are read
+        too (build_unified_shuffle()). None when the mode is off (default)
+        — added 2026-07-21, Task 19/20.
 
     retractor_key_locs: dict[liveside_region_name, loc_key] | None
         Unique Retractor Keys (2026-08-18) — where AP's own Fill actually
@@ -1856,6 +1886,7 @@ def run_patcher(
         # ── Tier 2: cadeaux / health / death penalty / soul threshold ────────
         from exe_patches.cadeaux_patch import apply_cadeau_step_patch, patch_levels_txt_launch_validator
         from exe_patches.health_patch import apply_health_patch
+        from exe_patches.life_altar_patch import apply_life_altar_patch
         from exe_patches.death_penalty_patch import apply_death_penalty_patch
         from exe_patches.sprint_patch import apply_sprint_patch
 
@@ -1880,6 +1911,11 @@ def run_patcher(
 
         apply_cadeau_step_patch(str(patched), rng, config)
         apply_health_patch(str(patched), rng, config)
+
+        # Life Altar Checks: keep the altars usable at max health, so every
+        # offering check stays reachable (see life_altar_patch.py).
+        if config.get("life_altar_checks"):
+            apply_life_altar_patch(str(patched))
 
         if config.get("death_penalty", 0):
             apply_death_penalty_patch(str(patched), step=config["death_penalty"])
@@ -2320,7 +2356,8 @@ def run_patcher(
     # ── Step 9.8: Unified entrance shuffle (.cut patches) ─────────────────────
     # Ported from the standalone's patcher.py Step 4e (2026-07-21, Task 19).
     # Rewrites ExitLevelPos() calls in the extracted cutscene .cut files so
-    # the 9 Deadside portals lead to whichever spoke entrance_shuffle
+    # the shuffled portals (9 Deadside, plus the 5 soul gates under
+    # cross_hub) lead to whichever spoke entrance_shuffle
     # assigned them (region graph side was handled back in Tasks 15-18 —
     # this is the physical/cutscene side that makes the game itself route
     # the player to match). No-op when entrance_shuffle is None (mode off).
@@ -2329,7 +2366,7 @@ def run_patcher(
         kpf_index=kpf_index if using_kpf else None,
     )
     if entrance_shuffle:
-        _shuffle_for_spoiler = build_deadside_unified_shuffle(entrance_shuffle)
+        _shuffle_for_spoiler = build_unified_shuffle(entrance_shuffle)
         with open(str(spoiler_path), "a", encoding="utf-8") as f:
             f.write("\n\n" + unified_spoiler_section(_shuffle_for_spoiler))
 

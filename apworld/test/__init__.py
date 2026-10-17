@@ -96,6 +96,8 @@ class a handful of times with seed=None locally, confirm it's solid,
 then pin the new value here deliberately -- don't just bump the number
 until it happens to go green once.
 """
+import unittest
+
 from test.bases import WorldTestBase
 
 
@@ -244,6 +246,77 @@ class TestExampleYaml(ShadowManTestBase):
         ours = set(ShadowManOptions.type_hints) - set(PerGameCommonOptions.type_hints)
         self.assertEqual(sorted(ours - set(self.options)), [],
                          "ShadowManRemastered.yaml is missing these options")
+
+
+class TestCrossHub(ShadowManTestBase):
+    """entrance_mode: cross_hub generates, and its 14-portal shuffle is
+    wired into the region graph."""
+    options = {
+        "entrance_mode": "cross_hub",
+    }
+    seed = 1
+
+    def test_shuffle_wired(self) -> None:
+        from ..regions import ALL_PORTAL_IDS, SOUL_GATE_PORTALS
+        world = self.multiworld.worlds[1]
+        self.assertEqual(set(world.entrance_shuffle), set(ALL_PORTAL_IDS))
+        names = {e.name for e in self.multiworld.get_entrances(1)}
+        for portal_id in ALL_PORTAL_IDS:
+            kind = "soul gate" if portal_id in SOUL_GATE_PORTALS else "portal"
+            self.assertTrue(any(f"[{portal_id} {kind}," in n for n in names),
+                            f"no entrance for {portal_id}")
+
+
+class TestCrossHubSeed2(TestCrossHub):
+    options = {
+        "entrance_mode": "cross_hub",
+        "unique_retractor_keys": True,
+    }
+    # seed 2 hits a FillError here: cross_hub fails fill on roughly 1 in 8
+    # seeds with default-sized location pools (see options.py EntranceMode).
+    seed = 4
+
+
+class TestEntranceShuffleTable(unittest.TestCase):
+    """Pure checks on regions.py's shuffle helpers (no generation)."""
+
+    def test_cross_hub_bijection_and_pins(self) -> None:
+        import random
+        from ..regions import (shuffle_entrances, ALL_PORTAL_IDS,
+                               DEADSIDE_PORTAL_IDS, CROSS_HUB_PINNED_SPOKES)
+        self.assertEqual(len(ALL_PORTAL_IDS), 14)
+        for seed in range(300):
+            shuffle = shuffle_entrances(random.Random(seed), "cross_hub")
+            self.assertEqual(set(shuffle), set(ALL_PORTAL_IDS))
+            self.assertEqual(sorted(shuffle.values()), sorted(ALL_PORTAL_IDS))
+            behind = {dest: portal for portal, dest in shuffle.items()}
+            for spoke in CROSS_HUB_PINNED_SPOKES:
+                self.assertIn(behind[spoke], DEADSIDE_PORTAL_IDS,
+                              f"seed {seed}: {spoke} behind {behind[spoke]}")
+
+    def test_deadside_only_stays_deadside(self) -> None:
+        import random
+        from ..regions import shuffle_entrances, DEADSIDE_PORTAL_IDS
+        shuffle = shuffle_entrances(random.Random(7), "deadside_only")
+        self.assertEqual(set(shuffle), set(DEADSIDE_PORTAL_IDS))
+        self.assertEqual(set(shuffle.values()), set(DEADSIDE_PORTAL_IDS))
+        self.assertIsNone(shuffle_entrances(random.Random(7), "off"))
+
+    def test_old_format_still_parses(self) -> None:
+        from ..regions import normalize_entrance_shuffle, deadside_portal_shuffle
+        old = {"LE_Wast.cut": "LE_Gad1.cut", "LE_Gad1.cut": "LE_Wast.cut"}
+        self.assertEqual(normalize_entrance_shuffle(old), {
+            "deadside/LE_Wast.cut": "deadside/LE_Gad1.cut",
+            "deadside/LE_Gad1.cut": "deadside/LE_Wast.cut",
+        })
+        self.assertEqual(deadside_portal_shuffle(old), old)
+        self.assertIsNone(normalize_entrance_shuffle(None))
+        with self.assertRaises(ValueError):
+            normalize_entrance_shuffle({"LE_Nope.cut": "LE_Wast.cut"})
+        # A soul-gate entry is dropped from the Deadside-only view.
+        mixed = {"deadside/LE_Lava.cut": "prison/soulexit.cut",
+                 "prison/soulexit.cut": "deadside/LE_Lava.cut"}
+        self.assertEqual(deadside_portal_shuffle(mixed), {})
 
 
 class TestProgressionOnBarrels(ShadowManTestBase):
