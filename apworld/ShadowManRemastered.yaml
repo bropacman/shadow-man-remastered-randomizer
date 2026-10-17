@@ -99,9 +99,16 @@ Shadow Man Remastered:
 
   # 5 checks for offering Cadeaux at the Wasteland life altars, sent as
   # you make your 1st..5th offering (any altar, any order). Each needs N x
-  # altar_cadeaux_required Cadeaux in logic; filler only. Only meaningful
-  # when cadeauxsanity is also on.
+  # altar_cadeaux_required Cadeaux in logic. Only meaningful when
+  # cadeauxsanity is also on. The location group "Life Altars" names all 5,
+  # e.g. exclude_locations: ["Life Altars"].
   life_altar_checks: false
+
+  # Makes the Life Altar checks priority locations, so they usually hold
+  # progression; enough Cadeaux to pay for all 5 offerings become
+  # progression items to allow it. Off: the altars only hold filler. Only
+  # meaningful when life_altar_checks is also on.
+  life_altar_priority: true
 
   # ── Cosmetic / optional shuffles ─────────────────────────────────────
   # Shuffle weapons into the pool. Off leaves them at vanilla locations.

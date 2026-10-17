@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from Options import (
     Choice,
     Toggle,
+    DefaultOnToggle,
     Range,
     DeathLink,
     PerGameCommonOptions,
@@ -554,10 +555,24 @@ class LifeAltarChecks(Toggle):
     offering can always be made; at the cap they just add no health.
 
     In logic, offering N needs Deadside - Wasteland plus N x Altar Cadeaux
-    Required worth of Cadeaux. These checks only hold filler items.
+    Required worth of Cadeaux. With Life Altar Priority on (the default),
+    they are priority locations and usually hold progression; off, they
+    only hold filler.
     """
     display_name = "Life Altar Checks"
     default = 0
+
+
+class LifeAltarPriority(DefaultOnToggle):
+    """
+    Only applies when Life Altar Checks is on (turned off otherwise).
+    Makes the 5 Life Altar Offering checks priority locations, so fill puts
+    progression there when it can. To make that possible, enough Cadeaux
+    items to pay for all 5 offerings (picked largest bundle first) become
+    progression; the rest stay filler. Off: the altars only hold filler,
+    as before this option existed.
+    """
+    display_name = "Life Altar Priority"
 
 
 class CadeauxBundleSize(Range):
@@ -870,6 +885,7 @@ class ShadowManOptions(PerGameCommonOptions):
     fogometers_cadeaux_required: FogometersCadeauxRequired
     cadeaux_gated_content:       CadeauxGatedContent
     life_altar_checks:           LifeAltarChecks
+    life_altar_priority:         LifeAltarPriority
     death_penalty:        DeathPenalty
     sprint_multiplier:     SprintMultiplier
     soul_threshold_mode:   SoulThresholdMode

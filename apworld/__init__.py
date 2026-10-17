@@ -34,6 +34,12 @@ from Options import OptionGroup
 from . import options as _opts
 from .options import ShadowManOptions
 
+# Cadeaux promoted by Life Altar Priority: logically relevant, but plentiful,
+# so not pulled forward by balancing and not wanted on priority locations.
+LIFE_ALTAR_CADEAUX_CLASSIFICATION = (ItemClassification.progression
+                                     | ItemClassification.skip_balancing
+                                     | ItemClassification.deprioritized)
+
 
 # ── Launcher registration ─────────────────────────────────────────────────────
 
@@ -93,7 +99,7 @@ class ShadowManWebWorld(WebWorld):
     option_groups = [
         OptionGroup("Cadeaux", [
             _opts.Cadeauxsanity, _opts.CadeauxBundleSize, _opts.CadeauxGatedContent,
-            _opts.LifeAltarChecks, _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
+            _opts.LifeAltarChecks, _opts.LifeAltarPriority, _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
         ]),
         OptionGroup("Gates", [
             _opts.GatePreset, _opts.MaxGateSL, _opts.OpenGatesN,
@@ -145,6 +151,11 @@ class ShadowManWorld(World):
     location_name_to_id: Dict[str, int] = {
         **{FRIENDLY_NAMES[key]: data.code for key, data in location_table.items()},
         **LIFE_ALTAR_LOCATIONS,
+    }
+    # Group names work in YAML location options, e.g.
+    # `exclude_locations: ["Life Altars"]`.
+    location_name_groups: Dict[str, set] = {
+        "Life Altars": set(LIFE_ALTAR_LOCATIONS),
     }
     # Cadeaux Bundle Size (2026-07-27): "Cadeaux Bundle x{N}" (see items.py)
     # is a distinct concrete item per denomination, since the bundle's
@@ -218,6 +229,10 @@ class ShadowManWorld(World):
             if bool(o.life_altar_checks):
                 warn("life_altar_checks turned off (requires cadeauxsanity).")
                 o.life_altar_checks.value = 0
+        # Life Altar Priority defaults on and means nothing without the
+        # checks: turn it off quietly so slot_data matches the seed.
+        if not bool(o.life_altar_checks) and bool(o.life_altar_priority):
+            o.life_altar_priority.value = 0
 
         # 4. Flat "Retractor" can't be given when unique keys are on.
         if bool(o.unique_retractor_keys):
@@ -1099,8 +1114,24 @@ class ShadowManWorld(World):
             # default bundle size of 1 every weight is 1, so
             # cadeaux_bundle_item_name(1) == "Cadeaux" and this is
             # byte-for-byte the same pool as before this option existed.
-            for _weight in self.cadeaux_bundle_representatives.values():
-                pool.append(self.create_item(cadeaux_bundle_item_name(_weight)))
+            # Life Altar Priority: promote enough Cadeaux to pay for all 5
+            # offerings (largest bundles first) to progression, so fill's
+            # sweeps can prove the altars reachable and put progression there
+            # (see _create_life_altar_locations). The rest stay filler.
+            _weights = list(self.cadeaux_bundle_representatives.values())
+            _promoted = set()
+            if bool(self.options.life_altar_checks) and bool(self.options.life_altar_priority):
+                _promote_worth = min(5 * int(self.options.altar_cadeaux_required), sum(_weights))
+                for _i in sorted(range(len(_weights)), key=lambda i: -_weights[i]):
+                    if _promote_worth <= 0:
+                        break
+                    _promoted.add(_i)
+                    _promote_worth -= _weights[_i]
+            for _i, _weight in enumerate(_weights):
+                _item = self.create_item(cadeaux_bundle_item_name(_weight))
+                if _i in _promoted:
+                    _item.classification = LIFE_ALTAR_CADEAUX_CLASSIFICATION
+                pool.append(_item)
 
         # CadeauxGatedContent (2026-07-24): off (default) excludes the
         # Fogometers Light Soul location from the region graph the same way
@@ -1182,13 +1213,20 @@ class ShadowManWorld(World):
         any order; the altars share the Baton Altar's requirement (region
         access only). Logic needs N x altar cost worth of Cadeaux, summed by
         real worth (a "Cadeaux Bundle x5" counts 5), capped at what the pool
-        holds. EXCLUDED like the Fogometers Light Soul: fill's simulations
-        never collect filler Cadeaux, so these may only hold filler.
+        holds.
+
+        Fill's sweeps only collect advancement items, so with every Cadeaux
+        filler these rules are never True there. Life Altar Priority off:
+        EXCLUDED like the Fogometers Light Soul (filler only). On:
+        create_items() promotes 5 x cost worth of Cadeaux to progression,
+        so the altars become PRIORITY locations; our own Cadeaux are kept
+        off them (a Cadeaux there would be a dull "progression" item).
         """
         wasteland = self.multiworld.get_region(LIFE_ALTAR_REGION, self.player)
         cost = int(self.options.altar_cadeaux_required)
         pool_worth = sum(self.cadeaux_bundle_representatives.values())
         player = self.player
+        priority = bool(self.options.life_altar_priority)
 
         def cadeaux_worth(state) -> int:
             return sum(state.count(name, player) * cadeaux_item_weight(name)
@@ -1198,7 +1236,12 @@ class ShadowManWorld(World):
             loc = ShadowManFlagLocation(player, name, code, wasteland)
             need = min(n * cost, pool_worth)
             loc.access_rule = lambda state, need=need: cadeaux_worth(state) >= need
-            loc.progress_type = LocationProgressType.EXCLUDED
+            if priority:
+                loc.progress_type = LocationProgressType.PRIORITY
+                loc.item_rule = lambda item: not (item.player == player
+                                                  and is_cadeaux_item(item.name))
+            else:
+                loc.progress_type = LocationProgressType.EXCLUDED
             wasteland.locations.append(loc)
 
     def create_item(self, name: str) -> ShadowManItem:
@@ -1551,6 +1594,23 @@ class ShadowManWorld(World):
 
         self._cadeaux_map_cache = (assignment, barrel_names, leftover_barrel_names)
         return self._cadeaux_map_cache
+
+    def fill_hook(self, progitempool, usefulitempool, filleritempool, fill_locations) -> None:
+        """
+        Life Altar Priority: move our promoted Cadeaux to the end of the
+        progression pool. fill_restrictive pops from the end, so they are
+        placed first, while plenty of locations not behind the altar items
+        are still free. Left in shuffled order (~10% FillError at altar cost
+        100) or placed last (same), the late Cadeaux had only locations
+        behind the altar items left, which they can't sit behind.
+        30 seeds each, bundle 1 and 5: 0/30 failures placed first.
+        """
+        if not (bool(self.options.life_altar_checks) and bool(self.options.life_altar_priority)):
+            return
+        ours = [i for i in progitempool if i.player == self.player and is_cadeaux_item(i.name)]
+        if ours:
+            ours_ids = {id(i) for i in ours}
+            progitempool[:] = [i for i in progitempool if id(i) not in ours_ids] + ours
 
     # ── Pre-fill ──────────────────────────────────────────────────────────────
 
@@ -2174,6 +2234,7 @@ class ShadowManWorld(World):
             "altar_cadeaux_required":      int(self.options.altar_cadeaux_required),
             "fogometers_cadeaux_required": int(self.options.fogometers_cadeaux_required),
             "life_altar_checks":     bool(self.options.life_altar_checks),
+            "life_altar_priority":   bool(self.options.life_altar_priority),
             "death_penalty":         int(self.options.death_penalty) / 10,
             "sprint_multiplier":     int(self.options.sprint_multiplier) / 10,
             # 2026-07-21 (entrance randomizer) — informational only; the
