@@ -388,3 +388,103 @@ class TestProgressionOnBarrels(ShadowManTestBase):
                    if getattr(l, "raw", None) is not None and l.raw.category == "barrel"]
         self.assertTrue(barrels)
         self.assertTrue(any(l.item_rule(baton) for l in barrels))
+
+
+
+class TestLifeAltarPriority(ShadowManTestBase):
+    """Life Altar Priority (default on): every Life Altar location is
+    PRIORITY, and fill can prove it reachable from progression items alone
+    (promoted Cadeaux), which a PRIORITY flag is useless without."""
+    options = {
+        "cadeauxsanity": True,
+        "cadeaux_bundle_size": 5,
+        "life_altar_checks": True,
+    }
+    seed = 1
+
+    def _altars(self):
+        from ..locations import LIFE_ALTAR_LOCATIONS
+        return [self.multiworld.get_location(n, self.player) for n in LIFE_ALTAR_LOCATIONS]
+
+    def test_altars_are_priority(self) -> None:
+        from BaseClasses import LocationProgressType
+        self.assertTrue(bool(self.world.options.life_altar_priority))
+        for loc in self._altars():
+            self.assertEqual(loc.progress_type, LocationProgressType.PRIORITY, loc.name)
+
+    def test_altars_reachable_from_progression_only(self) -> None:
+        from BaseClasses import CollectionState
+        state = CollectionState(self.multiworld)
+        for item in self.multiworld.itempool:
+            if item.player == self.player and item.advancement:
+                state.collect(item, True)
+        state.sweep_for_advancements()
+        for loc in self._altars():
+            self.assertTrue(loc.can_reach(state), loc.name)
+
+    def test_own_cadeaux_kept_off_altars(self) -> None:
+        cadeaux = self.world.create_item("Cadeaux Bundle x5")
+        for loc in self._altars():
+            self.assertFalse(loc.item_rule(cadeaux), loc.name)
+
+    def test_fill_hook_places_cadeaux_first(self) -> None:
+        from ..items import is_cadeaux_item
+        prog = [i for i in self.multiworld.itempool if i.advancement]
+        n_cad = sum(1 for i in prog if is_cadeaux_item(i.name))
+        self.assertGreater(n_cad, 0)
+        self.world.fill_hook(prog, [], [], [])
+        # fill_restrictive pops from the end: Cadeaux last in list = placed first.
+        self.assertTrue(all(is_cadeaux_item(i.name) for i in prog[-n_cad:]))
+        self.assertFalse(any(is_cadeaux_item(i.name) for i in prog[:-n_cad]))
+
+    def test_life_altars_group(self) -> None:
+        from ..locations import LIFE_ALTAR_LOCATIONS
+        group = self.world.location_name_groups["Life Altars"]
+        self.assertEqual(group, set(LIFE_ALTAR_LOCATIONS))
+        self.assertTrue(group <= set(self.world.location_name_to_id))
+
+
+class TestLifeAltarPriorityBundle1(TestLifeAltarPriority):
+    """Same checks at bundle size 1 (the most promoted Cadeaux items)."""
+    options = {
+        "cadeauxsanity": True,
+        "life_altar_checks": True,
+    }
+    seed = 2
+
+    def test_own_cadeaux_kept_off_altars(self) -> None:
+        cadeaux = self.world.create_item("Cadeaux")
+        for loc in self._altars():
+            self.assertFalse(loc.item_rule(cadeaux), loc.name)
+
+
+class TestLifeAltarNoPriority(ShadowManTestBase):
+    """life_altar_priority off: altars stay EXCLUDED and no Cadeaux is
+    promoted (the pre-option behavior)."""
+    options = {
+        "cadeauxsanity": True,
+        "life_altar_checks": True,
+        "life_altar_priority": False,
+    }
+    seed = 1
+
+    def test_altars_excluded(self) -> None:
+        from BaseClasses import LocationProgressType
+        from ..items import is_cadeaux_item
+        from ..locations import LIFE_ALTAR_LOCATIONS
+        for name in LIFE_ALTAR_LOCATIONS:
+            loc = self.multiworld.get_location(name, self.player)
+            self.assertEqual(loc.progress_type, LocationProgressType.EXCLUDED)
+        self.assertFalse(any(i.advancement for i in self.multiworld.itempool
+                             if i.player == self.player and is_cadeaux_item(i.name)))
+
+
+class TestLifeAltarPriorityNeedsChecks(ShadowManTestBase):
+    """life_altar_priority is turned off when life_altar_checks is off."""
+    options = {
+        "cadeauxsanity": True,
+    }
+    seed = 1
+
+    def test_priority_off(self) -> None:
+        self.assertFalse(bool(self.world.options.life_altar_priority))

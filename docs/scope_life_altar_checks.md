@@ -3,6 +3,21 @@
 Status: phase A built 2026-10-15 (`life_altar_checks` option). AP world +
 one exe patch (`exe_patches/life_altar_patch.py`).
 
+**Partial phase B built 2026-10-17 (`life_altar_priority`, default on):**
+only enough Cadeaux to pay for all 5 offerings (min(5 x altar cost, pool
+worth), largest bundles first) become `progression | skip_balancing |
+deprioritized`; the rest stay filler. The altar locations are then
+`PRIORITY` instead of `EXCLUDED`, with an item rule keeping this world's
+own Cadeaux off them. Without promotion, `PRIORITY` alone does nothing:
+fill's sweeps never hold filler Cadeaux, so AP's
+`inaccessible_location_rules` bans progression and useful items there
+anyway. `fill_hook` moves the promoted Cadeaux so they are placed
+first in the progression fill: left shuffled, ~10% of seeds hit FillError
+at altar cost 100 (the late Cadeaux had only locations behind the altar
+items left); placed first, 0/120 over seeds 1-60 at bundle sizes 1 and 5.
+The Fogometers Light Soul stays `EXCLUDED`. Location group
+"Life Altars" names all 5.
+
 **Max-health refusal (found in testing 2026-10-15):** the altar handler
 `FUN_14043f2f0` refuses when max health is exactly 10000 (`cmp eax, 0x2710`
 / `je` at 0x14043F4E3); the grant is a separate add-then-clamp. With a big

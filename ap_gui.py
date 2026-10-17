@@ -695,10 +695,16 @@ _HTML = r"""<!DOCTYPE html>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls whether the Fogometers Light Soul location (gated behind SL10 + collecting the Fog door&rsquo;s worth of Cadeaux, above) exists as an AP check at all. Off (default): excluded from AP entirely &mdash; stays vanilla, same treatment as barrels/enemy checks. On: it becomes a real check, gated in logic by that Fog door requirement, backed by a precollected-Cadeaux fix so it stays solvable. Requires Cadeaux Key Items above to also be on (greyed out otherwise) &mdash; Cadeaux isn&rsquo;t an AP-tracked item at all unless that&rsquo;s on.</span></span>
         </label>
         <label class="check-label" style="grid-column:1/-1;margin-top:6px">
-          <input type="checkbox" id="yLifeAltarChecks" onchange="updateYamlPreview()">
+          <input type="checkbox" id="yLifeAltarChecks" onchange="syncLifeAltarPriorityDependency()">
           Life Altar Checks
-          <button class="rng-btn" id="yLifeAltarChecksRng" onclick="event.preventDefault();toggleRng('yLifeAltarChecks')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. These checks only hold filler. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
+          <button class="rng-btn" id="yLifeAltarChecksRng" onclick="event.preventDefault();toggleRng('yLifeAltarChecks');syncLifeAltarPriorityDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. What they can hold is set by Life Altar Priority below. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
+        </label>
+        <label class="check-label" style="grid-column:1/-1;margin-top:6px">
+          <input type="checkbox" id="yLifeAltarPriority" checked onchange="updateYamlPreview()">
+          Life Altar Priority
+          <button class="rng-btn" id="yLifeAltarPriorityRng" onclick="event.preventDefault();toggleRng('yLifeAltarPriority')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): the 5 Life Altar Offering checks are priority locations, so they usually hold progression. To allow that, enough Cadeaux to pay for all 5 offerings become progression items; the rest stay filler. Off: the altars only hold filler. Requires Life Altar Checks above to also be on (greyed out otherwise). The location group &ldquo;Life Altars&rdquo; also works in priority_locations / exclude_locations.</span></span>
         </label>
       </div>
 
@@ -1131,6 +1137,19 @@ function syncCadeauxGatedDependency() {
     el.disabled = insanityOff || isRng(id);
     if (btn) btn.disabled = insanityOff;
   });
+  syncLifeAltarPriorityDependency();
+}
+
+// Life Altar Priority only means anything when Life Altar Checks is on.
+// Grey it out whenever Life Altar Checks is deterministically off, but keep
+// its value (it defaults on; the backend turns it off quietly without the
+// checks), same reasoning as syncCadeauxBundleDependency() below.
+function syncLifeAltarPriorityDependency() {
+  const altarsOff = !isRng('yLifeAltarChecks') && !document.getElementById('yLifeAltarChecks').checked;
+  const el  = document.getElementById('yLifeAltarPriority');
+  const btn = document.getElementById('yLifeAltarPriorityRng');
+  el.disabled = altarsOff || isRng('yLifeAltarPriority');
+  if (btn) btn.disabled = altarsOff;
   updateYamlPreview();
 }
 
@@ -1336,6 +1355,7 @@ function buildYaml() {
   kv('fogometers_cadeaux_required', yamlNum('yFogCadeaux'));
   kv('cadeaux_gated_content', yamlBool('yCadeauxGatedContent'));
   kv('life_altar_checks', yamlBool('yLifeAltarChecks'));
+  kv('life_altar_priority', yamlBool('yLifeAltarPriority'));
   kv('death_penalty', yamlDeathPenalty());
   kv('sprint_multiplier', yamlSprintMultiplier());
   kv('soul_threshold_mode', yamlChoiceRng('ySoulThresholdMode'));
@@ -1538,7 +1558,7 @@ async function importYaml() {
    'unique_retractor_keys:yUniqueRetractorKeys',
    'deadside_guns:yDeadsideGuns',
    'cadeauxsanity:yInsanity', 'cadeaux_gated_content:yCadeauxGatedContent',
-   'life_altar_checks:yLifeAltarChecks',
+   'life_altar_checks:yLifeAltarChecks', 'life_altar_priority:yLifeAltarPriority',
    'death_link:yDeathLink',
    'shuffle_ambients:yShuffleAmbients', 'shuffle_music:yShuffleMusic',
    'shuffle_voices:yShuffleVoices', 'shuffle_weapons_sfx:yShuffleWeaponsSfx',
