@@ -69,6 +69,9 @@ randomized too. Full option list and detailed behavior notes live in
   `cadeaux_gated_content` ("Fog Door Check") — whether Cadeaux locations
   exist as AP checks at all, whether they're bundled into grouped checks,
   and whether the Fogometers Light Soul is included.
+- `life_altar_checks` — 5 checks for your 1st–5th Cadeaux offering at the
+  Wasteland life altars (any altar, any order); filler only. Needs
+  `cadeauxsanity`.
 
 **Cosmetic / optional shuffles**
 `shuffle_weapons`, `shuffle_lore`, `shuffle_bonus`, `shuffle_enemies`

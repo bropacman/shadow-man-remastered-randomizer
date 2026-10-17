@@ -244,3 +244,68 @@ class TestExampleYaml(ShadowManTestBase):
         ours = set(ShadowManOptions.type_hints) - set(PerGameCommonOptions.type_hints)
         self.assertEqual(sorted(ours - set(self.options)), [],
                          "ShadowManRemastered.yaml is missing these options")
+
+
+class TestLifeAltarChecks(ShadowManTestBase):
+    """Life Altar Checks: 5 excluded offering checks in Wasteland with fixed
+    IDs, each needing N x altar cost worth of Cadeaux."""
+    options = {
+        "cadeauxsanity": True,
+        "life_altar_checks": True,
+        "altar_cadeaux_required": 100,
+    }
+    seed = 1
+
+    def _altar_locations(self):
+        from ..locations import LIFE_ALTAR_LOCATIONS
+        return [self.multiworld.get_location(name, self.player)
+                for name in LIFE_ALTAR_LOCATIONS]
+
+    def test_locations_exist_with_fixed_ids(self) -> None:
+        from BaseClasses import LocationProgressType
+        from ..locations import LIFE_ALTAR_LOCATIONS
+        for loc, code in zip(self._altar_locations(), LIFE_ALTAR_LOCATIONS.values()):
+            self.assertEqual(loc.address, code)
+            self.assertEqual(loc.parent_region.name, "Deadside - Wasteland")
+            self.assertEqual(loc.progress_type, LocationProgressType.EXCLUDED)
+            self.assertEqual(self.world.location_name_to_id[loc.name], code)
+        self.assertEqual(self.world.fill_slot_data()["life_altar_ap_ids"],
+                         list(LIFE_ALTAR_LOCATIONS.values()))
+
+    def test_offering_thresholds(self) -> None:
+        from BaseClasses import CollectionState
+        state = CollectionState(self.multiworld)
+        first, second = self._altar_locations()[:2]
+        # The state starts with the precollected Cadeaux cushion.
+        have = state.count("Cadeaux", self.player)
+        self.assertLess(have, 100)
+        for _ in range(99 - have):
+            state.collect(self.world.create_item("Cadeaux"), True)
+        self.assertFalse(first.access_rule(state))
+        state.collect(self.world.create_item("Cadeaux"), True)
+        self.assertTrue(first.access_rule(state))
+        self.assertFalse(second.access_rule(state))
+
+
+class TestLifeAltarChecksBundled(ShadowManTestBase):
+    """Bundled Cadeaux count by their worth, alongside the Fog Door Check."""
+    options = {
+        "cadeauxsanity": True,
+        "cadeaux_bundle_size": 5,
+        "cadeaux_gated_content": True,
+        "life_altar_checks": True,
+    }
+    seed = 1
+
+
+class TestLifeAltarChecksNeedCadeauxsanity(ShadowManTestBase):
+    """Without cadeauxsanity the option is turned off and no checks exist."""
+    options = {"life_altar_checks": True}
+    seed = 1
+
+    def test_turned_off(self) -> None:
+        from ..locations import LIFE_ALTAR_LOCATIONS
+        self.assertFalse(bool(self.world.options.life_altar_checks))
+        names = {loc.name for loc in self.multiworld.get_locations(self.player)}
+        self.assertFalse(names & set(LIFE_ALTAR_LOCATIONS))
+        self.assertEqual(self.world.fill_slot_data()["life_altar_ap_ids"], [])

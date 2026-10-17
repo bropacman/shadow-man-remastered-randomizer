@@ -4,6 +4,7 @@ locations.py
 Location definitions and ID table for Shadow Man Remastered.
 
 ID range: 1_000_001_000 – 1_000_099_999
+(1_000_091_001 – 1_000_091_005: Life Altar offerings, see below)
 
 Every entry in CHECKABLE_LOCS becomes an AP location.
 FIXED_SOUL_LOCS (boss/true_form) also become locations but are
@@ -145,3 +146,24 @@ def _build_friendly_names() -> dict[str, str]:
 
 
 FRIENDLY_NAMES: dict[str, str] = _build_friendly_names()
+
+
+# ── Life Altar offering checks ──────────────────────────────────────────────
+#
+# Not RSC pickups: sent by the client when the CF_LIFEALTAR00..04 save flags
+# (indices 35-39) count up, so they have no RawLocation, no `.raw` and nothing
+# for ap_patcher.py to write. Their IDs sit in a fixed block far above the
+# CSV-derived range, so CSV edits (which renumber location_table) never move
+# them. See docs/scope_life_altar_checks.md.
+
+LIFE_ALTAR_BASE_ID = BASE_ID + 90_000
+LIFE_ALTAR_REGION = "Deadside - Wasteland"
+LIFE_ALTAR_LOCATIONS: dict[str, int] = {
+    f"{LIFE_ALTAR_REGION} - Life Altar Offering {n}": LIFE_ALTAR_BASE_ID + n
+    for n in range(1, 6)
+}
+
+
+class ShadowManFlagLocation(Location):
+    """A real AP check sent from a save flag, with no RSC record (no `.raw`)."""
+    game = "Shadow Man Remastered"
