@@ -43,8 +43,11 @@ Shadow Man Remastered:
   # -1 leaves the preset's own baked-in value alone.
   open_gates_n: -1
 
-  # Shuffles which Deadside portal leads where. off (vanilla) |
-  # deadside_only (the 9 Deadside hub portals shuffled among themselves).
+  # Shuffles which portal leads where. off (vanilla) |
+  # deadside_only (the 9 Deadside hub portals shuffled among themselves) |
+  # cross_hub (the 9 Deadside portals and the 5 liveside soul gates
+  # shuffled together; Asylum, Wasteland and Temple of Fire stay behind
+  # Deadside portals).
   entrance_mode: "off"
 
   # How aggressively key items are pushed toward deeper locations (0-100).

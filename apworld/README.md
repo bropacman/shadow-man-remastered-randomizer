@@ -57,8 +57,11 @@ randomized too. Full option list and detailed behavior notes live in
   chaos (fully unconstrained).
 - `max_gate_sl` / `open_gates_n` — extra caps/overrides on top of the preset,
   mainly for multiworld reliability.
-- `entrance_mode` — shuffle which Deadside hub portal leads where
-  (`deadside_only`; `cross_hub` isn't ported from the standalone yet).
+- `entrance_mode` — shuffle which portal leads where: `deadside_only` (the
+  9 Deadside hub portals) or `cross_hub` (those plus the 5 liveside soul
+  gates, so a Deadside portal can lead into a Dark Engine room and a soul
+  gate can lead to a Deadside level; Asylum, Wasteland and Temple of Fire
+  always stay behind Deadside portals).
 - `soul_threshold_mode` / `soul_logic_buffer` — randomize real in-game
   soul-level requirements and/or pad AP's own logic with extra slack.
 - `progression_balancing` — how aggressively key items are pushed toward
@@ -120,8 +123,11 @@ two skins on one feature set:
   arguably this world's default location pool is already more expansive
   than the standalone's, since Dark Souls/Govis/Gad Powers are always
   shuffled with no vanilla-safe option at all.
-- **`cross_hub` entrance mode and `shuffle_prisms` aren't ported.**
-  `deadside_only` entrance shuffle and piston combo randomization are.
+- **`shuffle_prisms` isn't ported.** Both entrance modes (`deadside_only`,
+  `cross_hub`) and piston combo randomization are. AP's `cross_hub` keeps
+  Wasteland and Temple of Fire on Deadside portals too (the standalone
+  only pins Asylum), and drops the standalone's Salvage/Gad Temple rule
+  since Gad powers are always shuffled items in AP.
 - **In-game map tracker hints aren't available, but the client has its own
   full tracker instead.** The standalone's `patch_tracker` option (which
   rewrites in-game map badges) has no AP equivalent — it was removed after

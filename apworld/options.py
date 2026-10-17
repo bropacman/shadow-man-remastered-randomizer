@@ -476,12 +476,22 @@ class EntranceMode(Choice):
       threshold (fixed by where it actually sits in Deadside) — only where
       it leads changes.
 
-    cross_hub mode (mixing in the 5 Dark Engine soul gates too, matching the
-    standalone randomizer) is not implemented yet.
+    - cross_hub: the 9 Deadside portals and the 5 liveside soul gates are
+      shuffled together as one pool of 14, matching the standalone
+      randomizer. A Deadside portal can lead into a Dark Engine room, and a
+      liveside soul gate can lead to a Deadside level. Each return trip
+      goes back to the portal you came from. Asylum: Gateways, Wasteland
+      and Temple of Fire always stay behind a Deadside portal (Asylum
+      because liveside needs its Cathedral; the other two keep the early
+      game from depending on Night + a liveside item). The Cageways tram
+      into the Engine Block is not shuffled. With a small location pool
+      (mostly default options) cross_hub fails generation more often than
+      the other modes; turning on more shuffles adds locations and helps.
     """
     display_name = "Entrance Mode"
     option_off = 0
     option_deadside_only = 1
+    option_cross_hub = 2
     default = 0
 
 

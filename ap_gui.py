@@ -575,12 +575,13 @@ _HTML = r"""<!DOCTYPE html>
       <hr class="divider">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">
         Entrance Randomizer
-        <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>Deadside Only:</b> shuffles the 9 Deadside portals among themselves — which level a portal leads to is randomized, but each portal keeps its own physical soul-gate requirement. <b>Cross Hub</b> (Deadside levels + Engine Rooms shuffled together, standalone-only) isn&rsquo;t wired into the AP world yet — see AP_FEATURE_GAP.md Tier 3.</span></span>
+        <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>Deadside Only:</b> shuffles the 9 Deadside portals among themselves — which level a portal leads to is randomized, but each portal keeps its own physical soul-gate requirement. <b>Cross Hub:</b> the 9 Deadside portals and the 5 liveside soul gates are shuffled together — a Deadside portal can lead into a Dark Engine room, and a soul gate can lead to a Deadside level. Asylum, Wasteland and Temple of Fire always stay behind Deadside portals.</span></span>
       </div>
       <div class="row" style="margin-bottom:6px">
         <select id="yEntranceMode" onchange="updateYamlPreview()" style="width:100%;min-width:0">
           <option value="off" selected>Off — vanilla entrances</option>
           <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
+          <option value="cross_hub">Cross Hub — Deadside + Engine Rooms, 14 shuffled</option>
           <option value="random">&#127922; random</option>
         </select>
       </div>

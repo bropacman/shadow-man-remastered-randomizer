@@ -19,10 +19,11 @@ from .access_rules import R, make_location_rule, make_entrance_rule
 from .constants import GATE_VANILLA_SL, GATE_PRESETS, COFFIN_GATE_ORDER
 from .fill import _shuffle_gates, FIXED_SOUL_LOCS, CHECKABLE_LOCS, LIVESIDE_REGIONS, CADEAUX_666_LOCS, \
     DEPTH_BUCKETS
-from .regions import create_regions, DEADSIDE_PORTAL_FILES, ASYLUM_ENGINE_BLOCK, \
+from .regions import create_regions, ASYLUM_ENGINE_BLOCK, \
     ASYLUM_ENGINE_BLOCK_LONDON, ASYLUM_ENGINE_BLOCK_PRISON, ASYLUM_ENGINE_BLOCK_FLORIDA, \
     ASYLUM_ENGINE_BLOCK_SALVAGE, ASYLUM_ENGINE_BLOCK_QUEENS, \
-    compute_cadeaux_bundle_representatives, nested_round_robin_by_group
+    compute_cadeaux_bundle_representatives, nested_round_robin_by_group, \
+    normalize_entrance_shuffle, shuffle_entrances, SOUL_GATE_PORTALS, portal_destination_region
 from .items import ShadowManItem, item_table, STACKABLE_COUNTS, AP_ITEM_TO_RSC, _UNIQUE_ITEM_RSC_NAMES, \
     is_cadeaux_item, cadeaux_bundle_item_name, CADEAUX_ITEM_NAMES, is_trap_bonus_item, \
     RETRACTOR_KEY_ITEM_NAMES, cadeaux_item_weight
@@ -333,9 +334,8 @@ class ShadowManWorld(World):
                     f"for this regen rather than risk crashing it."
                 )
 
-        # Entrance randomizer (2026-07-21) — deadside_only mode only so far
-        # (see options.py EntranceMode docstring; cross_hub, which also mixes
-        # in the 5 Dark Engine soul gates, is not implemented yet). A pure
+        # Entrance randomizer (2026-07-21; cross_hub added 2026-10-15, see
+        # docs/scope_ap_cross_hub_entrances.md). For deadside_only: a pure
         # random bijection over the 9 Deadside portal files — deadside_only
         # has no extra placement constraints in the standalone either (its
         # two hard constraints, Asylum-behind-a-coffin-gate and Salvage's
@@ -360,14 +360,17 @@ class ShadowManWorld(World):
             # before, so there was previously no way for UT to recover
             # this even in principle). None (entrance_mode was "off" this
             # seed) round-trips through JSON as None correctly.
-            _es = self._ut_passthrough.get("entrance_shuffle")
-            self.entrance_shuffle = dict(_es) if _es else None
-        elif self.options.entrance_mode.current_key == "deadside_only":
-            dest_files = list(DEADSIDE_PORTAL_FILES)
-            self.random.shuffle(dest_files)
-            self.entrance_shuffle = dict(zip(DEADSIDE_PORTAL_FILES, dest_files))
+            # normalize_entrance_shuffle() also accepts the pre-cross_hub
+            # deadside-only format ({"LE_Wast.cut": "LE_Gad1.cut"}), so
+            # slot data from older seeds still regenerates.
+            self.entrance_shuffle = normalize_entrance_shuffle(
+                self._ut_passthrough.get("entrance_shuffle"))
         else:
-            self.entrance_shuffle = None
+            # deadside_only / cross_hub (2026-10-15): see shuffle_entrances()
+            # in regions.py -- cross_hub keeps Asylum: Gateways, Wasteland
+            # and Temple of Fire on Deadside portals.
+            self.entrance_shuffle = shuffle_entrances(
+                self.random, self.options.entrance_mode.current_key)
 
         preset_name = self.options.gate_preset.current_key
         preset      = GATE_PRESETS.get(preset_name, {})
@@ -1675,6 +1678,28 @@ class ShadowManWorld(World):
         else:
             _region_item_bans["Retractor"] = frozenset(LIVESIDE_REGIONS) | _engine_block_subregions
 
+        # cross_hub (2026-10-15): a soul gate can lead to a Deadside spoke or
+        # to another liveside's Engine Block room. Whatever it leads to sits
+        # behind that gate's own Night + item + Retractor, so ban those from
+        # the destination the same way as above.
+        if self.entrance_shuffle:
+            _soul_gate_extra_items = {
+                "Gardelle County Jail, Texas": ("Prison Key Card",),
+                "Mordant Street, Queens, NY":  ("Poigne",),
+                "Salvage Yard, Mojave Desert": ("Gad Power",),
+            }
+            for _pid, _dest_id in self.entrance_shuffle.items():
+                if _pid not in SOUL_GATE_PORTALS:
+                    continue
+                _liveside = SOUL_GATE_PORTALS[_pid][0]
+                _dest_region = portal_destination_region(_dest_id)
+                _items = ["La Lune", "La Lame", "Le Soleil",
+                          *_soul_gate_extra_items.get(_liveside, ()),
+                          RETRACTOR_KEY_ITEM_NAMES[_liveside]
+                          if bool(self.options.unique_retractor_keys) else "Retractor"]
+                for _item in _items:
+                    _region_item_bans[_item] = _region_item_bans.get(_item, frozenset()) | {_dest_region}
+
         # BARREL / PROGRESSION-ITEM GUARD (2026-08-07, generalized from
         # Jon's follow-up: "any progression item that would allow someone
         # else to get dark souls", not just Dark Soul behind an SL10 gate
@@ -2220,10 +2245,13 @@ class ShadowManWorld(World):
             "player": self.multiworld.get_file_safe_player_name(self.player),
             "config": config,
             "gate_remap": dict(self.gate_values),
-            # 2026-07-21 (entrance randomizer, Task 20) — dict[portal_file,
-            # dest_portal_file] over the 9 Deadside "LE_*.cut" filenames (see
-            # DEADSIDE_PORTAL_FILES in regions.py), or None when
-            # entrance_mode is "off". ap_patcher.py's run_patcher() consumes
+            # 2026-07-21 (entrance randomizer, Task 20) — dict[portal_id,
+            # dest_portal_id] of "folder/file" ids (2026-10-15: e.g.
+            # "deadside/LE_Wast.cut": "prison/soulexit.cut"; 9 Deadside
+            # entries for deadside_only, 14 for cross_hub — see
+            # ALL_PORTAL_IDS in regions.py), or None when entrance_mode is
+            # "off". Seeds before 2026-10-15 used bare "LE_*.cut" names;
+            # ap_patcher.py reads both. ap_patcher.py's run_patcher() consumes
             # this directly to drive apply_unified_shuffle() (ported from the
             # standalone's randomizers/entrance_randomizer.py) against the
             # extracted cutscene/scripts/*.cut files. Top-level (not nested
