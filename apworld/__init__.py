@@ -59,6 +59,10 @@ icon_paths["shadowman"] = f"ap:{__name__}/icon.png"
 
 # ── Module-level helpers ──────────────────────────────────────────────────────
 
+# See set_rules()'s "BARREL / PROGRESSION-ITEM GUARD" block.
+BAN_PROGRESSION_ON_BARRELS = False
+
+
 def _make_synthetic_raw(rsc_name: str, original_raw, save_idx=None):
     """
     Return a copy of original_raw with object replaced by rsc_name.
@@ -1776,13 +1780,26 @@ class ShadowManWorld(World):
         # the entire class of "a required item ended up somewhere that
         # itself required it" bugs at the source, rather than chasing
         # each new instance individually.
+        #
+        # 2026-10-15 (Jon): turned OFF via BAN_PROGRESSION_ON_BARRELS. Barrel
+        # logic has been cleaned up since, every location now has a friendly
+        # name (so a bad placement is easy to trace in a spoiler), and the
+        # guard made promoted barrels useless for easing progression fill:
+        # with it on, 100 trap barrels changed nothing about cross_hub's
+        # FillError rate. AP's own fill already refuses to put an item
+        # behind its own requirement as long as the logic is right, so a
+        # failure here now points at a logic gap to fix, not at barrels.
+        # The per-region item bans above stay. Flip the flag back to
+        # restore the old behaviour.
         for location in self.multiworld.get_locations(self.player):
             region = getattr(location, "parent_region", None)
             banned_here = frozenset(
                 name for name, banned_regions in _region_item_bans.items()
                 if region is not None and region.name in banned_regions
             )
-            is_barrel = getattr(location, "raw", None) is not None and location.raw.category == "barrel"
+            is_barrel = (BAN_PROGRESSION_ON_BARRELS
+                         and getattr(location, "raw", None) is not None
+                         and location.raw.category == "barrel")
             if not banned_here and not is_barrel:
                 continue
 

@@ -369,3 +369,22 @@ class TestEntranceShuffleTable(unittest.TestCase):
         mixed = {"deadside/LE_Lava.cut": "prison/soulexit.cut",
                  "prison/soulexit.cut": "deadside/LE_Lava.cut"}
         self.assertEqual(deadside_portal_shuffle(mixed), {})
+
+
+class TestProgressionOnBarrels(ShadowManTestBase):
+    """With BAN_PROGRESSION_ON_BARRELS off, a promoted barrel can hold this
+    player's own progression items (outside the per-region item bans)."""
+    options = {
+        "trap_bonus_count": 50,
+    }
+    seed = 1
+
+    def test_barrel_accepts_progression(self) -> None:
+        from .. import BAN_PROGRESSION_ON_BARRELS
+        if BAN_PROGRESSION_ON_BARRELS:
+            self.skipTest("guard switched back on")
+        baton = self.world.create_item("Baton")
+        barrels = [l for l in self.multiworld.get_locations(self.player)
+                   if getattr(l, "raw", None) is not None and l.raw.category == "barrel"]
+        self.assertTrue(barrels)
+        self.assertTrue(any(l.item_rule(baton) for l in barrels))
