@@ -212,6 +212,10 @@ def _resolve_random_config(config: dict, rng: random.Random) -> None:
     if str(config.get("piston_combos", "off")) == "random":
         config["piston_combos"] = rng.choice(["off", "on"])
         print(f"  [random] piston_combos → {config['piston_combos']}")
+    if str(config.get("pistons_required", 6)) == "random":
+        config["pistons_required"] = rng.randint(1, 6)
+        print(f"  [random] pistons_required → {config['pistons_required']}")
+    config["pistons_required"] = max(1, min(6, int(config.get("pistons_required", 6))))
 
     # ── Health (mirrors health_patch.py defaults/clamping) ───────────────────
     if str(config.get("starting_health", 5)) == "random":
@@ -1025,6 +1029,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
 
     _pc_combo = config.get("piston_combos", "off")
     _unique_retractor_keys = bool(config.get("unique_retractor_keys", False))
+    _pistons_required = int(config.get("pistons_required", 6))
     placement, gate_remap, retractor_level_assignment = assumed_fill(
         rng,
         progression_balancing=config.get("progression_balancing", 50),
@@ -1040,6 +1045,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
         piston_combos=_pc_combo,
         soul_thresholds=soul_thresholds,
         unique_retractor_keys=_unique_retractor_keys,
+        pistons_required=_pistons_required,
         **gate_kwargs,
     )
 
@@ -1069,6 +1075,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
                 piston_combos=_pc_combo,
                 soul_thresholds=soul_thresholds,
                 unique_retractor_keys=_unique_retractor_keys,
+                pistons_required=_pistons_required,
                 **gate_kwargs,
             )
         ok, report = validate_fill(
@@ -1085,6 +1092,7 @@ def run_assumed_fill(rng, config, gate_remap=None, entrance_shuffle=None, soul_t
             soul_thresholds=soul_thresholds,
             unique_retractor_keys=_unique_retractor_keys,
             retractor_level_assignment=retractor_level_assignment,
+            pistons_required=_pistons_required,
         )
         if ok:
             break
@@ -1381,6 +1389,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"  Shuffle light soul:    {yn(config.get('shuffle_bonus', False))}",
         f"  Shuffle prisms:        {yn(config.get('shuffle_prisms', False))}",
         f"  Shuffle piston combos: {'yes' if config.get('piston_combos', 'off') != 'off' else 'no'}",
+        f"  Pistons required:      {int(config.get('pistons_required', 6))} / 6",
         f"  Starting item:         {starting_friendly}",
         f"  Starting bundles:      {', '.join(config.get('starting_item_bundles', [])) or 'none'}",
         f"  Patch tracker:         {yn(config.get('patch_tracker', False))}",
@@ -2531,6 +2540,16 @@ def run_patcher(game_dir, seed, config, output_dir=None, dry_run=False, use_kpf=
                               f"seed logic still assumes per-level retractors, but nothing "
                               f"in-game will enforce it this run.")
 
+            # N of 6 pistons required. Must stay LAST: it places its cave
+            # from the file's current SizeOfImage / section slack, after
+            # every other section-appending patch above. No try/except: the
+            # seed logic assumes N, so a failure must stop the run.
+            if int(config.get("pistons_required", 6)) < 6:
+                from exe_patches import pistons_required_patch
+                pistons_required_patch.apply_patch(
+                    str(patched), int(config["pistons_required"]), dry_run=dry_run)
+                print(f"  Pistons required — {config['pistons_required']} of 6 stopped pistons stop the rest")
+
         except PermissionError:
             print(
                 f"\n⚠ Cannot write to {patched.name} — is Shadow Man Remastered currently running?\n"
@@ -2833,6 +2852,12 @@ if __name__ == "__main__":
     parser.add_argument("--piston-combos-random", action="store_true",
                         help="Randomly decide per-seed whether to shuffle piston combination values. "
                              "When active, Jack's Schematic becomes a required progression item.")
+    parser.add_argument("--pistons-required", type=int, choices=range(1, 7), default=6,
+                        metavar="N",
+                        help="Pistons that must be stopped before Legion (1-6, default 6 = vanilla). "
+                             "Once N are stopped the rest stop on their own (exe patch).")
+    parser.add_argument("--pistons-required-random", action="store_true",
+                        help="Randomly pick pistons required (1-6) per seed.")
     parser.add_argument("--entrance-mode",
                         choices=["off", "deadside_only", "cross_hub", "random"],
                         default="off",
@@ -2892,6 +2917,7 @@ if __name__ == "__main__":
         "death_penalty":               "random" if args.death_penalty_random else args.death_penalty,
         "sprint_multiplier":           "random" if args.sprint_multiplier_random else args.sprint_multiplier,
         "piston_combos":    "random" if args.piston_combos_random else ("on" if args.piston_combos else "off"),
+        "pistons_required": "random" if args.pistons_required_random else args.pistons_required,
         "settings_string":             args.settings_string,
     }
     if args.config and Path(args.config).exists():

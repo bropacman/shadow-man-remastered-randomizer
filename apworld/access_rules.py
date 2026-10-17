@@ -483,8 +483,16 @@ class _Rules:
                 and state.count("Retractor", player) >= 5
         )
 
-    def pistons(self, state, player, require_schematic: bool = False) -> bool:
+    def pistons(self, state, player, require_schematic: bool = False,
+                pistons_required: int = 6) -> bool:
         """
+        pistons_required: this world's PistonsRequired option (1-6). The
+        cable-car piston (STOPPED1) only needs Engine Block hub access,
+        which every caller's region already implies, so it counts as 1 for
+        free; each reachable Engine Block section adds one more. At 6 this
+        is the vanilla "all five sections" rule. The exe patch
+        (pistons_required_patch.py) stops the rest once N are stopped.
+
         require_schematic: True when this world's PistonCombos option is on
         (see options.py) — the piston combinations are randomized per-seed
         and only readable in-game via Jack's Schematic's journal entry, so
@@ -505,7 +513,16 @@ class _Rules:
         ]
         if require_schematic and not self.schematic(state, player):
             return False
-        return all(state.can_reach(s, "Region", player) for s in sections)
+        need = int(pistons_required) - 1
+        if need <= 0:
+            return True
+        reached = 0
+        for s in sections:
+            if state.can_reach(s, "Region", player):
+                reached += 1
+                if reached >= need:
+                    return True
+        return False
 
     # _soul_thresholds: optional per-call override, same as R.gate() — see
     # _soul_level()'s docstring. AP world's regions.py passes
@@ -581,13 +598,15 @@ class BoundR:
                  sl_thresholds: dict[int, int] | None = None,
                  piston_combos: bool = False,
                  cadeaux_required: int | None = None,
-                 cadeaux_trackable: bool = True):
+                 cadeaux_trackable: bool = True,
+                 pistons_required: int = 6):
         self._gv = gate_values
         self._p  = player
         self._st = sl_thresholds
         self._pc = piston_combos
         self._cr = cadeaux_required
         self._ct = cadeaux_trackable
+        self._pr = pistons_required
 
     def __getattr__(self, name):
         return getattr(R, name)
@@ -615,8 +634,10 @@ class BoundR:
         # as4dkeng barrels + Legion) always call "R.pistons(state, player)" —
         # a fixed 2-arg call, since eval()'s namespace only supplies state/player
         # (see make_location_rule() below). This override supplies this
-        # world's piston_combos flag the same way gate() supplies gate_values.
-        return R.pistons(state, player, require_schematic=self._pc)
+        # world's piston_combos flag and pistons_required count the same way
+        # gate() supplies gate_values.
+        return R.pistons(state, player, require_schematic=self._pc,
+                         pistons_required=self._pr)
 
 
 def make_entrance_rule(gate_id: str, gate_values: dict[str, int], player: int,
@@ -634,7 +655,8 @@ def make_location_rule(gate_expr: str, gate_values: dict[str, int], player: int,
                         sl_thresholds: dict[int, int] | None = None,
                         piston_combos: bool = False,
                         cadeaux_required: int | None = None,
-                        cadeaux_trackable: bool = True):
+                        cadeaux_trackable: bool = True,
+                        pistons_required: int = 6):
     """
     Returns a CollectionState → bool lambda for an AP location rule.
     Evaluates the gate_expr string with a BoundR so R.gate()/R.pistons()/
@@ -644,7 +666,7 @@ def make_location_rule(gate_expr: str, gate_values: dict[str, int], player: int,
     CADEAUX_666_VANILLA always-trackable behavior.
     """
     bound_r = BoundR(gate_values, player, sl_thresholds, piston_combos,
-                      cadeaux_required, cadeaux_trackable)
+                      cadeaux_required, cadeaux_trackable, pistons_required)
     return lambda state, expr=gate_expr, br=bound_r, p=player: eval(
         expr, {"R": br, "state": state, "player": p}
     )

@@ -196,6 +196,11 @@ These come from a long series of real crashes. Don't relearn them.
   `align_up(SizeOfImage, SectionAlignment)` read from the file at apply
   time. A hardcoded "safety gap" makes Windows refuse to launch the exe,
   and no static checker (incl. `pefile`) catches it.
+- **The header only fits 4 extra section headers** (table ends 0x348,
+  first raw data 0x400). Secret-mode and Unique Retractor Keys take all 4.
+  Later patches use zero raw slack in an appended code section and grow
+  its VirtualSize (`retractor_folder_log_patch`, `pistons_required_patch`);
+  apply those after every section-appending patch.
 - `.text` padding gaps are ≤16 bytes; chain fragments
   (`tools/find_cave.py`) or append a section. Assemble with Keystone,
   verify with Capstone (operand types, not string matching), then do a full

@@ -624,6 +624,7 @@ def _build_sub_regions(
     cadeaux_gated_content: bool = False,
     cadeaux_bundle_representatives: dict[str, int] | None = None,
     barrel_promoted_locs: frozenset[str] | None = None,
+    pistons_required: int = 6,
 ) -> None:
     skip_cats = _SKIP_CATS if cadeauxsanity else (_SKIP_CATS | {"cadeaux"})
 
@@ -715,7 +716,8 @@ def _build_sub_regions(
         # falls back to always-True when it's off, matching the pre-2026-07-24
         # behavior for that mode (see cadeaux_666()'s docstring in access_rules.py).
         rule_fn = make_location_rule(gate_expr, gate_values, player, sl_thresholds,
-                                      piston_combos, cadeaux_required, cadeauxsanity)
+                                      piston_combos, cadeaux_required, cadeauxsanity,
+                                      pistons_required=pistons_required)
         # sub_name already carries the "[gate_raw]" bracket tag and a unique
         # level prefix, so it doubles as a clean, collision-free entrance name.
         _connect(level_region, sub, rule=rule_fn, name=sub_name)
@@ -736,6 +738,7 @@ def create_regions(
     cadeaux_bundle_representatives: dict[str, int] | None = None,
     barrel_promoted_locs: frozenset[str] | None = None,
     unique_retractor_keys: bool = False,
+    pistons_required: int = 6,
 ) -> None:
     """
     Called from ShadowManWorld.create_regions().
@@ -817,6 +820,10 @@ def create_regions(
                    retractor_level_assignment) — each named item already has
                    a fixed region identity, so AP's own fill decides where
                    each one lands, same as any other progression item.
+    pistons_required: this world's PistonsRequired option (1-6) — the
+                   as4dkeng "R.pistons(state, player)" gate_exprs need
+                   that many pistons stopped instead of all six. Threaded
+                   into _build_sub_regions() via BoundR like piston_combos.
     """
     # ── Create all regions ────────────────────────────────────────────────────
     regions: dict[str, Region] = {}
@@ -1102,4 +1109,5 @@ def create_regions(
             gate_values, location_factory, sl_thresholds, piston_combos,
             cadeauxsanity, cadeaux_required, cadeaux_gated_content,
             cadeaux_bundle_representatives, barrel_promoted_locs,
+            pistons_required=pistons_required,
         )

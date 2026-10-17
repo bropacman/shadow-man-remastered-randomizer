@@ -533,6 +533,16 @@ _HTML = r"""<!DOCTYPE html>
   <div class="card">
     <div class="card-title">Gameplay Tuning</div>
 
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Goal</div>
+    <div class="row" style="margin-bottom:8px">
+      <span style="color:var(--muted);font-size:11px;white-space:nowrap">Pistons required:</span>
+      <input type="range" id="pistonsRequired" min="1" max="6" step="1" value="6"
+             oninput="document.getElementById('pistonsRequiredVal').textContent=this.value">
+      <span class="slider-val" id="pistonsRequiredVal">6</span>
+      <button class="rng-btn" id="pistonsRequiredRng" onclick="toggleRng('pistonsRequired')" title="Randomize per seed">&#127922;</button>
+      <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of the 6 Dark Engine pistons you must stop before Legion. Once that many are stopped, the rest stop on their own and the way to Legion opens. The cable-car piston always counts as one. 6 is the vanilla game.</span></span>
+    </div>
+
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Health</div>
     <div class="row" style="margin-bottom:8px">
       <span style="color:var(--muted);font-size:11px;white-space:nowrap">Starting:</span>
@@ -927,6 +937,7 @@ function getConfig() {
     deathPenalty:              isRng('deathPenalty') ? 'random' : document.getElementById('deathPenalty').value,
     sprintMultiplier:          isRng('sprintMultiplier') ? 'random' : document.getElementById('sprintMultiplier').value,
     pistonCombos:    isRng('pistonCombos') ? 'random' : (document.getElementById('pistonCombos').checked ? 'on' : 'off'),
+    pistonsRequired: isRng('pistonsRequired') ? 'random' : document.getElementById('pistonsRequired').value,
   };
 }
 // ── Settings string export / import ──────────────────────────────────────────
@@ -975,6 +986,7 @@ const FIELD_SHORT = {
   sprintMultiplier:          'spM',
   shufflePrisms:             'sPr',
   pistonCombos:    'pC',
+  pistonsRequired: 'pR',
 };
 // Reverse map: short code → long key
 const FIELD_LONG = Object.fromEntries(Object.entries(FIELD_SHORT).map(([l, s]) => [s, l]));
@@ -1020,6 +1032,7 @@ const FIELD_DEFAULTS = {
   sprintMultiplier:          '0',
   shufflePrisms:             false,
   pistonCombos:   'off',
+  pistonsRequired: '6',
 };
 
 function encodeSettings() {
@@ -1229,6 +1242,10 @@ function applyConfig(cfg) {
   if (cfg.pistonCombos !== undefined) {
     if (cfg.pistonCombos === 'random') { applyRng('pistonCombos', 'random'); }
     else { applyRng('pistonCombos', 'off'); set('pistonCombos', cfg.pistonCombos === 'on'); }
+  }
+  if (cfg.pistonsRequired !== undefined) {
+    if (String(cfg.pistonsRequired) === 'random') { applyRng('pistonsRequired', 'random'); }
+    else { applyRng('pistonsRequired', cfg.pistonsRequired); set('pistonsRequired', String(cfg.pistonsRequired)); document.getElementById('pistonsRequiredVal').textContent = String(cfg.pistonsRequired); }
   }
   // Restore enemy mode — strip the label suffix before setting
   if (cfg.enemyMode) {
@@ -1586,6 +1603,12 @@ class _Api:
             cmd.append("--piston-combos-random")
         elif de_combos == "on":
             cmd.append("--piston-combos")
+
+        pistons_required = str(config.get("pistonsRequired", "6")).strip()
+        if pistons_required == "random":
+            cmd.append("--pistons-required-random")
+        elif pistons_required and pistons_required != "6":
+            cmd += ["--pistons-required", pistons_required]
 
         settings_str = config.get("_settingsStr", "").strip()
         if settings_str:

@@ -71,6 +71,11 @@ Shadow Man Remastered:
   # combinations in the in-game journal before reaching Legion).
   piston_combos: false
 
+  # How many of the 6 Dark Engine pistons you must stop before Legion
+  # (1-6). Once that many are stopped the rest stop on their own and the
+  # way down to Legion opens. 6 (default) is the vanilla game.
+  pistons_required: 6
+
   # Split the 5 Retractors into one named key per liveside region
   # ("Retractor - London", "Retractor - Prison", ...); each schism then
   # needs its own key instead of any 5 of the shared stack.

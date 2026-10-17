@@ -762,6 +762,7 @@ class ShadowManWorld(World):
             cadeaux_bundle_representatives = self.cadeaux_bundle_representatives,
             barrel_promoted_locs = self.barrel_promoted_locs,
             unique_retractor_keys = bool(self.options.unique_retractor_keys),
+            pistons_required = int(self.options.pistons_required),
         )
 
         if bool(self.options.life_altar_checks):
@@ -786,7 +787,8 @@ class ShadowManWorld(World):
             "Defeat Legion",
             "Victory",
             rule=lambda state: R.pistons(state, self.player,
-                                          require_schematic=bool(self.options.piston_combos)),
+                                          require_schematic=bool(self.options.piston_combos),
+                                          pistons_required=int(self.options.pistons_required)),
             item_type=ShadowManItem,
         )
 
@@ -826,6 +828,7 @@ class ShadowManWorld(World):
                     # check in the seed.
                     self.cadeaux_required_logic,
                     bool(self.options.cadeauxsanity),
+                    pistons_required=int(self.options.pistons_required),
                 )
             _region.add_event(
                 f"{_soul_loc.friendly_name} ({_soul_loc.loc_key})",
@@ -2171,6 +2174,8 @@ class ShadowManWorld(World):
             # str(False) == "False", not "off", so a bare bool would always
             # take the randomize branch even when disabled.
             "piston_combos":         "on" if bool(self.options.piston_combos) else "off",
+            # ap_patcher.py applies pistons_required_patch when < 6.
+            "pistons_required":      int(self.options.pistons_required),
             # AP's native "random" YAML keyword picks uniformly among the
             # declared choices, including full_random — so this Choice's
             # current_key is already fully random-capable. "full_random" is
@@ -2505,6 +2510,9 @@ class ShadowManWorld(World):
             # this dict has no reason to match that unrelated convention;
             # see the matching read-side fix in client.py's on_package()).
             "piston_combos":       bool(self.options.piston_combos),
+            # PistonsRequired (1-6, 6 = vanilla). Read by client.py's
+            # on_package() for Go Mode's piston count.
+            "pistons_required":    int(self.options.pistons_required),
             # Unique Retractor Keys (2026-08-18) — plain bool, same
             # slot_data pattern as piston_combos just above. Read by
             # client.py's on_package() into self.unique_retractor_keys_on,

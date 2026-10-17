@@ -63,7 +63,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
 from extracted_locations import RAW_LOCATIONS, LOCATION_TABLE
-from access_rules import R, GATE_VANILLA_SL, set_piston_combos_random, set_soul_thresholds, set_unique_retractor_keys, VANILLA_SOUL_THRESHOLDS, CAGEWAYS_ROUTES, PLAYROOMS_ROUTES
+from access_rules import R, GATE_VANILLA_SL, set_piston_combos_random, set_pistons_required, set_soul_thresholds, set_unique_retractor_keys, VANILLA_SOUL_THRESHOLDS, CAGEWAYS_ROUTES, PLAYROOMS_ROUTES
 from constants import GATE_PRESETS, ITEM_GATE_IDS, COFFIN_GATE_ORDER, STARTING_ITEM_BUNDLES, item_display_name
 import regions as _regions
 
@@ -949,11 +949,13 @@ def assumed_fill(
     piston_combos: str = "off",
     soul_thresholds: dict[int, int] | None = None,
     unique_retractor_keys: bool = False,
+    pistons_required: int = 6,
 ) -> tuple[dict[str, str], dict[str, int], dict[str, str]]:
 
     # ── Piston combinations flag ───────────────────────────────────────────────
     _pc_random = str(piston_combos) == "random"
     set_piston_combos_random(_pc_random)
+    set_pistons_required(pistons_required)
 
     # ── Soul threshold override ────────────────────────────────────────────────
     set_soul_thresholds(soul_thresholds)
@@ -1574,6 +1576,7 @@ def assumed_fill(
     # Reset dark engine flag, soul thresholds, and unique-retractor-keys flag
     # so they don't bleed into subsequent calls
     set_piston_combos_random(False)
+    set_pistons_required(6)
     set_soul_thresholds(None)
     set_unique_retractor_keys(False)
 
@@ -1597,10 +1600,12 @@ def validate_fill(
     soul_thresholds: dict[int, int] | None = None,
     unique_retractor_keys: bool = False,
     retractor_level_assignment: dict[str, str] | None = None,
+    pistons_required: int = 6,
 ) -> tuple[bool, str]:
 
     _pc_random = str(piston_combos) == "random"
     set_piston_combos_random(_pc_random)
+    set_pistons_required(pistons_required)
     set_soul_thresholds(soul_thresholds)
     set_unique_retractor_keys(unique_retractor_keys)
 
@@ -1651,7 +1656,7 @@ def validate_fill(
 
     if verbose or not ok:
         lines.append(f"  Locations: {reached_count}/{total_checkable}")
-        lines.append(f"  Goal (PISTONS): {'OK' if goal_met else 'NO'}")
+        lines.append(f"  Goal (PISTONS, {int(pistons_required)}/6 required): {'OK' if goal_met else 'NO'}")
 
         unreached = [loc for loc in checkable_locs if loc.loc_key not in reached_keys]
         if unreached:
@@ -1687,6 +1692,7 @@ def validate_fill(
         STARTING_ITEMS.discard(_rsc)
 
     set_piston_combos_random(False)
+    set_pistons_required(6)
     set_soul_thresholds(None)
     set_unique_retractor_keys(False)
 

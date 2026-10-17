@@ -712,6 +712,7 @@ def write_spoiler_log(output_path, seed, patches_by_folder, gate_remap,
         f"Soul threshold mode: {config.get('soul_threshold_mode', 'default')}",
         f"Entrance mode: {config.get('entrance_mode', 'off')}",
         f"Piston combos: {config.get('piston_combos', 'off')}",
+        f"Pistons required: {int(config.get('pistons_required', 6))} / 6",
         "",
     ]
     # NOTE: this header list was previously missing most of the config keys
@@ -2091,6 +2092,17 @@ def run_patcher(
                 print(f"  WARNING: Unique Retractor Keys exe patch failed ({e}) — "
                       f"seed logic still assumes per-region retractors, but nothing "
                       f"in-game will enforce it this run.")
+
+        # N of 6 pistons required. Must stay LAST: it places its cave from
+        # the file's current SizeOfImage / section slack, after every other
+        # section-appending patch above (secret_mode uses fixed VAs at the
+        # vanilla image end). No try/except: seed logic assumes N, so a
+        # failure here must stop the run rather than ship an unwinnable exe.
+        _pistons_required = int(config.get("pistons_required", 6))
+        if _pistons_required < 6:
+            from exe_patches import pistons_required_patch
+            pistons_required_patch.apply_patch(str(patched), _pistons_required)
+            print(f"EXE: Pistons required: {_pistons_required} of 6 stopped pistons stop the rest")
     else:
         print("\nWARNING: thoth_x64.exe not found - EXE patches skipped")
 

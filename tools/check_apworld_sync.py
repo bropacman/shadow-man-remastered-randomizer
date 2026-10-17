@@ -66,6 +66,7 @@ NEAR_IDENTICAL: list[tuple[str, str]] = [
     ("exe_patches/gad_pickup_patch.py", "gad_pickup_patch.py"),
     ("exe_patches/health_patch.py", "health_patch.py"),
     ("patchers/levels_txt_patcher.py", "levels_txt_patcher.py"),
+    ("exe_patches/pistons_required_patch.py", "pistons_required_patch.py"),
     ("randomizers/ambient_randomizer.py", "ambient_randomizer.py"),
     ("randomizers/enemy_randomizer.py", "enemy_randomizer.py"),
     ("randomizers/music_randomizer.py", "music_randomizer.py"),

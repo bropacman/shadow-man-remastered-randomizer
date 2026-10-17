@@ -52,6 +52,19 @@ def set_piston_combos_random(val: bool) -> None:
     _piston_combos_random = val
 
 
+# "N of 6 pistons required" (1-6, 6 = vanilla). Once N pistons are stopped
+# the exe patch (exe_patches/pistons_required_patch.py) stops the rest, so
+# R.pistons() only needs N of them. Set/reset by fill.py's assumed_fill()/
+# validate_fill(), same pattern as set_piston_combos_random().
+_pistons_required: int = 6
+
+
+def set_pistons_required(val: int) -> None:
+    """Called by fill.py assumed_fill/validate_fill with the seed's pistons_required."""
+    global _pistons_required
+    _pistons_required = int(val)
+
+
 # Set to True when the "Unique Retractor Keys" option is on. When enabled,
 # each of the 5 liveside levels requires its own specific retractor (a
 # per-seed randomized 1:1 assignment computed in fill.py) instead of the
@@ -397,7 +410,11 @@ class _Rules:
         # the only way to learn the new combinations — treat it as required.
         if _piston_combos_random and not self.schematic(state, player):
             return False
-        return all(state.can_reach(s, "Region", player) for s in sections)
+        # The cable-car piston only needs Engine Block hub access, which
+        # every caller's region already implies, so it counts as 1 for free;
+        # each reachable section adds one. At 6 this is "all five sections".
+        need = _pistons_required - 1
+        return sum(1 for s in sections if state.can_reach(s, "Region", player)) >= need
 
     # ── Soul level methods ────────────────────────────────────────────────────
     # Retained for liveside SL2 EXE-hardcoded checks and any compound exprs
