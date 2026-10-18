@@ -19,11 +19,12 @@ build tooling.
 ## Goal
 
 Defeat Legion. Reaching him requires collecting enough Dark Souls to open
-the coffin gates blocking Deadside progress and completing the five Engine
-Blocks (or, if Piston Combo Randomizer is on, also finding and reading
-Jack's Schematic to learn that seed's randomized piston combination). Your
-client reports `goal complete` automatically the moment Legion is
-confirmed dead.
+the coffin gates blocking Deadside progress and stopping the Dark Engine's
+pistons: all 6 by default, or fewer with `pistons_required` (once enough
+are stopped, the rest shut down by themselves). If Piston Combo Randomizer
+is on, you also need to find and read Jack's Schematic to learn that
+seed's randomized piston combinations. Your client reports
+`goal complete` automatically the moment Legion is confirmed dead.
 
 ## Setup
 
@@ -32,9 +33,11 @@ Short version: **use the Shadow Man Remastered AP Companion tool** for
 both ends of this — its "Generate YAML" tab builds your player options
 file without hand-editing YAML, and once you have your `.apshadowman`
 file from generation, its "Apply AP Seed" tab patches it onto your local
-game install. Grab `shadow_man_ap_companion.exe` from the
-[`shadow-man-remastered-randomizer` releases page](https://github.com/bropacman/shadow-man-remastered-randomizer/releases)
-— it's a standalone Windows exe, no Python install needed. Running
+game install. Grab `shadow_man_ap_companion.exe` from
+[this repo's releases page](https://github.com/bropacman/shadow-man-remastered-ap-world/releases/latest),
+next to `shadowman.apworld` and an example player YAML
+(`ShadowManRemastered.yaml`, every option with comments) — it's a
+standalone Windows exe, no Python install needed. Running
 `ap_gui.py` from source (or editing a YAML by hand / using the
 Archipelago website's generator plus `apply_ap_seed.py` directly) still
 works if you'd rather script it, but the released exe is the easiest path
@@ -67,15 +70,25 @@ randomized too. Full option list and detailed behavior notes live in
   soul-level requirements and/or pad AP's own logic with extra slack.
 - `progression_balancing` — how aggressively key items are pushed toward
   deeper locations.
+- `pistons_required` — how many of the 6 Dark Engine pistons you must stop
+  before Legion (1–6, default 6 = vanilla); the rest stop by themselves
+  once you reach it, and logic follows the setting.
 - `piston_combos` — randomize the 6 Dark Engine piston combinations;
   makes Jack's Schematic required progression when on.
+- `unique_retractor_keys` — split the 5 Retractors into one named key per
+  liveside level ("Retractor - London", …); each schism only opens with
+  its own key, tracked live in Nettie's File.
 - `cadeauxsanity` (renamed from `insanity` 2026-08-23) / `cadeaux_bundle_size` /
   `cadeaux_gated_content` ("Fog Door Check") — whether Cadeaux locations
   exist as AP checks at all, whether they're bundled into grouped checks,
   and whether the Fogometers Light Soul is included.
-- `life_altar_checks` — 5 checks for your 1st–5th Cadeaux offering at the
-  Wasteland life altars (any altar, any order); filler only. Needs
-  `cadeauxsanity`.
+- `life_altar_checks` / `life_altar_priority` — 5 checks for your 1st–5th
+  Cadeaux offering at the Wasteland life altars (any altar, any order;
+  the altars stay usable at max health). With `life_altar_priority` (on by
+  default) they're priority locations that hold real progression, and
+  enough Cadeaux to pay for all five become progression items; turn it
+  off for filler-only altars. The "Life Altars" location group works in
+  `priority_locations` / `exclude_locations`. Needs `cadeauxsanity`.
 
 **Cosmetic / optional shuffles**
 `shuffle_weapons`, `shuffle_lore`, `shuffle_bonus`, `shuffle_enemies`
