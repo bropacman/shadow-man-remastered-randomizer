@@ -2815,8 +2815,8 @@ if __name__ == "__main__":
                              "physical Retractor is randomly assigned (per seed) to unlock exactly "
                              "one liveside level (Florida/Salvage/London/Prison/Queens), instead of "
                              "the vanilla 'any 5 retractors opens all 5 levels' shared gate. The "
-                             "assignment is documented in the spoiler log (no in-game text mechanism "
-                             "shows it yet).")
+                             "assignment is listed in the spoiler log and tracked live in Nettie's "
+                             "File (Five Keys pages).")
     parser.add_argument("--unique-retractor-keys-random", action="store_true",
                         help="Randomly decide per-seed whether to use unique retractor keys.")
     parser.add_argument("--altar-cadeaux-required", type=_int_or_random, default=None,

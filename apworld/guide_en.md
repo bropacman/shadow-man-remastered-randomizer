@@ -27,8 +27,8 @@ no manual `!goal` needed.
    its "Tracker Page" tab to show up (see "Tracking your progress" below),
    so it's easiest to just grab both now rather than backfilling it later.
 3. Get a player YAML for this game. Easiest path: grab
-   `shadow_man_ap_companion.exe` from the
-   [shadow-man-remastered-randomizer releases page](https://github.com/bropacman/shadow-man-remastered-randomizer/releases)
+   `shadow_man_ap_companion.exe` from the same
+   [releases page](https://github.com/bropacman/shadow-man-remastered-ap-world/releases)
    — a standalone Windows exe, no Python install needed — and use its
    "Generate YAML" tab for a GUI with tooltips for every option and a live
    YAML preview as you toggle things:

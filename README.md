@@ -16,7 +16,8 @@ enemies, music, and SFX using a custom assumed-fill algorithm.
 
 ### Gameplay
 - **Progression items** — Engineers Key, Poigne, Baton, Flambeau, Marteau, Calabash, Eclipser parts, Retractors, Accumulators, Prison Key Card; shuffled across all eligible locations using an assumed-fill algorithm that guarantees every seed is beatable
-- **Gad powers** — Touch, Walk, and Swim Gad as physical pickups shuffled across temple locations (EXE patch applied automatically)
+- **Gad powers** — Touch, Walk, and Swim Gad as physical pickups shuffled across temple locations (EXE patch applied automatically); finishing a Gad ring no longer starts the temple's ring cutscene
+- **Unique Retractor Keys** — optional; the 5 Retractors become one key per liveside level, and each schism only opens with its own key (EXE patch). Nettie's File gets a live "Five Keys" tracker page per level, and the spoiler log lists which key opens which level
 - **Weapons** — Asson, Shotgun, Sawed-off Shotgun, Enseigne, MP-909, 0.9-SMG, Tête de Mort, Flashlight, Violator
 - **Lore items** — Book of Shadows, Prophecy, Jack's Schematic
 - **Dark Engine piston combinations** — the six dark engine piston combos can be randomized per-seed; new values are patched directly into the in-game Jack's Schematic journal page, making it a required progression item
@@ -34,6 +35,7 @@ enemies, music, and SFX using a custom assumed-fill algorithm.
 - **Cross-hub** — all 14 portals (Deadside + Engine Rooms) shuffled together; a Deadside portal may lead to an Engine Room and vice versa
 
 ### Gameplay Tuning (EXE patches)
+- **Pistons Required** — how many of the 6 Dark Engine pistons you must stop before Legion (1–6, vanilla 6). Once that many are stopped, the rest shut down by themselves and the way down to Legion opens; the cable-car piston always counts as one. Seed logic follows the setting
 - **Life altar cadeaux requirement** — cadeaux cost per altar interaction (default 100, configurable 1–133)
 - **Fogometers light soul door** — cadeaux required to open the final Fogometers gate (default 666, configurable 5–666)
 - **Starting max health** — player max health at game start on a 0.5–10 scale in 0.5 steps (vanilla: 5)
@@ -87,6 +89,10 @@ enemies, music, and SFX using a custom assumed-fill algorithm.
 
 Download **`shadow_man_randomizer.exe`** from the [Releases page](https://github.com/bropacman/shadow-man-remastered-randomizer/releases/latest).
 No Python required — double-click and go.
+
+### Playing in an Archipelago multiworld?
+
+That's a separate download: the AP world (`shadowman.apworld`) and the **AP Companion** (`shadow_man_ap_companion.exe`, which builds your player YAML and applies your seed) are released on [shadow-man-remastered-ap-world](https://github.com/bropacman/shadow-man-remastered-ap-world/releases/latest), with an example player YAML. Its README and setup guide cover the rest.
 
 ### Running from source
 
@@ -153,9 +159,11 @@ The GUI covers all available settings and is the recommended way to generate see
 | `--shuffle-prisms-random` | off | Randomly decide per-seed whether to shuffle prisms *(in development)* |
 | `--starting-item RSC_NAME` | none | Place a specific item at the Louisiana Swampland church at run start (e.g. `RSC_X_ENGINEERS_KEY`) |
 | `--random-starting-item` | off | Pick a random starting item using the seed RNG — reproducible for a given seed |
-| `--starting-item-bundles NAME…` | none | Grant one or more full item groups at seed start, removing them from the shuffle pool. Available bundles: `all_accumulators`, `all_retractors`, `all_eclipsers` |
+| `--starting-item-bundles NAME…` | none | Grant one or more full item groups at seed start, removing them from the shuffle pool. Available bundles: `all_accumulators`, `all_retractors`, `all_eclipsers`, `all_gad_pickups` (needs `--shuffle-gad-temples`), `all_prisms` *(in development)* |
 | `--piston-combos` | off | Randomize the six dark engine piston combination values; the new codes are patched into the in-game Jack's Schematic journal page, making it a required progression item |
 | `--piston-combos-random` | off | Randomly decide per-seed whether to randomize piston combinations |
+| `--unique-retractor-keys` | off | Turn the 5 Retractors into one key per liveside level (Florida, Salvage, London, Prison, Queens); each schism only opens with its own key. Tracked live in Nettie's File and listed in the spoiler log |
+| `--unique-retractor-keys-random` | off | Randomly decide per-seed whether to use unique retractor keys |
 | `--insanity [1\|2\|3\|random]` | off | Place progression items in normally-excluded slots. Tier 1 = soul/govi slots, tier 2 = +cadeaux slots, tier 3 = all slots. Bare `--insanity` defaults to tier 3. Pass `random` to let the seed pick a tier. |
 | `--progression-balancing N` | 50 | 0–100, higher = items pushed deeper into the world. Accepts `random`. |
 
@@ -185,6 +193,8 @@ Several of the options below accept `random` in place of a number — when passe
 | `--sprint-multiplier-random` | off | Choose a random sprint multiplier (1.5x–4.0x) per-seed rather than disabling it. Reproducible for a given seed. |
 | `--deadside-guns` | off | Force the "I Like Dead Side Guns" secret on (Deadside weapons work on Liveside and vice versa) without needing to find its hidden in-world unlock trigger. Edits `kexengine.cfg` at patch time — requires having launched the game at least once already. |
 | `--deadside-guns-random` | off | Randomly decide per-seed whether to force the Deadside Guns secret on. |
+| `--pistons-required N` | `6` | How many of the 6 Dark Engine pistons must be stopped before Legion (1–6, vanilla 6). Once N are stopped the rest stop on their own (EXE patch); the cable-car piston always counts as one. |
+| `--pistons-required-random` | off | Pick a random pistons-required value (1–6) per-seed. |
 
 
 ### Map tracker (Teddy Bear hints)
@@ -293,7 +303,7 @@ re-run the scripts in `tools/` to regenerate them.
 6. **Entrance shuffle** — rewrites level exit scripts so hub portals connect to new spokes (if enabled)
 7. **Patch RSC** — writes new item names to all RSC files
 8. **Patch enemies** — shuffles enemy type names in enemies RSC files (if enabled)
-9. **Patch EXE** — writes prison key card position fix (always) + gad pickup dispatch (if enabled) + cadeaux altar/door thresholds + starting health and altar health grant + soul level thresholds (if enabled) + death penalty (if enabled)
+9. **Patch EXE** — writes prison key card position fix and save-folder redirect (always) + gad pickup dispatch (if enabled) + cadeaux altar/door thresholds + starting health and altar health grant + soul level thresholds, death penalty, Shift-sprint, Pistons Required, and Unique Retractor Keys with its Five Keys tracker (each if enabled)
 10. **Patch dark engine** — randomizes piston combo values and patches the Jack's Schematic journal page with the new codes (if enabled)
 11. **Update decos** — renames ARC coffin gate decorations to match new SL values
 12. **Repack** — packs all modified files into `shadowman_randomizer_<seed>.kpf` so the seed is always identifiable from the filename alone
