@@ -5424,11 +5424,29 @@ class ShadowManContext(SuperContext):
     # __init__ (tracker_loaded only). Powers the GUI tab's per-level
     # location browser's in-logic marker.
     _ut_in_logic_locations: set
+    # Event ITEM names (not location names — see _on_ut_events_updated)
+    # Universal Tracker collected in its latest logic pass, updated via
+    # set_events_callback in __init__ (tracker_loaded only). Contains
+    # "Victory" exactly when UT's "Defeat Legion" event is reachable, i.e.
+    # the same state.has("Victory") the real completion_condition uses —
+    # the tab's Go Mode line reads this instead of approximating Victory
+    # from item counts + section reachability (2026-10-18 fix).
+    _ut_events: set
+    # Whether set_events_callback exists on the installed UT (older UT
+    # builds predate it). False falls back to the item-checklist heuristic.
+    _ut_events_supported: bool
     # Whether this seed's piston_combos option is on — from slot_data on
     # Connected (see on_package). Defaults False until then.
     piston_combos_on: bool
     # PistonsRequired (1-6) from slot_data; 6 (vanilla) for older seeds.
     pistons_required: int
+    # Whether this seed shuffled entrances (slot_data's entrance_shuffle is
+    # non-None) — from slot_data on Connected. Used by the Go Mode tab to
+    # note that its Prerequisites list is the vanilla liveside route: under
+    # cross_hub a shuffled Deadside portal can open an Engine Block section
+    # without Night/Retractors/Eng Key, so an unmet prerequisite row does
+    # not necessarily mean the section is unreachable.
+    entrance_shuffle_on: bool
     # Whether this seed's Unique Retractor Keys option is on (2026-08-18) —
     # from slot_data on Connected, same pattern as piston_combos_on. Used by
     # _go_mode_prerequisites() to show the 5 named keys individually instead
@@ -5550,8 +5568,11 @@ class ShadowManContext(SuperContext):
         self._ap_id_to_loc_key    = {}
         self._ut_in_logic_regions = set()
         self._ut_in_logic_locations = set()
+        self._ut_events          = set()
+        self._ut_events_supported = False
         self.piston_combos_on     = False
         self.pistons_required     = 6
+        self.entrance_shuffle_on  = False
         self.unique_retractor_keys_on = False
         self._last_gad_resync_level = None
         self.trap_bonus_mode     = "always_temporary"
@@ -5594,6 +5615,16 @@ class ShadowManContext(SuperContext):
         if tracker_loaded:
             self.set_region_callback(self._on_ut_regions_updated)
             self.set_callback(self._on_ut_locations_updated)
+            # Events callback (2026-10-18) — UT passes the event ITEM names
+            # (e.g. "Victory") its latest logic pass collected, which is the
+            # exact state.has("Victory") the completion condition uses. The
+            # tab's Go Mode line uses "Victory" in _ut_events rather than
+            # approximating the win from item counts + engine-section
+            # reachability. Guarded with hasattr because older UT builds
+            # only shipped the region/location callbacks.
+            if hasattr(self, "set_events_callback"):
+                self.set_events_callback(self._on_ut_events_updated)
+                self._ut_events_supported = True
 
         if self.save_dir:
             logger.info(f"[ShadowMan] Save directory: {self.save_dir}")
@@ -5776,6 +5807,11 @@ class ShadowManContext(SuperContext):
             # matching write in __init__.py).
             self.unique_retractor_keys_on = bool(slot_data.get("unique_retractor_keys", False))
             self.pistons_required = int(slot_data.get("pistons_required", 6))
+            # Entrance shuffle (2026-10-18) — fill_slot_data() writes the
+            # real per-seed portal→portal dict (or None when off); never
+            # read here before, only by UT. Used to annotate the Go Mode
+            # tab's Prerequisites list (see its layout docstring).
+            self.entrance_shuffle_on = bool(slot_data.get("entrance_shuffle"))
             self._life_altar_ap_ids = [int(a) for a in slot_data.get("life_altar_ap_ids") or []]
             # Trap/Bonus (2026-08-01, renamed + generalized from "Secret
             # Trap" 2026-08-03) — see options.py's TrapBonusMode/
@@ -9141,6 +9177,22 @@ class ShadowManContext(SuperContext):
         self._ut_in_logic_locations = set(locations)
         return True
 
+    def _on_ut_events_updated(self, events: List[str]) -> bool:
+        """Universal Tracker events callback (2026-10-18, see __init__'s
+        set_events_callback() call). UT calls this with the event ITEM
+        names its latest logic pass collected — for this world "Victory"
+        (the "Defeat Legion" event in Asylum: Engine Block) plus the fixed
+        boss souls' "Dark Soul" event items. "Victory" in this list is
+        exactly state.has("Victory", player), i.e. the real completion
+        condition and UT's own "Go mode" label, so the tab's Go Mode line
+        reads it directly instead of reconstructing Victory from item
+        counts + engine-section reachability (which cannot model the
+        Engine Block hub's Engineers Key gate, and so reported Go Mode: Yes
+        with pistons_required < 6 whenever an entrance-shuffled Deadside
+        portal happened to open one Engine Block section)."""
+        self._ut_events = set(events)
+        return True
+
     def _engine_block_reachable(self) -> Optional[List[Tuple[str, bool]]]:
         """[(region_name, reachable), ...] for the 5 ENGINE_BLOCK_REGIONS,
         per Universal Tracker's latest logic pass — access_rules.py's
@@ -9177,7 +9229,14 @@ class ShadowManContext(SuperContext):
         -> Asylum Gateways -> [eng_key] -> Cathedral -> [SL2 + 5
         Retractors] -> each liveside region -> [Night (all 3 Eclipser
         parts) + a region-specific extra] -> that region's Engine Block
-        sub-area. Night's per-region extras (see regions.py's
+        sub-area. NOTE (2026-10-18): this is the VANILLA route. Under
+        entrance_mode cross_hub, `shuffle_entrances()` can assign a soul
+        gate destination to a Deadside portal (996/1000 seeds in a quick
+        simulation), so an Engine Block section is reachable without most
+        of this list — the tab shows a note when entrance shuffle is on.
+        The Go Mode decision itself no longer uses this list (it reads
+        UT's Victory event); these rows remain the item checklist.
+        Night's per-region extras (see regions.py's
         LIVESIDE_PRISON/QUEENS/SALVAGE entrance rules): Prison needs
         Prison Key Card, Queens needs Poigne, Salvage needs Gad Power x3
         (gad3_swim); London/Florida need nothing beyond Night itself.
@@ -9659,18 +9718,21 @@ class ShadowManContext(SuperContext):
 
         class ShadowManGoModeLayout(BoxLayout):
             """"Proximity to Go Mode" — Go Mode itself is exactly
-            state.has("Victory", player), which reduces (per the "Defeat
-            Legion" event's rule in __init__.py) to holding Jacks
-            Schematic (if piston_combos is on) plus reaching all 5 Engine
-            Block regions. The Prerequisites section (2026-07-26) spells
-            out the concrete items/soul-level that actually gate that
-            reachability (Engineers Key, SL2, 5 Retractors, the 3
-            Eclipser parts, plus each liveside region's own extra item —
-            see ctx._go_mode_prerequisites()) — pure item-count checks,
-            so unlike the per-region breakdown below it works with or
-            without Universal Tracker installed. The per-region
-            breakdown itself still needs UT (logic engine), so that part
-            alone degrades to a fallback message without it."""
+            state.has("Victory", player). That event lives in the Engine
+            Block HUB ("Defeat Legion"), so it needs BOTH Engineers Key
+            (the hub's only entrance) and access_rules.py's pistons() count
+            — Jacks Schematic (if piston_combos is on) plus
+            pistons_required - 1 of the 5 Engine Block sections. The tab
+            now reads this directly from UT's events callback (_ut_events);
+            the per-region breakdown below is informational. Note the
+            Prerequisites list spells out the VANILLA liveside route
+            (SL2/Retractors/Eclipser/region extras): under entrance_mode
+            cross_hub a shuffled Deadside portal can open an Engine Block
+            section without any of those, in which case the section shows
+            reachable while some prerequisites remain unmet — still not Go
+            Mode until the hub (Engineers Key) is reachable too. The
+            per-region breakdown needs UT (logic engine) and degrades to a
+            fallback message without it."""
 
             def __init__(self) -> None:
                 super().__init__(orientation="vertical", size_hint_y=None, spacing="2dp")
@@ -9742,6 +9804,25 @@ class ShadowManContext(SuperContext):
                 self.jacks_lbl = _stat_label("")
                 self.jacks_lbl.height = 0
                 self.add_widget(self.jacks_lbl)
+
+                # Entrance-shuffle note (2026-10-18) — always-created slot,
+                # collapsed when this seed has entrance shuffle off, same
+                # pattern as jacks_lbl above. The Prerequisites list above
+                # describes the vanilla liveside route; under cross_hub a
+                # shuffled Deadside portal can open an Engine Block section
+                # directly, so a section can show reachable while some of
+                # those rows are unmet (it still isn't Go Mode until the
+                # hub/Engineers Key is reachable — see _ut_events).
+                self.shuffle_note_lbl = _stat_label("")
+                self.shuffle_note_lbl.height = 0
+                # Grow/shrink to however many lines it wraps to — the tab
+                # width varies with the window, so a fixed height could clip
+                # the note. Same treatment as none of the fixed-height rows
+                # above because this one is only ever shown/hidden whole.
+                self.shuffle_note_lbl.bind(
+                    texture_size=lambda lbl, ts: setattr(
+                        lbl, "height", ts[1] if lbl.text else 0))
+                self.add_widget(self.shuffle_note_lbl)
 
                 # (2026-07-28, Jon: "we can show 0/5 and track engine
                 # blocks that are beatable") — header now doubles as a
@@ -9818,6 +9899,20 @@ class ShadowManContext(SuperContext):
                     self.jacks_lbl.height = 0
                     self.jacks_lbl.text = ""
 
+                # Entrance-shuffle note (2026-10-18) — see its creation
+                # comment above. Collapsed entirely with shuffle off.
+                if ctx.entrance_shuffle_on:
+                    self.shuffle_note_lbl.text = (
+                        "[color=888888]Entrance shuffle is on — the requirements "
+                        "above describe the vanilla liveside route; a shuffled "
+                        "portal can open an Engine Block section another way. "
+                        "Go Mode still requires the Engine Block hub "
+                        "(Engineers Key).[/color]"
+                    )
+                else:
+                    self.shuffle_note_lbl.height = 0
+                    self.shuffle_note_lbl.text = ""
+
                 blocks = ctx._engine_block_reachable()
                 if blocks is None:
                     self.summary_lbl.text = (
@@ -9845,13 +9940,11 @@ class ShadowManContext(SuperContext):
                 # list the Prerequisites section renders, and per its own
                 # docstring "the concrete item / soul-level requirements
                 # that gate Engine Block access end-to-end") instead of
-                # `blocks`. `blocks`/`reached` (Universal Tracker's live
-                # region-reachability pass) is kept as the authoritative
-                # signal for the Yes/No decision itself — reaching a region
-                # in logic is the real, final gate; a held item can still
-                # be short of reachability for other reasons UT knows about
-                # that this item checklist doesn't model — but the visible
-                # X/Y count should match the list the player is looking at.
+                # `blocks`. The Yes/No decision itself now reads UT's
+                # Victory event (see the Go Mode block below, 2026-10-18);
+                # `blocks`/`reached` remain the per-section detail and the
+                # fallback for older UT builds. The visible X/Y count should
+                # match the list the player is looking at.
                 prereq_total = len(prereqs)
                 prereq_done  = sum(1 for _, ok, _ in prereqs if ok)
 
@@ -9859,7 +9952,32 @@ class ShadowManContext(SuperContext):
                 # pistons need N-1 of the 5 Engine Block sections
                 # (access_rules.py's pistons()).
                 blocks_needed = max(0, min(len(blocks), ctx.pistons_required - 1))
-                if reached >= blocks_needed and schematic_ok:
+
+                # Go Mode (2026-10-18 fix, Jon's report): prefer UT's own
+                # Victory event — "Victory" is in _ut_events exactly when
+                # the "Defeat Legion" event location (in the Engine Block
+                # HUB) is reachable, which is what completion_condition
+                # actually checks. The old reached >= blocks_needed
+                # heuristic below is only an approximation: it can't see
+                # the hub at all, so under entrance_mode cross_hub (where a
+                # shuffled Deadside portal can open one Engine Block
+                # section directly, skipping Night/Retractors/Eng Key) it
+                # said "Go Mode: Yes" with pistons_required < 6 while the
+                # hub — and therefore Legion — was still gated behind the
+                # Engineers Key. With pistons_required = 6 it needed all
+                # five sections, which made the hole far less visible.
+                if ctx._ut_events_supported:
+                    go_mode_ok = "Victory" in ctx._ut_events
+                else:
+                    # Older UT without set_events_callback: require the hub
+                    # (the only entrance to it is R.eng_key) to be in logic
+                    # too, so at least the Eng-Key gate is modeled.
+                    go_mode_ok = (
+                        reached >= blocks_needed
+                        and schematic_ok
+                        and "Asylum: Engine Block" in ctx._ut_in_logic_regions
+                    )
+                if go_mode_ok:
                     self.summary_lbl.text = "[color=00FA9A][b]Go Mode: Yes[/b][/color]"
                 else:
                     self.summary_lbl.text = (
