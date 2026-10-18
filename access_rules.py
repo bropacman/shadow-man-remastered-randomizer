@@ -410,6 +410,16 @@ class _Rules:
         # the only way to learn the new combinations — treat it as required.
         if _piston_combos_random and not self.schematic(state, player):
             return False
+        # Engineers Key (2026-10-18): every engine room has ENG_KEY-gated
+        # locations in locations.csv behind its entrance area, and the
+        # piston control is behind that same gate — entering the section
+        # alone isn't enough to shut a piston down. Redundant in the vanilla
+        # topology (every R.pistons() caller is in the Engine Block hub,
+        # itself eng_key-gated), but load-bearing under cross_hub entrance
+        # shuffle, where a Deadside portal can open an engine room without
+        # the liveside route or the key.
+        if not self.eng_key(state, player):
+            return False
         # The cable-car piston only needs Engine Block hub access, which
         # every caller's region already implies, so it counts as 1 for free;
         # each reachable section adds one. At 6 this is "all five sections".

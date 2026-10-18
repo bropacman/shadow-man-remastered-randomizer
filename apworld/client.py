@@ -9218,6 +9218,19 @@ class ShadowManContext(SuperContext):
             for ni in self.items_received
         )
 
+    def _has_engineers_key(self) -> bool:
+        """Whether we've received the Engineers Key. access_rules.py's
+        pistons() requires it (2026-10-18): each engine room's deeper
+        pickups are ENG_KEY-gated in locations.csv, and the piston control
+        is behind that same gate. Same items_received lookup as
+        _has_jacks_schematic(), so it works before the game is attached."""
+        if not self.item_names:
+            return False
+        return any(
+            self.item_names.lookup_in_game(ni.item) == "Engineers Key"
+            for ni in self.items_received
+        )
+
     def _go_mode_prerequisites(self) -> List[Tuple[str, bool, str]]:
         """[(label, satisfied, detail), ...] — the concrete item / soul-
         level requirements that gate Engine Block access end-to-end,
@@ -9986,14 +9999,19 @@ class ShadowManContext(SuperContext):
 
                 # "Beatable" (2026-07-28, Jon: "track engine blocks that
                 # are beatable") — UT's own reachability (`ok`) only
-                # covers getting INTO a region; when piston_combos is on,
-                # actually clearing that Engine Block's piston-combo
-                # barrels also needs Jacks Schematic (see
-                # _go_mode_prerequisites' docstring — it "gates the actual
-                # Engine Block completions themselves"), which is a single
-                # global item, not per-region, so it either unlocks all 5
-                # at once or none of them.
-                beatable_n = sum(1 for _, ok in blocks if ok and schematic_ok)
+                # covers getting INTO a region. Actually stopping that
+                # section's piston also needs:
+                #   - Engineers Key (2026-10-18): every engine room's
+                #     deeper pickups are ENG_KEY-gated in locations.csv,
+                #     and the piston control is behind that same gate
+                #     (access_rules.py's pistons() now requires it);
+                #   - Jacks Schematic, when piston_combos is on, to know
+                #     the randomized combinations.
+                # Both are single global items, not per-region, so each
+                # either unlocks all 5 at once or none of them.
+                eng_key_ok = ctx._has_engineers_key()
+                beatable_n = sum(1 for _, ok in blocks
+                                 if ok and schematic_ok and eng_key_ok)
                 header_color = "00FA9A" if beatable_n >= blocks_needed else "FFA500"
                 _needed_note = ("" if blocks_needed == len(blocks)
                                 else f", {blocks_needed} needed for {ctx.pistons_required}/6 pistons")
@@ -10002,12 +10020,14 @@ class ShadowManContext(SuperContext):
                     f"([color={header_color}]{beatable_n}/{len(blocks)}[/color] beatable{_needed_note})"
                 )
                 for lbl, (name, ok) in zip(self.region_lbls, blocks):
-                    if ok and schematic_ok:
-                        color, mark = "00FA9A", "beatable"
-                    elif ok:
+                    if not ok:
+                        color, mark = "888888", "not yet reachable"
+                    elif not eng_key_ok:
+                        color, mark = "FFA500", "reachable — needs Engineers Key"
+                    elif not schematic_ok:
                         color, mark = "FFA500", "reachable — needs Jacks Schematic"
                     else:
-                        color, mark = "888888", "not yet reachable"
+                        color, mark = "00FA9A", "beatable"
                     lbl.text = f"  {name}: [color={color}]{mark}[/color]"
 
         class ShadowManContent(ScrollView):

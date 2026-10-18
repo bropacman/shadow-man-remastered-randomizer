@@ -503,6 +503,20 @@ class _Rules:
         baked into those two extracted_*.py files, eval'd via BoundR — see
         BoundR.pistons() below, which is what actually supplies the live
         per-world value) keep working unchanged when the option is off.
+
+        Engineers Key (2026-10-18, Jon's report): every engine room's
+        locations.csv rows include ENG_KEY-gated pickups behind its
+        entrance area, and the piston control sits behind that same gate —
+        so reaching a section is not enough; the key must be held to
+        progress inside and shut the piston down. Under entrance_mode
+        cross_hub this is load-bearing: a shuffled Deadside portal can put
+        an Engine Block section in logic with no liveside route at all
+        (no Night/Retractors/liveside items), which is exactly when the
+        old sections-only count over-reported pistons as stoppable. This
+        is redundant in the vanilla topology, where every R.pistons()
+        caller lives in the Engine Block hub and the hub's only entrance
+        already requires R.eng_key() — kept explicit so the rule stays
+        correct wherever it is evaluated.
         """
         sections = [
             "Asylum: Engine Block - London",
@@ -512,6 +526,8 @@ class _Rules:
             "Asylum: Engine Block - Florida"
         ]
         if require_schematic and not self.schematic(state, player):
+            return False
+        if not self.eng_key(state, player):
             return False
         need = int(pistons_required) - 1
         if need <= 0:
