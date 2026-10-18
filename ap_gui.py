@@ -203,7 +203,7 @@ def _autodetect_ap_dir() -> "Path | None":
 # bidirectional IPC) was added -- that work had been committed but never
 # actually compiled anywhere until this release. Drafted, not yet
 # published -- pending Jon's own playtest of the new panel.
-COMPANION_VERSION = "v0.1.5"
+COMPANION_VERSION = "v0.2.0"
 
 
 def _load_prefs() -> dict:

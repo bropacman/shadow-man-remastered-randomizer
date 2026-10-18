@@ -4,7 +4,7 @@
 
 </div>
 
-**Version: v1.2.2**
+**Version: v1.3.0**
 
 A standalone randomizer for **Shadow Man Remastered** (Nightdive Studios, 2021).
 Randomizes key items, souls, weapons, gad powers, coffin gate thresholds, entrances,
