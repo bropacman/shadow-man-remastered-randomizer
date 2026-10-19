@@ -261,6 +261,13 @@ _HTML = r"""<!DOCTYPE html>
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
 
+  /* Generate-YAML sub-tabs (2026-10-19) -- three natural groupings of the
+     option cards inside Tab 1. Same mechanism as .tab-panel, one level in. */
+  .sub-tabs { margin-top: 2px; margin-bottom: 10px; }
+  .tab-btn.sub { font-size: 12px; padding: 7px 2px; margin-right: 14px; }
+  .sub-panel { display: none; }
+  .sub-panel.active { display: block; }
+
   .card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; padding: 12px 15px;
@@ -426,57 +433,19 @@ _HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Row 2: Gameplay+Starting Item (left) | Coffin Gates+Entrance (centre) | Gameplay Tuning (right) -->
-  <div style="display:grid;grid-template-columns:minmax(0,0.75fr) minmax(0,0.9fr) minmax(0,1.35fr);gap:10px;margin-bottom:10px;align-items:stretch">
+  <!-- Generate-YAML sub-tabs (2026-10-19): three natural groupings of the
+       page's option cards. Hidden panels keep their inputs in the DOM, so
+       buildYaml()/the check estimate/dependency syncs work unchanged. -->
+  <div class="tabs sub-tabs">
+    <button class="tab-btn sub active" id="subTabItems" onclick="showSubTab('items')">Items &amp; Checks</button>
+    <button class="tab-btn sub" id="subTabWorld" onclick="showSubTab('world')">World &amp; Player</button>
+    <button class="tab-btn sub" id="subTabEnemies" onclick="showSubTab('enemies')">Enemies &amp; Cosmetics</button>
+  </div>
 
-    <!-- Left: Gameplay checkboxes + Starting Item (stub) -->
-    <div class="card" style="min-width:200px">
-      <div class="card-title">Gameplay — Shuffle</div>
-      <div class="check-grid" style="grid-template-columns:1fr">
-        <!-- Gad Pickups checkbox removed (2026-08-15): gad temples are
-             always shuffled now, no longer a player option -- the "off"
-             state was a real correctness bug (see options.py's
-             ShadowManOptions comment / CLAUDE.md). Want Gad Powers
-             guaranteed from the start instead of shuffled? Use AP's own
-             Start Inventory From Pool for "Gad Power" in your YAML. -->
-        <label class="check-label">
-          <input type="checkbox" id="yShuffleWeapons" checked onchange="updateYamlPreview()">
-          Weapons
-          <button class="rng-btn" id="yShuffleWeaponsRng" onclick="event.preventDefault();toggleRng('yShuffleWeapons')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapons (Asson, Shotgun, Enseigne, MP5, T&ecirc;te de Mort, Desert Eagle) across item locations. Uncheck to leave weapons in their vanilla spots.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yShuffleLore" checked onchange="updateYamlPreview()">
-          Lore
-          <button class="rng-btn" id="yShuffleLoreRng" onclick="event.preventDefault();toggleRng('yShuffleLore')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles lore items (Book of Shadows, Prophecy, Jack&rsquo;s Schematic) across locations. Uncheck to leave them in vanilla positions.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yShuffleBonus" onchange="updateYamlPreview()">
-          Light Soul
-          <button class="rng-btn" id="yShuffleBonusRng" onclick="event.preventDefault();toggleRng('yShuffleBonus')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item (permanent invincibility, vanilla reward for 666 Cadeaux) in the shuffle pool. Off by default as it can affect run balance.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yPistonCombos" onchange="updateYamlPreview()">
-          Piston Combos
-          <button class="rng-btn" id="yPistonCombosRng" onclick="event.preventDefault();toggleRng('yPistonCombos')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes the 6 Dark Engine piston combination values; the in-game journal (Jack&rsquo;s Schematic entry) is rewritten to show the new numbers. When enabled, Jack&rsquo;s Schematic becomes required progression — you must find it to learn the combinations needed to shut the pistons off and reach Legion, the final boss.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yUniqueRetractorKeys" onchange="syncUniqueRetractorKeysDependency()">
-          Unique Retractor Keys
-          <button class="rng-btn" id="yUniqueRetractorKeysRng" onclick="event.preventDefault();toggleRng('yUniqueRetractorKeys');syncUniqueRetractorKeysDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Splits the single "Retractor" pickup into 5 named keys, one per liveside region (Queens, Prison, London, Florida, Salvage Yard) — each only opens schisms in its own region, instead of any one Retractor unlocking all of them. Adds more individually-trackable checks/items to the pool. When on, the flat "Retractor (all 5)" Starting Item option below can't be used (its item no longer exists in the pool) and is disabled automatically.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yDeadsideGuns" onchange="updateYamlPreview()">
-          Deadside Guns
-          <button class="rng-btn" id="yDeadsideGunsRng" onclick="event.preventDefault();toggleRng('yDeadsideGuns')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the vanilla "I like Dead Side Guns" secret on at patch time &mdash; Deadside weapons work on Liveside and vice versa &mdash; without needing to find its hidden in-world unlock trigger. Edits kexengine.cfg; requires having launched the game at least once already.</span></span>
-        </label>
-      </div>
-      <hr class="divider">
+  <div class="sub-panel active" id="subPanelItems">
+    <div style="display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.3fr);gap:10px;margin-bottom:10px;align-items:start">
+      <div class="card" style="min-width:220px">
+        <div class="card-title">Items</div>
       <div class="card-title" style="margin-bottom:8px">
         Starting Item
         <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">AP-native "Start Inventory From Pool". Ctrl/Cmd-click (or shift-click for a range) to pick several items at once — AP's start_inventory_from_pool genuinely supports multiple items, unlike the standalone randomizer's single-item Starting Item dropdown. Retractor / Accumulator / Gad Power Upgrade each grant the full stackable count (5 / 3 / 3) in one pick — there's no separate "give me just 1" option, matching what the old bundle checkboxes did. Picked items are removed from the shuffle pool and granted at game start via the AP client's memory injection.</span></span>
@@ -513,150 +482,31 @@ _HTML = r"""<!DOCTYPE html>
       <div class="row" style="margin-top:6px">
         <button type="button" class="btn-ghost" onclick="clearStartingItems()" style="width:100%;font-size:11px;padding:5px 9px">Clear Selection</button>
       </div>
-    </div>
-
-    <!-- Centre column: Coffin Gate Soul Levels + Entrance Randomizer + Health (gameplay tuning, non-AP-specific) -->
-    <div class="card">
-      <div class="card-title">
-        Coffin Gate Soul Levels
-        <span class="tip" style="vertical-align:middle">
-          <span class="tip-icon">?</span>
-          <span class="tip-box">Shuffles the soul level (SL) thresholds on deadside coffin gates. Higher SL gates require more Dark Souls collected before they open.</span>
-        </span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:7px">
-        <div class="row">
-          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:64px">Preset:</label>
-          <select id="yGatePreset" onchange="onGatePresetChange()" style="flex:1;min-width:0">
-            <option value="story">story — all gates open</option>
-            <option value="easy">easy — SL7 cap, 6 open</option>
-            <option value="medium">medium — SL8 cap, 3 open</option>
-            <option value="hard" selected>hard — no cap, 1 open</option>
-            <option value="chaos">chaos — unconstrained</option>
-            <option value="random">&#127922; random — rolled per seed</option>
-          </select>
-        </div>
-        <div class="row">
-          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:64px">Max SL:</label>
-          <input type="range" id="yMaxGateSl" min="3" max="10" step="1" value="8"
-                 oninput="document.getElementById('yMaxGateSlVal').textContent=this.value;updateYamlPreview()">
-          <span class="slider-val" id="yMaxGateSlVal">8</span>
-          <button class="rng-btn" id="yMaxGateSlRng" onclick="toggleRng('yMaxGateSl')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Caps the highest Soul Level a shuffled coffin gate can require. 10 = no cap (top gate needs all 120 souls). Lower values leave more slack, making generation more reliable. Greyed out for the <b>story</b> preset, which ignores it &mdash; all gates are SL0 regardless.</span></span>
-        </div>
-        <div class="row">
-          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:64px">Open N:</label>
-          <select id="yOpenGatesN" style="flex:1;min-width:0" onchange="updateYamlPreview()">
-            <option value="-1" selected>preset</option>
-            <option value="0">0 — none</option>
-            <option value="1">1 — Marrow</option>
-            <option value="2">2 — Wasteland</option>
-            <option value="3">3 — Asylum</option>
-            <option value="4">4 — Temple</option>
-            <option value="5">5 — Cageways</option>
-            <option value="6">6 — Playrooms</option>
-          </select>
-          <button class="rng-btn" id="yOpenGatesNRng" onclick="event.preventDefault();toggleRng('yOpenGatesN')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the first N linear coffin gates to SL0, regardless of the gate preset. Gates open in sequence: Marrow &rarr; Wasteland &rarr; Asylum &rarr; Temple &rarr; Cageways &rarr; Playrooms. <b>preset</b> leaves the chosen preset's own default alone. Greyed out for the <b>story</b> preset, which already opens every gate.</span></span>
-        </div>
-        <div class="row">
-          <label style="color:var(--muted);font-size:11px;white-space:nowrap">SL Req Shuffle:</label>
-          <select id="ySoulThresholdMode" style="flex:1;min-width:0" onchange="updateYamlPreview()">
-            <option value="off" selected>Off (vanilla)</option>
-            <option value="progressive">Progressive</option>
-            <option value="balanced">Balanced</option>
-            <option value="full_random">Random</option>
-          </select>
-          <button class="rng-btn" id="ySoulThresholdModeRng" onclick="event.preventDefault();toggleRng('ySoulThresholdMode')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Redistributes the soul counts required for SL1&ndash;SL10 (vanilla: 1, 3, 7, 15, 23, 35, 51, 71, 95, 120). <b>Off</b> keeps vanilla thresholds. AP&rsquo;s own logic always matches whatever this seed's real thresholds are. The &#127922; button randomly picks a mode each seed. <b>Random</b> was briefly removed 2026-08-09 after being blamed for AP generation failures, then re-added the same day once the real cause (Dark Soul provisioning math using vanilla thresholds instead of the seed's real ones, affecting every mode) was found and fixed, plus two rounds of hardening on Random's own threshold spacing.</span></span>
-        </div>
-      </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">
-        Entrance Randomizer
-        <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>Deadside Only:</b> shuffles the 9 Deadside portals among themselves — which level a portal leads to is randomized, but each portal keeps its own physical soul-gate requirement. <b>Cross Hub:</b> the 9 Deadside portals and the 5 liveside soul gates are shuffled together — a Deadside portal can lead into a Dark Engine room, and a soul gate can lead to a Deadside level. Asylum, Wasteland and Temple of Fire always stay behind Deadside portals; so do Cageways and Temple of Prophecy unless Cadeauxsanity is on with a bundle size of 5 or less.</span></span>
-      </div>
-      <div class="row" style="margin-bottom:6px">
-        <select id="yEntranceMode" onchange="updateYamlPreview()" style="width:100%;min-width:0">
-          <option value="off" selected>Off — vanilla entrances</option>
-          <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
-          <option value="cross_hub">Cross Hub — Deadside + Engine Rooms, 14 shuffled</option>
-          <option value="random">&#127922; random</option>
-        </select>
-      </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Goal</div>
-      <div class="row" style="margin-bottom:6px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Pistons required:</span>
-        <input type="range" id="yPistonsRequired" min="1" max="6" step="1" value="6"
-               oninput="document.getElementById('yPistonsRequiredVal').textContent=this.value;updateYamlPreview()">
-        <span class="slider-val" id="yPistonsRequiredVal">6</span>
-        <button class="rng-btn" id="yPistonsRequiredRng" onclick="toggleRng('yPistonsRequired')" title="Randomize per seed">&#127922;</button>
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of the 6 Dark Engine pistons you must stop before Legion. Once that many are stopped, the rest stop on their own and the way to Legion opens. The cable-car piston always counts as one. 6 is the vanilla game.</span></span>
-      </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Health</div>
-      <div class="row" style="margin-bottom:8px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Starting:</span>
-        <input type="range" id="yStartingHealth" min="1" max="10" step="1" value="5"
-               oninput="document.getElementById('yStartingHealthVal').textContent=this.value;updateYamlPreview()">
-        <span class="slider-val" id="yStartingHealthVal">5</span>
-        <button class="rng-btn" id="yStartingHealthRng" onclick="toggleRng('yStartingHealth')" title="Randomize per seed">&#127922;</button>
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Starting max health, as a multiple of 1000. Vanilla is 5 (5000 HP). Current health is set to max on spawn.</span></span>
-      </div>
-      <div class="row" style="margin-bottom:6px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per altar:</span>
-        <input type="range" id="yAltarHealth" min="1" max="10" step="1" value="1"
-               oninput="document.getElementById('yAltarHealthVal').textContent=this.value;updateYamlPreview()">
-        <span class="slider-val" id="yAltarHealthVal">1</span>
-        <button class="rng-btn" id="yAltarHealthRng" onclick="toggleRng('yAltarHealth')" title="Randomize per seed">&#127922;</button>
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Health granted per life altar interaction, as a multiple of 1000. Vanilla is 1 (1000 HP per altar, 5 altars total).</span></span>
-      </div>
-      <div class="hint" style="margin-bottom:6px">start + 5 &times; per-altar &le; 10 (hard cap)</div>
-      <div class="row" style="margin-bottom:4px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per death:</span>
-        <input type="range" id="yDeathPenalty" min="0" max="10" step="0.5" value="0" oninput="refreshDeathPenaltyLabel()">
-        <span class="slider-val" id="yDeathPenaltyVal">Off</span>
-        <button class="rng-btn" id="yDeathPenaltyRng" onclick="toggleRng('yDeathPenalty');refreshDeathPenaltyLabel()" title="Randomize per seed">&#127922;</button>
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by step&times;1000 on each death, floored at that amount. Supports half-steps (e.g. 0.5 = &minus;500/death). <b>Off</b> disables the penalty. Applied as a direct EXE patch.</span></span>
-      </div>
-      <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 0.5&ndash;10 = &minus;&frac12; to &minus;10 health bars/death</div>
-      <div class="row" style="margin-bottom:4px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Shift-sprint:</span>
-        <input type="range" id="ySprintMultiplier" min="0" max="5" step="0.1" value="0" oninput="refreshSprintMultiplierLabel()">
-        <span class="slider-val" id="ySprintMultiplierVal">Off</span>
-        <button class="rng-btn" id="ySprintMultiplierRng" onclick="toggleRng('ySprintMultiplier');refreshSprintMultiplierLabel()" title="Randomize per seed">&#127922;</button>
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Hold Shift to move at this multiple of normal speed, on both land and in water. <b>Off</b> disables Shift-sprint entirely (vanilla movement). Applied as a direct EXE patch.</span></span>
-      </div>
-      <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 1.0&ndash;5.0 = 1x&ndash;5x speed while Shift is held</div>
-    </div>
-
-    <!-- Col 3: Archipelago Settings -->
-    <div class="card">
-      <div class="card-title">Archipelago Settings</div>
-
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Multiworld</div>
-      <div class="row" style="flex-wrap:wrap;row-gap:6px;margin-bottom:8px">
-        <label class="check-label" style="padding:0">
-          <input type="checkbox" id="yDeathLink" onchange="syncDeathLinkThresholdDependency()">
-          Death Link
-          <button class="rng-btn" id="yDeathLinkRng" onclick="event.preventDefault();toggleRng('yDeathLink');syncDeathLinkThresholdDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Standard Archipelago Death Link — a death in any linked game kills you here too, and vice versa.</span></span>
+        <hr class="divider">
+        <div class="card-title" style="margin-bottom:8px">Item Shuffles</div>
+        <div class="check-grid" style="grid-template-columns:1fr">
+        <label class="check-label">
+          <input type="checkbox" id="yShuffleWeapons" checked onchange="updateYamlPreview()">
+          Weapons
+          <button class="rng-btn" id="yShuffleWeaponsRng" onclick="event.preventDefault();toggleRng('yShuffleWeapons')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapons (Asson, Shotgun, Enseigne, MP5, T&ecirc;te de Mort, Desert Eagle) across item locations. Uncheck to leave weapons in their vanilla spots.</span></span>
         </label>
-        <div style="display:flex;align-items:center;gap:8px;margin-left:10px">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap">Every</span>
-          <input type="number" id="yDeathLinkThreshold" value="1" min="1" max="5" style="width:50px" oninput="updateYamlPreview()">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap">death(s)</span>
-          <button class="rng-btn" id="yDeathLinkThresholdRng" onclick="event.preventDefault();toggleRng('yDeathLinkThreshold')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of YOUR OWN deaths it takes to send one Death Link. 1 (default) sends every time, same as before this existed. 5 means only every 5th death of yours actually broadcasts &mdash; the other 4 die free. Incoming Death Links (a teammate died) always kill you immediately regardless of this &mdash; it only throttles what you send. Greyed out unless Death Link above is on.</span></span>
+        <label class="check-label">
+          <input type="checkbox" id="yShuffleLore" checked onchange="updateYamlPreview()">
+          Lore
+          <button class="rng-btn" id="yShuffleLoreRng" onclick="event.preventDefault();toggleRng('yShuffleLore')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles lore items (Book of Shadows, Prophecy, Jack&rsquo;s Schematic) across locations. Uncheck to leave them in vanilla positions.</span></span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yShuffleBonus" onchange="updateYamlPreview()">
+          Light Soul
+          <button class="rng-btn" id="yShuffleBonusRng" onclick="event.preventDefault();toggleRng('yShuffleBonus')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item (permanent invincibility, vanilla reward for 666 Cadeaux) in the shuffle pool. Off by default as it can affect run balance.</span></span>
+        </label>
         </div>
       </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px">Cadeaux</div>
+      <div class="card">
+        <div class="card-title">Cadeaux Checks</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;align-items:start">
         <label class="check-label">
           <input type="checkbox" id="yInsanity" onchange="syncCadeauxGatedDependency();syncCadeauxBundleDependency()">
@@ -718,9 +568,10 @@ _HTML = r"""<!DOCTYPE html>
         </label>
         <div class="hint" style="grid-column:1/-1">Turning Fog Door Check on lowers Fog door from 666 to 5&times; Altar cost (500 at the default altar cost) &mdash; raise it again if you want the vanilla door.</div>
       </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Trap/Bonus Filler</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title">Trap/Bonus Filler</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;align-items:start">
         <div class="row" style="grid-column:1/-1">
           <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Count:</span>
@@ -768,8 +619,109 @@ _HTML = r"""<!DOCTYPE html>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can instantly drain all 3 tracked ammo types (Shotgun, Violator, 9mm) to 0, or hold them all at max for the Trap Duration (or permanently, per Mode above).</span></span>
         </label>
       </div>
+    </div>
+  </div>
 
-      <hr class="divider">
+  <div class="sub-panel" id="subPanelWorld">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1fr);gap:10px;margin-bottom:10px;align-items:start">
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-title">Goal &amp; Difficulty</div>
+      <div class="row" style="margin-bottom:6px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Pistons required:</span>
+        <input type="range" id="yPistonsRequired" min="1" max="6" step="1" value="6"
+               oninput="document.getElementById('yPistonsRequiredVal').textContent=this.value;updateYamlPreview()">
+        <span class="slider-val" id="yPistonsRequiredVal">6</span>
+        <button class="rng-btn" id="yPistonsRequiredRng" onclick="toggleRng('yPistonsRequired')" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of the 6 Dark Engine pistons you must stop before Legion. Once that many are stopped, the rest stop on their own and the way to Legion opens. The cable-car piston always counts as one. 6 is the vanilla game.</span></span>
+      </div>
+          <div class="check-grid" style="grid-template-columns:1fr;margin-top:6px">
+        <label class="check-label">
+          <input type="checkbox" id="yPistonCombos" onchange="updateYamlPreview()">
+          Piston Combos
+          <button class="rng-btn" id="yPistonCombosRng" onclick="event.preventDefault();toggleRng('yPistonCombos')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes the 6 Dark Engine piston combination values; the in-game journal (Jack&rsquo;s Schematic entry) is rewritten to show the new numbers. When enabled, Jack&rsquo;s Schematic becomes required progression — you must find it to learn the combinations needed to shut the pistons off and reach Legion, the final boss.</span></span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yUniqueRetractorKeys" onchange="syncUniqueRetractorKeysDependency()">
+          Unique Retractor Keys
+          <button class="rng-btn" id="yUniqueRetractorKeysRng" onclick="event.preventDefault();toggleRng('yUniqueRetractorKeys');syncUniqueRetractorKeysDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Splits the single "Retractor" pickup into 5 named keys, one per liveside region (Queens, Prison, London, Florida, Salvage Yard) — each only opens schisms in its own region, instead of any one Retractor unlocking all of them. Adds more individually-trackable checks/items to the pool. When on, the flat "Retractor (all 5)" Starting Item option below can't be used (its item no longer exists in the pool) and is disabled automatically.</span></span>
+        </label>
+          </div>
+        </div>
+        <div class="card">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">
+        Entrance Randomizer
+        <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>Deadside Only:</b> shuffles the 9 Deadside portals among themselves — which level a portal leads to is randomized, but each portal keeps its own physical soul-gate requirement. <b>Cross Hub:</b> the 9 Deadside portals and the 5 liveside soul gates are shuffled together — a Deadside portal can lead into a Dark Engine room, and a soul gate can lead to a Deadside level. Asylum, Wasteland and Temple of Fire always stay behind Deadside portals; so do Cageways and Temple of Prophecy unless Cadeauxsanity is on with a bundle size of 5 or less.</span></span>
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <select id="yEntranceMode" onchange="updateYamlPreview()" style="width:100%;min-width:0">
+          <option value="off" selected>Off — vanilla entrances</option>
+          <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
+          <option value="cross_hub">Cross Hub — Deadside + Engine Rooms, 14 shuffled</option>
+          <option value="random">&#127922; random</option>
+        </select>
+      </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+      <div class="card-title">
+        Coffin Gate Soul Levels
+        <span class="tip" style="vertical-align:middle">
+          <span class="tip-icon">?</span>
+          <span class="tip-box">Shuffles the soul level (SL) thresholds on deadside coffin gates. Higher SL gates require more Dark Souls collected before they open.</span>
+        </span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:64px">Preset:</label>
+          <select id="yGatePreset" onchange="onGatePresetChange()" style="flex:1;min-width:0">
+            <option value="story">story — all gates open</option>
+            <option value="easy">easy — SL7 cap, 6 open</option>
+            <option value="medium">medium — SL8 cap, 3 open</option>
+            <option value="hard" selected>hard — no cap, 1 open</option>
+            <option value="chaos">chaos — unconstrained</option>
+            <option value="random">&#127922; random — rolled per seed</option>
+          </select>
+        </div>
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:64px">Max SL:</label>
+          <input type="range" id="yMaxGateSl" min="3" max="10" step="1" value="8"
+                 oninput="document.getElementById('yMaxGateSlVal').textContent=this.value;updateYamlPreview()">
+          <span class="slider-val" id="yMaxGateSlVal">8</span>
+          <button class="rng-btn" id="yMaxGateSlRng" onclick="toggleRng('yMaxGateSl')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Caps the highest Soul Level a shuffled coffin gate can require. 10 = no cap (top gate needs all 120 souls). Lower values leave more slack, making generation more reliable. Greyed out for the <b>story</b> preset, which ignores it &mdash; all gates are SL0 regardless.</span></span>
+        </div>
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap;width:64px">Open N:</label>
+          <select id="yOpenGatesN" style="flex:1;min-width:0" onchange="updateYamlPreview()">
+            <option value="-1" selected>preset</option>
+            <option value="0">0 — none</option>
+            <option value="1">1 — Marrow</option>
+            <option value="2">2 — Wasteland</option>
+            <option value="3">3 — Asylum</option>
+            <option value="4">4 — Temple</option>
+            <option value="5">5 — Cageways</option>
+            <option value="6">6 — Playrooms</option>
+          </select>
+          <button class="rng-btn" id="yOpenGatesNRng" onclick="event.preventDefault();toggleRng('yOpenGatesN')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the first N linear coffin gates to SL0, regardless of the gate preset. Gates open in sequence: Marrow &rarr; Wasteland &rarr; Asylum &rarr; Temple &rarr; Cageways &rarr; Playrooms. <b>preset</b> leaves the chosen preset's own default alone. Greyed out for the <b>story</b> preset, which already opens every gate.</span></span>
+        </div>
+        <div class="row">
+          <label style="color:var(--muted);font-size:11px;white-space:nowrap">SL Req Shuffle:</label>
+          <select id="ySoulThresholdMode" style="flex:1;min-width:0" onchange="updateYamlPreview()">
+            <option value="off" selected>Off (vanilla)</option>
+            <option value="progressive">Progressive</option>
+            <option value="balanced">Balanced</option>
+            <option value="full_random">Random</option>
+          </select>
+          <button class="rng-btn" id="ySoulThresholdModeRng" onclick="event.preventDefault();toggleRng('ySoulThresholdMode')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Redistributes the soul counts required for SL1&ndash;SL10 (vanilla: 1, 3, 7, 15, 23, 35, 51, 71, 95, 120). <b>Off</b> keeps vanilla thresholds. AP&rsquo;s own logic always matches whatever this seed's real thresholds are. The &#127922; button randomly picks a mode each seed. <b>Random</b> was briefly removed 2026-08-09 after being blamed for AP generation failures, then re-added the same day once the real cause (Dark Soul provisioning math using vanilla thresholds instead of the seed's real ones, affecting every mode) was found and fixed, plus two rounds of hardening on Random's own threshold spacing.</span></span>
+        </div>
+      </div>
+          <hr class="divider">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Progression</div>
       <div class="row" style="flex-wrap:wrap;row-gap:8px;column-gap:14px">
       <div style="display:flex;align-items:center;gap:8px">
@@ -793,11 +745,78 @@ _HTML = r"""<!DOCTYPE html>
       </div>
       </div>
       <div class="hint" style="margin-top:6px">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</div>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-title">Player</div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Health</div>
+      <div class="row" style="margin-bottom:8px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Starting:</span>
+        <input type="range" id="yStartingHealth" min="1" max="10" step="1" value="5"
+               oninput="document.getElementById('yStartingHealthVal').textContent=this.value;updateYamlPreview()">
+        <span class="slider-val" id="yStartingHealthVal">5</span>
+        <button class="rng-btn" id="yStartingHealthRng" onclick="toggleRng('yStartingHealth')" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Starting max health, as a multiple of 1000. Vanilla is 5 (5000 HP). Current health is set to max on spawn.</span></span>
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per altar:</span>
+        <input type="range" id="yAltarHealth" min="1" max="10" step="1" value="1"
+               oninput="document.getElementById('yAltarHealthVal').textContent=this.value;updateYamlPreview()">
+        <span class="slider-val" id="yAltarHealthVal">1</span>
+        <button class="rng-btn" id="yAltarHealthRng" onclick="toggleRng('yAltarHealth')" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Health granted per life altar interaction, as a multiple of 1000. Vanilla is 1 (1000 HP per altar, 5 altars total).</span></span>
+      </div>
+      <div class="hint" style="margin-bottom:6px">start + 5 &times; per-altar &le; 10 (hard cap)</div>
+      <div class="row" style="margin-bottom:4px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Per death:</span>
+        <input type="range" id="yDeathPenalty" min="0" max="10" step="0.5" value="0" oninput="refreshDeathPenaltyLabel()">
+        <span class="slider-val" id="yDeathPenaltyVal">Off</span>
+        <button class="rng-btn" id="yDeathPenaltyRng" onclick="toggleRng('yDeathPenalty');refreshDeathPenaltyLabel()" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by step&times;1000 on each death, floored at that amount. Supports half-steps (e.g. 0.5 = &minus;500/death). <b>Off</b> disables the penalty. Applied as a direct EXE patch.</span></span>
+      </div>
+      <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 0.5&ndash;10 = &minus;&frac12; to &minus;10 health bars/death</div>
+      <div class="row" style="margin-bottom:4px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Shift-sprint:</span>
+        <input type="range" id="ySprintMultiplier" min="0" max="5" step="0.1" value="0" oninput="refreshSprintMultiplierLabel()">
+        <span class="slider-val" id="ySprintMultiplierVal">Off</span>
+        <button class="rng-btn" id="ySprintMultiplierRng" onclick="toggleRng('ySprintMultiplier');refreshSprintMultiplierLabel()" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Hold Shift to move at this multiple of normal speed, on both land and in water. <b>Off</b> disables Shift-sprint entirely (vanilla movement). Applied as a direct EXE patch.</span></span>
+      </div>
+      <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 1.0&ndash;5.0 = 1x&ndash;5x speed while Shift is held</div>
+          <hr class="divider">
+          <div class="check-grid" style="grid-template-columns:1fr">
+        <label class="check-label">
+          <input type="checkbox" id="yDeadsideGuns" onchange="updateYamlPreview()">
+          Deadside Guns
+          <button class="rng-btn" id="yDeadsideGunsRng" onclick="event.preventDefault();toggleRng('yDeadsideGuns')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the vanilla "I like Dead Side Guns" secret on at patch time &mdash; Deadside weapons work on Liveside and vice versa &mdash; without needing to find its hidden in-world unlock trigger. Edits kexengine.cfg; requires having launched the game at least once already.</span></span>
+        </label>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Multiworld</div>
+      <div class="row" style="flex-wrap:wrap;row-gap:6px;margin-bottom:8px">
+        <label class="check-label" style="padding:0">
+          <input type="checkbox" id="yDeathLink" onchange="syncDeathLinkThresholdDependency()">
+          Death Link
+          <button class="rng-btn" id="yDeathLinkRng" onclick="event.preventDefault();toggleRng('yDeathLink');syncDeathLinkThresholdDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Standard Archipelago Death Link — a death in any linked game kills you here too, and vice versa.</span></span>
+        </label>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:10px">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap">Every</span>
+          <input type="number" id="yDeathLinkThreshold" value="1" min="1" max="5" style="width:50px" oninput="updateYamlPreview()">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap">death(s)</span>
+          <button class="rng-btn" id="yDeathLinkThresholdRng" onclick="event.preventDefault();toggleRng('yDeathLinkThreshold')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of YOUR OWN deaths it takes to send one Death Link. 1 (default) sends every time, same as before this existed. 5 means only every 5th death of yours actually broadcasts &mdash; the other 4 die free. Incoming Death Links (a teammate died) always kill you immediately regardless of this &mdash; it only throttles what you send. Greyed out unless Death Link above is on.</span></span>
+        </div>
+      </div>
+        </div>
+      </div>
     </div>
-
   </div>
 
-  <!-- Row 3: Enemies + Cosmetic Shuffles -->
+  <div class="sub-panel" id="subPanelEnemies">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
     <div class="card" style="flex:1;min-width:280px">
       <div class="card-title">Enemies</div>
@@ -889,6 +908,7 @@ _HTML = r"""<!DOCTYPE html>
       </div>
     </div>
   </div>
+  </div>
 
   <div class="card" style="margin-bottom:10px">
     <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -964,6 +984,23 @@ function showTab(name) {
   document.getElementById('panelApply').classList.toggle('active', name === 'apply');
   document.getElementById('tabBtnYaml').classList.toggle('active', name === 'yaml');
   document.getElementById('tabBtnApply').classList.toggle('active', name === 'apply');
+}
+
+// Generate-YAML sub-tabs (2026-10-19): Items & Checks / World & Player /
+// Enemies & Cosmetics. Purely a visibility switch -- every input stays in
+// the DOM, so buildYaml(), the check estimate and all dependency syncs work
+// regardless of which panel is showing. The last panel is remembered in
+// localStorage (wrapped in try/catch: it can throw in private/restricted
+// webviews).
+const SUB_TABS = ['items', 'world', 'enemies'];
+function showSubTab(name) {
+  if (!SUB_TABS.includes(name)) name = 'items';
+  SUB_TABS.forEach(n => {
+    const cap = n[0].toUpperCase() + n.slice(1);
+    document.getElementById('subPanel' + cap).classList.toggle('active', n === name);
+    document.getElementById('subTab' + cap).classList.toggle('active', n === name);
+  });
+  try { localStorage.setItem('shadowman.generateSubTab', name); } catch (e) { /* ignore */ }
 }
 
 // ── Tab 1: YAML generation ──────────────────────────────────────────────────
@@ -1801,6 +1838,10 @@ window.addEventListener('pywebviewready', async () => {
   syncDeathLinkThresholdDependency();
   syncCombineSfxDependency();
   syncUniqueRetractorKeysDependency();
+  // Restore the last Generate-YAML sub-tab (items/world/enemies).
+  let _savedSub = 'items';
+  try { _savedSub = localStorage.getItem('shadowman.generateSubTab') || 'items'; } catch (e) { /* ignore */ }
+  showSubTab(SUB_TABS.includes(_savedSub) ? _savedSub : 'items');
   updateYamlPreview();
   loadCheckBase();
 });
