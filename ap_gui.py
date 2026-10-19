@@ -674,6 +674,24 @@ _HTML = r"""<!DOCTYPE html>
         </select>
       </div>
         </div>
+        <div class="card">
+          <div class="card-title">Multiworld</div>
+      <div class="row" style="flex-wrap:wrap;row-gap:6px;margin-bottom:8px">
+        <label class="check-label" style="padding:0">
+          <input type="checkbox" id="yDeathLink" onchange="syncDeathLinkThresholdDependency()">
+          Death Link
+          <button class="rng-btn" id="yDeathLinkRng" onclick="event.preventDefault();toggleRng('yDeathLink');syncDeathLinkThresholdDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Standard Archipelago Death Link — a death in any linked game kills you here too, and vice versa.</span></span>
+        </label>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:10px">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap">Every</span>
+          <input type="number" id="yDeathLinkThreshold" value="1" min="1" max="5" style="width:50px" oninput="updateYamlPreview()">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap">death(s)</span>
+          <button class="rng-btn" id="yDeathLinkThresholdRng" onclick="event.preventDefault();toggleRng('yDeathLinkThreshold')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of YOUR OWN deaths it takes to send one Death Link. 1 (default) sends every time, same as before this existed. 5 means only every 5th death of yours actually broadcasts &mdash; the other 4 die free. Incoming Death Links (a teammate died) always kill you immediately regardless of this &mdash; it only throttles what you send. Greyed out unless Death Link above is on.</span></span>
+        </div>
+      </div>
+        </div>
       </div>
       <div>
         <div class="card">
@@ -759,8 +777,7 @@ _HTML = r"""<!DOCTYPE html>
       </div>
       <div>
         <div class="card" style="margin-bottom:10px">
-          <div class="card-title">Player</div>
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Health</div>
+          <div class="card-title">Health</div>
       <div class="row" style="margin-bottom:8px">
         <span style="color:var(--muted);font-size:11px;white-space:nowrap">Starting:</span>
         <input type="range" id="yStartingHealth" min="1" max="10" step="1" value="5"
@@ -786,6 +803,9 @@ _HTML = r"""<!DOCTYPE html>
         <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by step&times;1000 on each death, floored at that amount. Supports half-steps (e.g. 0.5 = &minus;500/death). <b>Off</b> disables the penalty. Applied as a direct EXE patch.</span></span>
       </div>
       <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 0.5&ndash;10 = &minus;&frac12; to &minus;10 health bars/death</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Miscellaneous</div>
       <div class="row" style="margin-bottom:4px">
         <span style="color:var(--muted);font-size:11px;white-space:nowrap">Shift-sprint:</span>
         <input type="range" id="ySprintMultiplier" min="0" max="5" step="0.1" value="0" oninput="refreshSprintMultiplierLabel()">
@@ -803,24 +823,6 @@ _HTML = r"""<!DOCTYPE html>
           <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the vanilla "I like Dead Side Guns" secret on at patch time &mdash; Deadside weapons work on Liveside and vice versa &mdash; without needing to find its hidden in-world unlock trigger. Edits kexengine.cfg; requires having launched the game at least once already.</span></span>
         </label>
           </div>
-        </div>
-        <div class="card">
-          <div class="card-title">Multiworld</div>
-      <div class="row" style="flex-wrap:wrap;row-gap:6px;margin-bottom:8px">
-        <label class="check-label" style="padding:0">
-          <input type="checkbox" id="yDeathLink" onchange="syncDeathLinkThresholdDependency()">
-          Death Link
-          <button class="rng-btn" id="yDeathLinkRng" onclick="event.preventDefault();toggleRng('yDeathLink');syncDeathLinkThresholdDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Standard Archipelago Death Link — a death in any linked game kills you here too, and vice versa.</span></span>
-        </label>
-        <div style="display:flex;align-items:center;gap:8px;margin-left:10px">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap">Every</span>
-          <input type="number" id="yDeathLinkThreshold" value="1" min="1" max="5" style="width:50px" oninput="updateYamlPreview()">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap">death(s)</span>
-          <button class="rng-btn" id="yDeathLinkThresholdRng" onclick="event.preventDefault();toggleRng('yDeathLinkThreshold')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of YOUR OWN deaths it takes to send one Death Link. 1 (default) sends every time, same as before this existed. 5 means only every 5th death of yours actually broadcasts &mdash; the other 4 die free. Incoming Death Links (a teammate died) always kill you immediately regardless of this &mdash; it only throttles what you send. Greyed out unless Death Link above is on.</span></span>
-        </div>
-      </div>
         </div>
       </div>
     </div>
