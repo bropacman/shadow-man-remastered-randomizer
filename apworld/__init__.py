@@ -100,11 +100,14 @@ class ShadowManWebWorld(WebWorld):
     option_groups = [
         OptionGroup("Cadeaux", [
             _opts.Cadeauxsanity, _opts.CadeauxBundleSize,
-            _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
         ]),
-        OptionGroup("Cadeaux Checks", [
-            _opts.CadeauxGatedContent, _opts.FogDoorPriority,
-            _opts.LifeAltarChecks, _opts.LifeAltarPriority,
+        OptionGroup("Life Altars", [
+            _opts.AltarCadeauxRequired, _opts.LifeAltarChecks,
+            _opts.LifeAltarPriority,
+        ]),
+        OptionGroup("Fog Door", [
+            _opts.FogometersCadeauxRequired, _opts.CadeauxGatedContent,
+            _opts.FogDoorPriority,
         ]),
         OptionGroup("Gates", [
             _opts.GatePreset, _opts.MaxGateSL, _opts.OpenGatesN,

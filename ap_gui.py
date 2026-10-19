@@ -261,6 +261,22 @@ _HTML = r"""<!DOCTYPE html>
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
 
+  /* Generate-YAML sub-tabs (2026-10-19) -- three natural groupings of the
+     option cards inside Tab 1. Same mechanism as .tab-panel, one level in. */
+  .sub-tabs { margin-top: 2px; margin-bottom: 10px; }
+  .tab-btn.sub { font-size: 12px; padding: 7px 2px; margin-right: 14px; }
+  .sub-panel { display: none; }
+  .sub-panel.active { display: block; }
+
+  /* Cadeaux-gated controls: dimmed while Cadeaux Key Items is off, with an
+     explicit "requires Cadeaux Key Items" note on the affected groups. */
+  .unavailable { opacity: 0.42; }
+  .req-note { display: none; margin-left: 8px; color: var(--muted);
+              font-size: 9px; font-weight: 600; text-transform: none;
+              letter-spacing: 0; }
+  .req-note.visible { display: inline; }
+  .req-note.warn { color: var(--red); }
+
   .card {
     background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; padding: 12px 15px;
@@ -426,19 +442,21 @@ _HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Row 2: Gameplay+Starting Item (left) | Coffin Gates+Entrance (centre) | Gameplay Tuning (right) -->
-  <div style="display:grid;grid-template-columns:minmax(0,0.75fr) minmax(0,0.9fr) minmax(0,1.35fr);gap:10px;margin-bottom:10px;align-items:stretch">
+  <!-- Generate-YAML sub-tabs (2026-10-19): three natural groupings of the
+       page's option cards. Hidden panels keep their inputs in the DOM, so
+       buildYaml()/the check estimate/dependency syncs work unchanged. -->
+  <div class="tabs sub-tabs">
+    <button class="tab-btn sub active" id="subTabItems" onclick="showSubTab('items')">Items &amp; Checks</button>
+    <button class="tab-btn sub" id="subTabWorld" onclick="showSubTab('world')">World &amp; Player</button>
+    <button class="tab-btn sub" id="subTabEnemies" onclick="showSubTab('enemies')">Enemies &amp; Cosmetics</button>
+  </div>
 
-    <!-- Left: Gameplay checkboxes + Starting Item (stub) -->
-    <div class="card" style="min-width:200px">
-      <div class="card-title">Gameplay — Shuffle</div>
-      <div class="check-grid" style="grid-template-columns:1fr">
-        <!-- Gad Pickups checkbox removed (2026-08-15): gad temples are
-             always shuffled now, no longer a player option -- the "off"
-             state was a real correctness bug (see options.py's
-             ShadowManOptions comment / CLAUDE.md). Want Gad Powers
-             guaranteed from the start instead of shuffled? Use AP's own
-             Start Inventory From Pool for "Gad Power" in your YAML. -->
+  <div class="sub-panel active" id="subPanelItems">
+    <div style="display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.3fr);gap:10px;margin-bottom:10px;align-items:start">
+      <div class="card" style="min-width:220px">
+        <div class="card-title">Items</div>
+        <div class="card-title" style="margin-bottom:8px">Item Shuffles</div>
+        <div class="check-grid" style="grid-template-columns:1fr">
         <label class="check-label">
           <input type="checkbox" id="yShuffleWeapons" checked onchange="updateYamlPreview()">
           Weapons
@@ -457,26 +475,8 @@ _HTML = r"""<!DOCTYPE html>
           <button class="rng-btn" id="yShuffleBonusRng" onclick="event.preventDefault();toggleRng('yShuffleBonus')" title="Randomize per seed">&#127922;</button>
           <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item (permanent invincibility, vanilla reward for 666 Cadeaux) in the shuffle pool. Off by default as it can affect run balance.</span></span>
         </label>
-        <label class="check-label">
-          <input type="checkbox" id="yPistonCombos" onchange="updateYamlPreview()">
-          Piston Combos
-          <button class="rng-btn" id="yPistonCombosRng" onclick="event.preventDefault();toggleRng('yPistonCombos')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes the 6 Dark Engine piston combination values; the in-game journal (Jack&rsquo;s Schematic entry) is rewritten to show the new numbers. When enabled, Jack&rsquo;s Schematic becomes required progression — you must find it to learn the combinations needed to shut the pistons off and reach Legion, the final boss.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yUniqueRetractorKeys" onchange="syncUniqueRetractorKeysDependency()">
-          Unique Retractor Keys
-          <button class="rng-btn" id="yUniqueRetractorKeysRng" onclick="event.preventDefault();toggleRng('yUniqueRetractorKeys');syncUniqueRetractorKeysDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Splits the single "Retractor" pickup into 5 named keys, one per liveside region (Queens, Prison, London, Florida, Salvage Yard) — each only opens schisms in its own region, instead of any one Retractor unlocking all of them. Adds more individually-trackable checks/items to the pool. When on, the flat "Retractor (all 5)" Starting Item option below can't be used (its item no longer exists in the pool) and is disabled automatically.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yDeadsideGuns" onchange="updateYamlPreview()">
-          Deadside Guns
-          <button class="rng-btn" id="yDeadsideGunsRng" onclick="event.preventDefault();toggleRng('yDeadsideGuns')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the vanilla "I like Dead Side Guns" secret on at patch time &mdash; Deadside weapons work on Liveside and vice versa &mdash; without needing to find its hidden in-world unlock trigger. Edits kexengine.cfg; requires having launched the game at least once already.</span></span>
-        </label>
-      </div>
-      <hr class="divider">
+        </div>
+        <hr class="divider">
       <div class="card-title" style="margin-bottom:8px">
         Starting Item
         <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">AP-native "Start Inventory From Pool". Ctrl/Cmd-click (or shift-click for a range) to pick several items at once — AP's start_inventory_from_pool genuinely supports multiple items, unlike the standalone randomizer's single-item Starting Item dropdown. Retractor / Accumulator / Gad Power Upgrade each grant the full stackable count (5 / 3 / 3) in one pick — there's no separate "give me just 1" option, matching what the old bundle checkboxes did. Picked items are removed from the shuffle pool and granted at game start via the AP client's memory injection.</span></span>
@@ -513,10 +513,188 @@ _HTML = r"""<!DOCTYPE html>
       <div class="row" style="margin-top:6px">
         <button type="button" class="btn-ghost" onclick="clearStartingItems()" style="width:100%;font-size:11px;padding:5px 9px">Clear Selection</button>
       </div>
-    </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Checks &amp; Filler</div>
+        <div class="req-note visible" id="yCadeauxReqNote" style="margin:0 0 10px">Max bundle, Life Altar Checks and Fog Door Check require Cadeaux Key Items.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;align-items:start">
+        <div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-top:2px">Cadeaux</div>
+        <label class="check-label">
+          <input type="checkbox" id="yInsanity" onchange="syncCadeauxGatedDependency();syncCadeauxBundleDependency()">
+          Cadeaux Key Items
+          <button class="rng-btn" id="yInsanityRng" onclick="event.preventDefault();toggleRng('yInsanity');syncCadeauxGatedDependency();syncCadeauxBundleDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Off (default): cadeaux (statue/altar) locations are excluded from AP entirely &mdash; same treatment as barrels, no checks, no hints, stays vanilla. On: all ~657 cadeaux locations become real checks with no item-type restriction (any item, including other players&rsquo; key items, can land there). Soul/Govi altar locations are unaffected either way &mdash; they&rsquo;ve always existed as checks eligible for any item. Note: narrower than the standalone tool&rsquo;s graded insanity tiers, which can also open weapon/lore/bonus/barrel slots &mdash; not implemented here.</span></span>
+        </label>
+        <div class="row" id="yCadeauxBundleRow">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Max bundle:</span>
+          <input type="number" id="yCadeauxBundleSize" value="1" min="1" max="50" style="width:55px" oninput="updateYamlPreview()">
+          <button class="rng-btn" id="yCadeauxBundleSizeRng" onclick="event.preventDefault();toggleRng('yCadeauxBundleSize')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Caps how many cadeaux pickups can be grouped into a single AP check, instead of one check per cadeaux. Bundling is now GLOBAL across the whole game (changed 2026-07-28) &mdash; every eligible cadeaux is shuffled together and chunked at this size, so you get AT MOST ONE remainder bundle smaller than this value for the entire seed, not one per region. Tradeoff: a bundle's real check can end up behind a different gate than some of the cadeaux whose value it absorbed, so the reward pacing no longer strictly follows region/gate progression &mdash; doesn't affect completability, just the economy's feel. 1 (default): no bundling, same as before this option existed (~657 individual checks). E.g. a cap of 5 turns ~657 checks into ~131 (130 at x5, 1 remainder). Only meaningful when Cadeaux Key Items above is also on &mdash; greyed out otherwise.</span></span>
+        </div>
 
-    <!-- Centre column: Coffin Gate Soul Levels + Entrance Randomizer + Health (gameplay tuning, non-AP-specific) -->
-    <div class="card">
+        <div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-top:8px">Life Altars<span class="req-note" id="yLifeAltarsReq">requires Cadeaux Key Items</span></div>
+        <div>
+          <div class="row">
+            <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Altar cost:</span>
+            <input type="number" id="yAltarCadeaux" value="100" min="1" max="133" style="width:60px" oninput="syncCadeauxConstraints()">
+            <button class="rng-btn" id="yAltarCadeauxRng" onclick="toggleRng('yAltarCadeaux');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
+            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Cadeaux required and spent per life altar interaction. The minimum required and the per-interaction cost are always equal (vanilla: 100, max: 133 = &lfloor;666 &divide; 5&rfloor;). Also the per-offering cost Life Altar Checks logic uses, and the floor Fog door is raised to. EXE patch, but it feeds AP logic where those checks are on.</span></span>
+          </div>
+          <div id="yAltarCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
+        </div>
+        <label class="check-label">
+          <input type="checkbox" id="yLifeAltarChecks" onchange="syncLifeAltarPriorityDependency()">
+          Life Altar Checks
+          <button class="rng-btn" id="yLifeAltarChecksRng" onclick="event.preventDefault();toggleRng('yLifeAltarChecks');syncLifeAltarPriorityDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. What they can hold is set by Life Altar Progression. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
+        </label>
+        <label class="check-label" style="grid-column:2">
+          <input type="checkbox" id="yLifeAltarPriority" checked onchange="updateYamlPreview()">
+          Life Altar Progression
+          <button class="rng-btn" id="yLifeAltarPriorityRng" onclick="event.preventDefault();toggleRng('yLifeAltarPriority')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): the 5 Life Altar Offering checks are priority locations, so they usually hold progression (important) items. To allow that, enough Cadeaux to pay for all 5 offerings become progression items; the rest stay filler. Off: the altars only hold filler. Requires Life Altar Checks above to also be on (greyed out otherwise). The location group &ldquo;Life Altars&rdquo; also works in priority_locations / exclude_locations.</span></span>
+        </label>
+
+        <div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-top:8px">Fog Door<span class="req-note" id="yFogDoorReq">requires Cadeaux Key Items</span></div>
+        <div>
+          <div class="row">
+            <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Fog door:</span>
+            <input type="number" id="yFogCadeaux" value="666" min="5" max="666" style="width:60px" oninput="syncCadeauxConstraints()">
+            <button class="rng-btn" id="yFogCadeauxRng" onclick="toggleRng('yFogCadeaux');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
+            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Total Cadeaux required to open the Fogometers door (vanilla: 666). Must be at least 5&times; the altar cost and no more than 666. Also what the Fog Door Check checks against when that option is on. <b>666 is the extreme case:</b> the check then needs essentially every Cadeaux item in logic, so it is much harder and much heavier to generate &mdash; 500 (the default floor) is recommended whenever Fog Door Check is on. Turning Fog Door Check on lowers this field from 666 to the 5&times; altar floor automatically.</span></span>
+          </div>
+          <div id="yFogCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
+        </div>
+        <label class="check-label">
+          <input type="checkbox" id="yCadeauxGatedContent" onchange="onFogDoorCheckChange()">
+          Fog Door Check
+          <button class="rng-btn" id="yCadeauxGatedContentRng" onclick="event.preventDefault();toggleRng('yCadeauxGatedContent');onFogDoorCheckChange()" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls whether the Fogometers Light Soul location (gated behind SL10 + collecting the Fog door&rsquo;s worth of Cadeaux) exists as an AP check at all. Off (default): excluded from AP entirely &mdash; stays vanilla, same treatment as barrels/enemy checks. On: it becomes a real check, gated in logic by that Fog door requirement, backed by a precollected-Cadeaux fix so it stays solvable, and the Fog door value above is lowered from 666 to the 5&times; altar floor (500 by default) if it was still 666. Requires Cadeaux Key Items above to also be on (greyed out otherwise) &mdash; Cadeaux isn&rsquo;t an AP-tracked item at all unless that&rsquo;s on.</span></span>
+        </label>
+        <label class="check-label" style="grid-column:2">
+          <input type="checkbox" id="yFogDoorPriority" onchange="updateYamlPreview()">
+          Fog Door Progression
+          <button class="rng-btn" id="yFogDoorPriorityRng" onclick="event.preventDefault();toggleRng('yFogDoorPriority')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Off (default): the Fog Door Check only holds filler. On: it becomes a priority location, so Archipelago fills it with progression (important) items first. To make that possible, enough Cadeaux to satisfy the Fog door requirement become progression items themselves (same treatment as Life Altar Progression); the rest stay filler. <b>Heads up:</b> the Fog Door's logic counts Cadeaux <i>items</i>, so at 666 &mdash; or any value at/above the number of Cadeaux items &mdash; that promotes essentially the whole Cadeaux pool. Use 500 (the default floor) or bundling for a lighter seed. Requires Fog Door Check above to also be on (greyed out otherwise).</span></span>
+        </label>
+        <div class="hint" style="grid-column:1/-1">Turning Fog Door Check on lowers Fog door from 666 to 5&times; Altar cost (500 at the default altar cost) &mdash; raise it again if you want the vanilla door.</div>
+      </div>
+      <hr class="divider">
+      <div class="card-title">Trap/Bonus Filler</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;align-items:start">
+        <div class="row" style="grid-column:1/-1">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Count:</span>
+          <input type="number" id="yTrapBonusCount" value="0" min="0" max="1000" style="width:55px" oninput="updateYamlPreview()">
+          <button class="rng-btn" id="yTrapBonusCountRng" onclick="event.preventDefault();toggleRng('yTrapBonusCount')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">How many "Trap/Bonus" filler items are added to the pool. Each applies one random effect, rolled from whichever categories are enabled below: Secrets (a cosmetic secret cvar effect &mdash; Big Head, Wireframe, Disco Lights, etc.), Health (a ~1-minute gradual poison or a full heal x2), Voodoo (drain to 0 or hold at max), or Ammo (drain all 3 tracked guns to 0 or hold at max). 0 (default) adds none. Promotes that many previously-excluded, verified barrel-category locations to real AP checks too, so traps add genuinely new room rather than displacing existing filler.</span></span>
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-left:14px;margin-right:8px">Duration:</span>
+          <input type="number" id="yTrapBonusDuration" value="60" min="10" max="300" style="width:55px" oninput="updateYamlPreview()">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-left:4px">sec</span>
+          <button class="rng-btn" id="yTrapBonusDurationRng" onclick="event.preventDefault();toggleRng('yTrapBonusDuration')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Seconds a temporary trap/hold effect lasts before auto-reverting. Only matters when Mode below actually goes temporary.</span></span>
+        </div>
+        <div class="row" style="grid-column:1/-1;margin-top:6px">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Mode:</span>
+          <select id="yTrapBonusMode" style="flex:1;min-width:0" onchange="updateYamlPreview()">
+            <option value="always_temporary" selected>Always Temporary</option>
+            <option value="always_permanent">Always Permanent</option>
+            <option value="mixed">Mixed (rolled per pickup)</option>
+          </select>
+          <button class="rng-btn" id="yTrapBonusModeRng" onclick="event.preventDefault();toggleRng('yTrapBonusMode')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Only applies to the Secrets, Voodoo Hold, and Ammo Hold sub-effects (Health and Voodoo/Ammo Drain always run their own fixed one-shot duration regardless of this setting). Always Temporary (default): auto-reverts after Trap Duration seconds. Always Permanent: stays on until superseded by a matching drain or another roll of the same effect. Mixed: each pickup independently rolls temporary vs permanent.</span></span>
+        </div>
+        <label class="check-label" style="margin-top:6px">
+          <input type="checkbox" id="yTrapBonusSecretsEnabled" checked onchange="updateYamlPreview()">
+          Secrets
+          <button class="rng-btn" id="yTrapBonusSecretsEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusSecretsEnabled')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can apply a cosmetic secret cvar effect (Big Head, Wireframe, Disco Lights, etc.).</span></span>
+        </label>
+        <label class="check-label" style="margin-top:6px">
+          <input type="checkbox" id="yTrapBonusHealthEnabled" checked onchange="updateYamlPreview()">
+          Health (Poison/Heal)
+          <button class="rng-btn" id="yTrapBonusHealthEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusHealthEnabled')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can apply a ~1-minute gradual poison (drains your whole health pool, then kills you if it reaches 0 before you heal up) or a gradual recovery (heals your full health pool twice over).</span></span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yTrapBonusVoodooEnabled" checked onchange="updateYamlPreview()">
+          Voodoo Power
+          <button class="rng-btn" id="yTrapBonusVoodooEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusVoodooEnabled')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can instantly drain Voodoo Power to 0, or hold it at max for the Trap Duration (or permanently, per Mode above).</span></span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yTrapBonusAmmoEnabled" checked onchange="updateYamlPreview()">
+          Ammo
+          <button class="rng-btn" id="yTrapBonusAmmoEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusAmmoEnabled')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can instantly drain all 3 tracked ammo types (Shotgun, Violator, 9mm) to 0, or hold them all at max for the Trap Duration (or permanently, per Mode above).</span></span>
+        </label>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sub-panel" id="subPanelWorld">
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr) minmax(0,1fr);gap:10px;margin-bottom:10px;align-items:start">
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-title">Goal &amp; Difficulty</div>
+      <div class="row" style="margin-bottom:6px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Pistons required:</span>
+        <input type="range" id="yPistonsRequired" min="1" max="6" step="1" value="6"
+               oninput="document.getElementById('yPistonsRequiredVal').textContent=this.value;updateYamlPreview()">
+        <span class="slider-val" id="yPistonsRequiredVal">6</span>
+        <button class="rng-btn" id="yPistonsRequiredRng" onclick="toggleRng('yPistonsRequired')" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of the 6 Dark Engine pistons you must stop before Legion. Once that many are stopped, the rest stop on their own and the way to Legion opens. The cable-car piston always counts as one. 6 is the vanilla game.</span></span>
+      </div>
+          <div class="check-grid" style="grid-template-columns:1fr;margin-top:6px">
+        <label class="check-label">
+          <input type="checkbox" id="yPistonCombos" onchange="updateYamlPreview()">
+          Piston Combos
+          <button class="rng-btn" id="yPistonCombosRng" onclick="event.preventDefault();toggleRng('yPistonCombos')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Randomizes the 6 Dark Engine piston combination values; the in-game journal (Jack&rsquo;s Schematic entry) is rewritten to show the new numbers. When enabled, Jack&rsquo;s Schematic becomes required progression — you must find it to learn the combinations needed to shut the pistons off and reach Legion, the final boss.</span></span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yUniqueRetractorKeys" onchange="syncUniqueRetractorKeysDependency()">
+          Unique Retractor Keys
+          <button class="rng-btn" id="yUniqueRetractorKeysRng" onclick="event.preventDefault();toggleRng('yUniqueRetractorKeys');syncUniqueRetractorKeysDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Splits the single "Retractor" pickup into 5 named keys, one per liveside region (Queens, Prison, London, Florida, Salvage Yard) — each only opens schisms in its own region, instead of any one Retractor unlocking all of them. Adds more individually-trackable checks/items to the pool. When on, the flat "Retractor (all 5)" Starting Item option below can't be used (its item no longer exists in the pool) and is disabled automatically.</span></span>
+        </label>
+          </div>
+        </div>
+        <div class="card" style="margin-bottom:10px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">
+        Entrance Randomizer
+        <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>Deadside Only:</b> shuffles the 9 Deadside portals among themselves — which level a portal leads to is randomized, but each portal keeps its own physical soul-gate requirement. <b>Cross Hub:</b> the 9 Deadside portals and the 5 liveside soul gates are shuffled together — a Deadside portal can lead into a Dark Engine room, and a soul gate can lead to a Deadside level. Asylum, Wasteland and Temple of Fire always stay behind Deadside portals; so do Cageways and Temple of Prophecy unless Cadeauxsanity is on with a bundle size of 5 or less.</span></span>
+      </div>
+      <div class="row" style="margin-bottom:6px">
+        <select id="yEntranceMode" onchange="updateYamlPreview()" style="width:100%;min-width:0">
+          <option value="off" selected>Off — vanilla entrances</option>
+          <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
+          <option value="cross_hub">Cross Hub — Deadside + Engine Rooms, 14 shuffled</option>
+          <option value="random">&#127922; random</option>
+        </select>
+      </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Multiworld</div>
+      <div class="row" style="flex-wrap:wrap;row-gap:6px;margin-bottom:8px">
+        <label class="check-label" style="padding:0">
+          <input type="checkbox" id="yDeathLink" onchange="syncDeathLinkThresholdDependency()">
+          Death Link
+          <button class="rng-btn" id="yDeathLinkRng" onclick="event.preventDefault();toggleRng('yDeathLink');syncDeathLinkThresholdDependency()" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Standard Archipelago Death Link — a death in any linked game kills you here too, and vice versa.</span></span>
+        </label>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:10px">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap">Every</span>
+          <input type="number" id="yDeathLinkThreshold" value="1" min="1" max="5" style="width:50px" oninput="updateYamlPreview()">
+          <span style="color:var(--muted);font-size:11px;white-space:nowrap">death(s)</span>
+          <button class="rng-btn" id="yDeathLinkThresholdRng" onclick="event.preventDefault();toggleRng('yDeathLinkThreshold')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of YOUR OWN deaths it takes to send one Death Link. 1 (default) sends every time, same as before this existed. 5 means only every 5th death of yours actually broadcasts &mdash; the other 4 die free. Incoming Death Links (a teammate died) always kill you immediately regardless of this &mdash; it only throttles what you send. Greyed out unless Death Link above is on.</span></span>
+        </div>
+      </div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
       <div class="card-title">
         Coffin Gate Soul Levels
         <span class="tip" style="vertical-align:middle">
@@ -571,34 +749,35 @@ _HTML = r"""<!DOCTYPE html>
           <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Redistributes the soul counts required for SL1&ndash;SL10 (vanilla: 1, 3, 7, 15, 23, 35, 51, 71, 95, 120). <b>Off</b> keeps vanilla thresholds. AP&rsquo;s own logic always matches whatever this seed's real thresholds are. The &#127922; button randomly picks a mode each seed. <b>Random</b> was briefly removed 2026-08-09 after being blamed for AP generation failures, then re-added the same day once the real cause (Dark Soul provisioning math using vanilla thresholds instead of the seed's real ones, affecting every mode) was found and fixed, plus two rounds of hardening on Random's own threshold spacing.</span></span>
         </div>
       </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">
-        Entrance Randomizer
-        <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>Deadside Only:</b> shuffles the 9 Deadside portals among themselves — which level a portal leads to is randomized, but each portal keeps its own physical soul-gate requirement. <b>Cross Hub:</b> the 9 Deadside portals and the 5 liveside soul gates are shuffled together — a Deadside portal can lead into a Dark Engine room, and a soul gate can lead to a Deadside level. Asylum, Wasteland and Temple of Fire always stay behind Deadside portals; so do Cageways and Temple of Prophecy unless Cadeauxsanity is on with a bundle size of 5 or less.</span></span>
+          <hr class="divider">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Progression</div>
+      <div class="row" style="flex-wrap:wrap;row-gap:8px;column-gap:14px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Balancing:</span>
+        <input type="range" id="yProgBalance" min="0" max="100" value="50" style="width:80px"
+               oninput="document.getElementById('yProgBalanceVal').textContent=this.value;updateYamlPreview()">
+        <span class="slider-val" id="yProgBalanceVal">50</span>
+        <button class="rng-btn" id="yProgBalanceRng" onclick="toggleRng('yProgBalance')" title="Randomize per seed">&#127922;</button>
+        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls how deep into the world progression items tend to be placed. Default 50 is balanced. 0 = items placed early, 100 = items pushed deep.</span></span>
       </div>
-      <div class="row" style="margin-bottom:6px">
-        <select id="yEntranceMode" onchange="updateYamlPreview()" style="width:100%;min-width:0">
-          <option value="off" selected>Off — vanilla entrances</option>
-          <option value="deadside_only">Deadside Only — 9 levels shuffled</option>
-          <option value="cross_hub">Cross Hub — Deadside + Engine Rooms, 14 shuffled</option>
-          <option value="random">&#127922; random</option>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Soul Buffer:</span>
+        <select id="ySoulLogicBuffer" style="width:126px" onchange="updateYamlPreview()">
+          <option value="off" selected>Off (no slack)</option>
+          <option value="hard">Hard (+2 souls)</option>
+          <option value="medium">Medium (+4 souls)</option>
+          <option value="easy">Easy (+6 souls)</option>
         </select>
+        <button class="rng-btn" id="ySoulLogicBufferRng" onclick="event.preventDefault();toggleRng('ySoulLogicBuffer')" title="Randomize per seed">&#127922;</button>
+        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Pads how many souls AP&rsquo;s fill/logic requires be reachable before a soul gate, beyond what the gate actually needs in-game. E.g. <b>Medium</b> means a gate that really only needs 3 souls won&rsquo;t be treated as passable until 7 are placed reachable before it. Doesn&rsquo;t change the real in-game requirement at all &mdash; just leaves AP more slack so a seed doesn&rsquo;t feel razor-tight if you don&rsquo;t grab every single soul on the way. Higher = more forgiving, less "tight." Off (default) is exact prior behavior &mdash; the underlying soul-provisioning bugs that once motivated defaulting this on were found and fixed directly (see SoulThresholdMode's docstring in options.py), so this is back to being a pure optional-extra-slack knob, not a safety net.</span></span>
       </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Goal</div>
-      <div class="row" style="margin-bottom:6px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Pistons required:</span>
-        <input type="range" id="yPistonsRequired" min="1" max="6" step="1" value="6"
-               oninput="document.getElementById('yPistonsRequiredVal').textContent=this.value;updateYamlPreview()">
-        <span class="slider-val" id="yPistonsRequiredVal">6</span>
-        <button class="rng-btn" id="yPistonsRequiredRng" onclick="toggleRng('yPistonsRequired')" title="Randomize per seed">&#127922;</button>
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of the 6 Dark Engine pistons you must stop before Legion. Once that many are stopped, the rest stop on their own and the way to Legion opens. The cable-car piston always counts as one. 6 is the vanilla game.</span></span>
       </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Health</div>
+      <div class="hint" style="margin-top:6px">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</div>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="card-title">Health</div>
       <div class="row" style="margin-bottom:8px">
         <span style="color:var(--muted);font-size:11px;white-space:nowrap">Starting:</span>
         <input type="range" id="yStartingHealth" min="1" max="10" step="1" value="5"
@@ -624,6 +803,9 @@ _HTML = r"""<!DOCTYPE html>
         <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Reduces max health by step&times;1000 on each death, floored at that amount. Supports half-steps (e.g. 0.5 = &minus;500/death). <b>Off</b> disables the penalty. Applied as a direct EXE patch.</span></span>
       </div>
       <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 0.5&ndash;10 = &minus;&frac12; to &minus;10 health bars/death</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Miscellaneous</div>
       <div class="row" style="margin-bottom:4px">
         <span style="color:var(--muted);font-size:11px;white-space:nowrap">Shift-sprint:</span>
         <input type="range" id="ySprintMultiplier" min="0" max="5" step="0.1" value="0" oninput="refreshSprintMultiplierLabel()">
@@ -632,172 +814,21 @@ _HTML = r"""<!DOCTYPE html>
         <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Hold Shift to move at this multiple of normal speed, on both land and in water. <b>Off</b> disables Shift-sprint entirely (vanilla movement). Applied as a direct EXE patch.</span></span>
       </div>
       <div class="hint" style="margin-bottom:6px">Off = disabled &nbsp;&nbsp; 1.0&ndash;5.0 = 1x&ndash;5x speed while Shift is held</div>
-    </div>
-
-    <!-- Col 3: Archipelago Settings -->
-    <div class="card">
-      <div class="card-title">Archipelago Settings</div>
-
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Multiworld</div>
-      <div class="row" style="flex-wrap:wrap;row-gap:6px;margin-bottom:8px">
-        <label class="check-label" style="padding:0">
-          <input type="checkbox" id="yDeathLink" onchange="syncDeathLinkThresholdDependency()">
-          Death Link
-          <button class="rng-btn" id="yDeathLinkRng" onclick="event.preventDefault();toggleRng('yDeathLink');syncDeathLinkThresholdDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Standard Archipelago Death Link — a death in any linked game kills you here too, and vice versa.</span></span>
-        </label>
-        <div style="display:flex;align-items:center;gap:8px;margin-left:10px">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap">Every</span>
-          <input type="number" id="yDeathLinkThreshold" value="1" min="1" max="5" style="width:50px" oninput="updateYamlPreview()">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap">death(s)</span>
-          <button class="rng-btn" id="yDeathLinkThresholdRng" onclick="event.preventDefault();toggleRng('yDeathLinkThreshold')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">How many of YOUR OWN deaths it takes to send one Death Link. 1 (default) sends every time, same as before this existed. 5 means only every 5th death of yours actually broadcasts &mdash; the other 4 die free. Incoming Death Links (a teammate died) always kill you immediately regardless of this &mdash; it only throttles what you send. Greyed out unless Death Link above is on.</span></span>
-        </div>
-      </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px">Cadeaux</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;align-items:start">
-        <div>
-          <div class="row">
-            <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Altar cost:</span>
-            <input type="number" id="yAltarCadeaux" value="100" min="1" max="133" style="width:60px" oninput="syncCadeauxConstraints()">
-            <button class="rng-btn" id="yAltarCadeauxRng" onclick="toggleRng('yAltarCadeaux');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
-            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Cadeaux required and spent per life altar interaction. The minimum required and the per-interaction cost are always equal (vanilla: 100, max: 133 = &lfloor;666 &divide; 5&rfloor;). Also the per-offering cost Life Altar Checks logic uses, and the floor Fog door is raised to. EXE patch, but it feeds AP logic where those checks are on.</span></span>
-          </div>
-          <div id="yAltarCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
-        </div>
-        <div>
-          <div class="row">
-            <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Fog door:</span>
-            <input type="number" id="yFogCadeaux" value="666" min="5" max="666" style="width:60px" oninput="syncCadeauxConstraints()">
-            <button class="rng-btn" id="yFogCadeauxRng" onclick="toggleRng('yFogCadeaux');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
-            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Total Cadeaux required to open the Fogometers door (vanilla: 666). Must be at least 5&times; the altar cost and no more than 666. Also what the Fog Door Check (below) checks against when that option is on. <b>666 is the extreme case:</b> the check then needs essentially every Cadeaux item in logic, so it is much harder and much heavier to generate &mdash; 500 (the default floor) is recommended whenever Fog Door Check is on.</span></span>
-          </div>
-          <div id="yFogCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
-        </div>
-        <label class="check-label" style="margin-top:6px">
-          <input type="checkbox" id="yInsanity" onchange="syncCadeauxGatedDependency();syncCadeauxBundleDependency()">
-          Cadeaux Key Items
-          <button class="rng-btn" id="yInsanityRng" onclick="event.preventDefault();toggleRng('yInsanity');syncCadeauxGatedDependency();syncCadeauxBundleDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Off (default): cadeaux (statue/altar) locations are excluded from AP entirely &mdash; same treatment as barrels, no checks, no hints, stays vanilla. On: all ~657 cadeaux locations become real checks with no item-type restriction (any item, including other players&rsquo; key items, can land there). Soul/Govi altar locations are unaffected either way &mdash; they&rsquo;ve always existed as checks eligible for any item. Note: narrower than the standalone tool&rsquo;s graded insanity tiers, which can also open weapon/lore/bonus/barrel slots &mdash; not implemented here.</span></span>
-        </label>
-        <div class="row" style="margin-top:6px">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Max bundle:</span>
-          <input type="number" id="yCadeauxBundleSize" value="1" min="1" max="50" style="width:55px" oninput="updateYamlPreview()">
-          <button class="rng-btn" id="yCadeauxBundleSizeRng" onclick="event.preventDefault();toggleRng('yCadeauxBundleSize')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Caps how many cadeaux pickups can be grouped into a single AP check, instead of one check per cadeaux. Bundling is now GLOBAL across the whole game (changed 2026-07-28) &mdash; every eligible cadeaux is shuffled together and chunked at this size, so you get AT MOST ONE remainder bundle smaller than this value for the entire seed, not one per region. Tradeoff: a bundle's real check can end up behind a different gate than some of the cadeaux whose value it absorbed, so the reward pacing no longer strictly follows region/gate progression &mdash; doesn't affect completability, just the economy's feel. 1 (default): no bundling, same as before this option existed (~657 individual checks). E.g. a cap of 5 turns ~657 checks into ~131 (130 at x5, 1 remainder). Only meaningful when Cadeaux Key Items above is also on &mdash; greyed out otherwise.</span></span>
-        </div>
-      </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Cadeaux Checks</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;align-items:start">
-        <label class="check-label" style="grid-column:1/-1;margin-top:6px">
-          <input type="checkbox" id="yCadeauxGatedContent" onchange="onFogDoorCheckChange()">
-          Fog Door Check
-          <button class="rng-btn" id="yCadeauxGatedContentRng" onclick="event.preventDefault();toggleRng('yCadeauxGatedContent');onFogDoorCheckChange()" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls whether the Fogometers Light Soul location (gated behind SL10 + collecting the Fog door&rsquo;s worth of Cadeaux, above) exists as an AP check at all. Off (default): excluded from AP entirely &mdash; stays vanilla, same treatment as barrels/enemy checks. On: it becomes a real check, gated in logic by that Fog door requirement, backed by a precollected-Cadeaux fix so it stays solvable. Requires Cadeaux Key Items above to also be on (greyed out otherwise) &mdash; Cadeaux isn&rsquo;t an AP-tracked item at all unless that&rsquo;s on.</span></span>
-        </label>
-        <label class="check-label" style="grid-column:1/-1;margin-top:6px">
-          <input type="checkbox" id="yFogDoorPriority" onchange="updateYamlPreview()">
-          Fog Door Progression
-          <button class="rng-btn" id="yFogDoorPriorityRng" onclick="event.preventDefault();toggleRng('yFogDoorPriority')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Off (default): the Fog Door Check only holds filler. On: it becomes a priority location, so Archipelago fills it with progression (important) items first. To make that possible, enough Cadeaux to satisfy the Fog door requirement become progression items themselves (same treatment as Life Altar Progression); the rest stay filler. <b>Heads up:</b> the Fog Door's logic counts Cadeaux <i>items</i>, so at 666 &mdash; or any value at/above the number of Cadeaux items &mdash; that promotes essentially the whole Cadeaux pool. Use 500 (the default floor) or bundling for a lighter seed. Requires Fog Door Check above to also be on (greyed out otherwise).</span></span>
-        </label>
-        <label class="check-label" style="grid-column:1/-1;margin-top:6px">
-          <input type="checkbox" id="yLifeAltarChecks" onchange="syncLifeAltarPriorityDependency()">
-          Life Altar Checks
-          <button class="rng-btn" id="yLifeAltarChecksRng" onclick="event.preventDefault();toggleRng('yLifeAltarChecks');syncLifeAltarPriorityDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. What they can hold is set by Life Altar Progression below. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
-        </label>
-        <label class="check-label" style="grid-column:1/-1;margin-top:6px">
-          <input type="checkbox" id="yLifeAltarPriority" checked onchange="updateYamlPreview()">
-          Life Altar Progression
-          <button class="rng-btn" id="yLifeAltarPriorityRng" onclick="event.preventDefault();toggleRng('yLifeAltarPriority')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): the 5 Life Altar Offering checks are priority locations, so they usually hold progression (important) items. To allow that, enough Cadeaux to pay for all 5 offerings become progression items; the rest stay filler. Off: the altars only hold filler. Requires Life Altar Checks above to also be on (greyed out otherwise). The location group &ldquo;Life Altars&rdquo; also works in priority_locations / exclude_locations.</span></span>
-        </label>
-      </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Trap/Bonus Filler</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;align-items:start">
-        <div class="row" style="grid-column:1/-1">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Count:</span>
-          <input type="number" id="yTrapBonusCount" value="0" min="0" max="1000" style="width:55px" oninput="updateYamlPreview()">
-          <button class="rng-btn" id="yTrapBonusCountRng" onclick="event.preventDefault();toggleRng('yTrapBonusCount')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">How many "Trap/Bonus" filler items are added to the pool. Each applies one random effect, rolled from whichever categories are enabled below: Secrets (a cosmetic secret cvar effect &mdash; Big Head, Wireframe, Disco Lights, etc.), Health (a ~1-minute gradual poison or a full heal x2), Voodoo (drain to 0 or hold at max), or Ammo (drain all 3 tracked guns to 0 or hold at max). 0 (default) adds none. Promotes that many previously-excluded, verified barrel-category locations to real AP checks too, so traps add genuinely new room rather than displacing existing filler.</span></span>
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-left:14px;margin-right:8px">Duration:</span>
-          <input type="number" id="yTrapBonusDuration" value="60" min="10" max="300" style="width:55px" oninput="updateYamlPreview()">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-left:4px">sec</span>
-          <button class="rng-btn" id="yTrapBonusDurationRng" onclick="event.preventDefault();toggleRng('yTrapBonusDuration')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Seconds a temporary trap/hold effect lasts before auto-reverting. Only matters when Mode below actually goes temporary.</span></span>
-        </div>
-        <div class="row" style="grid-column:1/-1;margin-top:6px">
-          <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Mode:</span>
-          <select id="yTrapBonusMode" style="flex:1;min-width:0" onchange="updateYamlPreview()">
-            <option value="always_temporary" selected>Always Temporary</option>
-            <option value="always_permanent">Always Permanent</option>
-            <option value="mixed">Mixed (rolled per pickup)</option>
-          </select>
-          <button class="rng-btn" id="yTrapBonusModeRng" onclick="event.preventDefault();toggleRng('yTrapBonusMode')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Only applies to the Secrets, Voodoo Hold, and Ammo Hold sub-effects (Health and Voodoo/Ammo Drain always run their own fixed one-shot duration regardless of this setting). Always Temporary (default): auto-reverts after Trap Duration seconds. Always Permanent: stays on until superseded by a matching drain or another roll of the same effect. Mixed: each pickup independently rolls temporary vs permanent.</span></span>
-        </div>
-        <label class="check-label" style="margin-top:6px">
-          <input type="checkbox" id="yTrapBonusSecretsEnabled" checked onchange="updateYamlPreview()">
-          Secrets
-          <button class="rng-btn" id="yTrapBonusSecretsEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusSecretsEnabled')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can apply a cosmetic secret cvar effect (Big Head, Wireframe, Disco Lights, etc.).</span></span>
-        </label>
-        <label class="check-label" style="margin-top:6px">
-          <input type="checkbox" id="yTrapBonusHealthEnabled" checked onchange="updateYamlPreview()">
-          Health (Poison/Heal)
-          <button class="rng-btn" id="yTrapBonusHealthEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusHealthEnabled')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can apply a ~1-minute gradual poison (drains your whole health pool, then kills you if it reaches 0 before you heal up) or a gradual recovery (heals your full health pool twice over).</span></span>
-        </label>
+          <hr class="divider">
+          <div class="check-grid" style="grid-template-columns:1fr">
         <label class="check-label">
-          <input type="checkbox" id="yTrapBonusVoodooEnabled" checked onchange="updateYamlPreview()">
-          Voodoo Power
-          <button class="rng-btn" id="yTrapBonusVoodooEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusVoodooEnabled')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can instantly drain Voodoo Power to 0, or hold it at max for the Trap Duration (or permanently, per Mode above).</span></span>
+          <input type="checkbox" id="yDeadsideGuns" onchange="updateYamlPreview()">
+          Deadside Guns
+          <button class="rng-btn" id="yDeadsideGunsRng" onclick="event.preventDefault();toggleRng('yDeadsideGuns')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Forces the vanilla "I like Dead Side Guns" secret on at patch time &mdash; Deadside weapons work on Liveside and vice versa &mdash; without needing to find its hidden in-world unlock trigger. Edits kexengine.cfg; requires having launched the game at least once already.</span></span>
         </label>
-        <label class="check-label">
-          <input type="checkbox" id="yTrapBonusAmmoEnabled" checked onchange="updateYamlPreview()">
-          Ammo
-          <button class="rng-btn" id="yTrapBonusAmmoEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusAmmoEnabled')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can instantly drain all 3 tracked ammo types (Shotgun, Violator, 9mm) to 0, or hold them all at max for the Trap Duration (or permanently, per Mode above).</span></span>
-        </label>
+          </div>
+        </div>
       </div>
-
-      <hr class="divider">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Progression</div>
-      <div class="row" style="flex-wrap:wrap;row-gap:8px;column-gap:14px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Balancing:</span>
-        <input type="range" id="yProgBalance" min="0" max="100" value="50" style="width:80px"
-               oninput="document.getElementById('yProgBalanceVal').textContent=this.value;updateYamlPreview()">
-        <span class="slider-val" id="yProgBalanceVal">50</span>
-        <button class="rng-btn" id="yProgBalanceRng" onclick="toggleRng('yProgBalance')" title="Randomize per seed">&#127922;</button>
-        <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Controls how deep into the world progression items tend to be placed. Default 50 is balanced. 0 = items placed early, 100 = items pushed deep.</span></span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="color:var(--muted);font-size:11px;white-space:nowrap">Soul Buffer:</span>
-        <select id="ySoulLogicBuffer" style="width:126px" onchange="updateYamlPreview()">
-          <option value="off" selected>Off (no slack)</option>
-          <option value="hard">Hard (+2 souls)</option>
-          <option value="medium">Medium (+4 souls)</option>
-          <option value="easy">Easy (+6 souls)</option>
-        </select>
-        <button class="rng-btn" id="ySoulLogicBufferRng" onclick="event.preventDefault();toggleRng('ySoulLogicBuffer')" title="Randomize per seed">&#127922;</button>
-        <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Pads how many souls AP&rsquo;s fill/logic requires be reachable before a soul gate, beyond what the gate actually needs in-game. E.g. <b>Medium</b> means a gate that really only needs 3 souls won&rsquo;t be treated as passable until 7 are placed reachable before it. Doesn&rsquo;t change the real in-game requirement at all &mdash; just leaves AP more slack so a seed doesn&rsquo;t feel razor-tight if you don&rsquo;t grab every single soul on the way. Higher = more forgiving, less "tight." Off (default) is exact prior behavior &mdash; the underlying soul-provisioning bugs that once motivated defaulting this on were found and fixed directly (see SoulThresholdMode's docstring in options.py), so this is back to being a pure optional-extra-slack knob, not a safety net.</span></span>
-      </div>
-      </div>
-      <div class="hint" style="margin-top:6px">0 = items placed early &nbsp;&nbsp; 100 = items pushed deep</div>
     </div>
-
   </div>
 
-  <!-- Row 3: Enemies + Cosmetic Shuffles -->
+  <div class="sub-panel" id="subPanelEnemies">
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:stretch">
     <div class="card" style="flex:1;min-width:280px">
       <div class="card-title">Enemies</div>
@@ -889,6 +920,7 @@ _HTML = r"""<!DOCTYPE html>
       </div>
     </div>
   </div>
+  </div>
 
   <div class="card" style="margin-bottom:10px">
     <div class="card-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -964,6 +996,23 @@ function showTab(name) {
   document.getElementById('panelApply').classList.toggle('active', name === 'apply');
   document.getElementById('tabBtnYaml').classList.toggle('active', name === 'yaml');
   document.getElementById('tabBtnApply').classList.toggle('active', name === 'apply');
+}
+
+// Generate-YAML sub-tabs (2026-10-19): Items & Checks / World & Player /
+// Enemies & Cosmetics. Purely a visibility switch -- every input stays in
+// the DOM, so buildYaml(), the check estimate and all dependency syncs work
+// regardless of which panel is showing. The last panel is remembered in
+// localStorage (wrapped in try/catch: it can throw in private/restricted
+// webviews).
+const SUB_TABS = ['items', 'world', 'enemies'];
+function showSubTab(name) {
+  if (!SUB_TABS.includes(name)) name = 'items';
+  SUB_TABS.forEach(n => {
+    const cap = n[0].toUpperCase() + n.slice(1);
+    document.getElementById('subPanel' + cap).classList.toggle('active', n === name);
+    document.getElementById('subTab' + cap).classList.toggle('active', n === name);
+  });
+  try { localStorage.setItem('shadowman.generateSubTab', name); } catch (e) { /* ignore */ }
 }
 
 // ── Tab 1: YAML generation ──────────────────────────────────────────────────
@@ -1134,6 +1183,15 @@ function syncCadeauxConstraints() {
 // per-seed (its resolved value isn't known here, so we don't second-guess
 // it — the backend already treats cadeaux_gated_content as a no-op
 // whenever insanity actually resolves off for that seed).
+// Dim a control (and its enclosing label/row) while the option it depends on
+// is off, so "unavailable" reads at a glance instead of just a disabled box.
+function setUnavailable(id, unavailable) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const box = el.closest('label') || el;
+  box.classList.toggle('unavailable', unavailable);
+}
+
 function syncCadeauxGatedDependency() {
   const insanityOff = !isRng('yInsanity') && !document.getElementById('yInsanity').checked;
   // Fog Door Check and Life Altar Checks share this rule (both are
@@ -1147,7 +1205,18 @@ function syncCadeauxGatedDependency() {
     }
     el.disabled = insanityOff || isRng(id);
     if (btn) btn.disabled = insanityOff;
+    setUnavailable(id, insanityOff);
   });
+  // The three controls that genuinely don't exist without Cadeauxsanity:
+  // Max bundle, Life Altar Checks, Fog Door Check. (Altar cost / Fog door
+  // stay usable — they're EXE patch values that apply either way.)
+  setUnavailable('yCadeauxBundleRow', insanityOff);
+  ['yLifeAltarsReq', 'yFogDoorReq'].forEach(id => {
+    const note = document.getElementById(id);
+    if (note) note.classList.toggle('visible', insanityOff);
+  });
+  const cardNote = document.getElementById('yCadeauxReqNote');
+  if (cardNote) cardNote.classList.toggle('warn', insanityOff);
   syncLifeAltarPriorityDependency();
   syncFogDoorPriorityDependency();
 }
@@ -1189,6 +1258,7 @@ function syncFogDoorPriorityDependency() {
   const btn = document.getElementById('yFogDoorPriorityRng');
   el.disabled = gateOff || isRng('yFogDoorPriority');
   if (btn) btn.disabled = gateOff;
+  setUnavailable('yFogDoorPriority', gateOff);
   updateYamlPreview();
 }
 
@@ -1202,6 +1272,7 @@ function syncLifeAltarPriorityDependency() {
   const btn = document.getElementById('yLifeAltarPriorityRng');
   el.disabled = altarsOff || isRng('yLifeAltarPriority');
   if (btn) btn.disabled = altarsOff;
+  setUnavailable('yLifeAltarPriority', altarsOff);
   updateYamlPreview();
 }
 
@@ -1801,6 +1872,10 @@ window.addEventListener('pywebviewready', async () => {
   syncDeathLinkThresholdDependency();
   syncCombineSfxDependency();
   syncUniqueRetractorKeysDependency();
+  // Restore the last Generate-YAML sub-tab (items/world/enemies).
+  let _savedSub = 'items';
+  try { _savedSub = localStorage.getItem('shadowman.generateSubTab') || 'items'; } catch (e) { /* ignore */ }
+  showSubTab(SUB_TABS.includes(_savedSub) ? _savedSub : 'items');
   updateYamlPreview();
   loadCheckBase();
 });
