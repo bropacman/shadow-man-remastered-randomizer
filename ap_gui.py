@@ -660,7 +660,7 @@ _HTML = r"""<!DOCTYPE html>
         </label>
           </div>
         </div>
-        <div class="card">
+        <div class="card" style="margin-bottom:10px">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">
         Entrance Randomizer
         <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box"><b>Deadside Only:</b> shuffles the 9 Deadside portals among themselves — which level a portal leads to is randomized, but each portal keeps its own physical soul-gate requirement. <b>Cross Hub:</b> the 9 Deadside portals and the 5 liveside soul gates are shuffled together — a Deadside portal can lead into a Dark Engine room, and a soul gate can lead to a Deadside level. Asylum, Wasteland and Temple of Fire always stay behind Deadside portals; so do Cageways and Temple of Prophecy unless Cadeauxsanity is on with a bundle size of 5 or less.</span></span>
