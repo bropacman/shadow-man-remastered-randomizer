@@ -446,6 +446,28 @@ _HTML = r"""<!DOCTYPE html>
     <div style="display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.3fr);gap:10px;margin-bottom:10px;align-items:start">
       <div class="card" style="min-width:220px">
         <div class="card-title">Items</div>
+        <div class="card-title" style="margin-bottom:8px">Item Shuffles</div>
+        <div class="check-grid" style="grid-template-columns:1fr">
+        <label class="check-label">
+          <input type="checkbox" id="yShuffleWeapons" checked onchange="updateYamlPreview()">
+          Weapons
+          <button class="rng-btn" id="yShuffleWeaponsRng" onclick="event.preventDefault();toggleRng('yShuffleWeapons')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapons (Asson, Shotgun, Enseigne, MP5, T&ecirc;te de Mort, Desert Eagle) across item locations. Uncheck to leave weapons in their vanilla spots.</span></span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yShuffleLore" checked onchange="updateYamlPreview()">
+          Lore
+          <button class="rng-btn" id="yShuffleLoreRng" onclick="event.preventDefault();toggleRng('yShuffleLore')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles lore items (Book of Shadows, Prophecy, Jack&rsquo;s Schematic) across locations. Uncheck to leave them in vanilla positions.</span></span>
+        </label>
+        <label class="check-label">
+          <input type="checkbox" id="yShuffleBonus" onchange="updateYamlPreview()">
+          Light Soul
+          <button class="rng-btn" id="yShuffleBonusRng" onclick="event.preventDefault();toggleRng('yShuffleBonus')" title="Randomize per seed">&#127922;</button>
+          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item (permanent invincibility, vanilla reward for 666 Cadeaux) in the shuffle pool. Off by default as it can affect run balance.</span></span>
+        </label>
+        </div>
+        <hr class="divider">
       <div class="card-title" style="margin-bottom:8px">
         Starting Item
         <span class="tip" style="vertical-align:middle"><span class="tip-icon">?</span><span class="tip-box">AP-native "Start Inventory From Pool". Ctrl/Cmd-click (or shift-click for a range) to pick several items at once — AP's start_inventory_from_pool genuinely supports multiple items, unlike the standalone randomizer's single-item Starting Item dropdown. Retractor / Accumulator / Gad Power Upgrade each grant the full stackable count (5 / 3 / 3) in one pick — there's no separate "give me just 1" option, matching what the old bundle checkboxes did. Picked items are removed from the shuffle pool and granted at game start via the AP client's memory injection.</span></span>
@@ -482,32 +504,11 @@ _HTML = r"""<!DOCTYPE html>
       <div class="row" style="margin-top:6px">
         <button type="button" class="btn-ghost" onclick="clearStartingItems()" style="width:100%;font-size:11px;padding:5px 9px">Clear Selection</button>
       </div>
-        <hr class="divider">
-        <div class="card-title" style="margin-bottom:8px">Item Shuffles</div>
-        <div class="check-grid" style="grid-template-columns:1fr">
-        <label class="check-label">
-          <input type="checkbox" id="yShuffleWeapons" checked onchange="updateYamlPreview()">
-          Weapons
-          <button class="rng-btn" id="yShuffleWeaponsRng" onclick="event.preventDefault();toggleRng('yShuffleWeapons')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles weapons (Asson, Shotgun, Enseigne, MP5, T&ecirc;te de Mort, Desert Eagle) across item locations. Uncheck to leave weapons in their vanilla spots.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yShuffleLore" checked onchange="updateYamlPreview()">
-          Lore
-          <button class="rng-btn" id="yShuffleLoreRng" onclick="event.preventDefault();toggleRng('yShuffleLore')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Shuffles lore items (Book of Shadows, Prophecy, Jack&rsquo;s Schematic) across locations. Uncheck to leave them in vanilla positions.</span></span>
-        </label>
-        <label class="check-label">
-          <input type="checkbox" id="yShuffleBonus" onchange="updateYamlPreview()">
-          Light Soul
-          <button class="rng-btn" id="yShuffleBonusRng" onclick="event.preventDefault();toggleRng('yShuffleBonus')" title="Randomize per seed">&#127922;</button>
-          <span class="tip"><span class="tip-icon">?</span><span class="tip-box">Includes the Light Soul bonus item (permanent invincibility, vanilla reward for 666 Cadeaux) in the shuffle pool. Off by default as it can affect run balance.</span></span>
-        </label>
-        </div>
       </div>
       <div class="card">
-        <div class="card-title">Cadeaux Checks</div>
+        <div class="card-title">Checks &amp; Filler</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;align-items:start">
+        <div style="grid-column:1/-1;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-top:2px">Cadeaux</div>
         <label class="check-label">
           <input type="checkbox" id="yInsanity" onchange="syncCadeauxGatedDependency();syncCadeauxBundleDependency()">
           Cadeaux Key Items
@@ -537,7 +538,7 @@ _HTML = r"""<!DOCTYPE html>
           <button class="rng-btn" id="yLifeAltarChecksRng" onclick="event.preventDefault();toggleRng('yLifeAltarChecks');syncLifeAltarPriorityDependency()" title="Randomize per seed">&#127922;</button>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. What they can hold is set by Life Altar Progression. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
         </label>
-        <label class="check-label">
+        <label class="check-label" style="grid-column:2">
           <input type="checkbox" id="yLifeAltarPriority" checked onchange="updateYamlPreview()">
           Life Altar Progression
           <button class="rng-btn" id="yLifeAltarPriorityRng" onclick="event.preventDefault();toggleRng('yLifeAltarPriority')" title="Randomize per seed">&#127922;</button>
@@ -560,7 +561,7 @@ _HTML = r"""<!DOCTYPE html>
           <button class="rng-btn" id="yCadeauxGatedContentRng" onclick="event.preventDefault();toggleRng('yCadeauxGatedContent');onFogDoorCheckChange()" title="Randomize per seed">&#127922;</button>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls whether the Fogometers Light Soul location (gated behind SL10 + collecting the Fog door&rsquo;s worth of Cadeaux) exists as an AP check at all. Off (default): excluded from AP entirely &mdash; stays vanilla, same treatment as barrels/enemy checks. On: it becomes a real check, gated in logic by that Fog door requirement, backed by a precollected-Cadeaux fix so it stays solvable, and the Fog door value above is lowered from 666 to the 5&times; altar floor (500 by default) if it was still 666. Requires Cadeaux Key Items above to also be on (greyed out otherwise) &mdash; Cadeaux isn&rsquo;t an AP-tracked item at all unless that&rsquo;s on.</span></span>
         </label>
-        <label class="check-label">
+        <label class="check-label" style="grid-column:2">
           <input type="checkbox" id="yFogDoorPriority" onchange="updateYamlPreview()">
           Fog Door Progression
           <button class="rng-btn" id="yFogDoorPriorityRng" onclick="event.preventDefault();toggleRng('yFogDoorPriority')" title="Randomize per seed">&#127922;</button>
@@ -568,9 +569,7 @@ _HTML = r"""<!DOCTYPE html>
         </label>
         <div class="hint" style="grid-column:1/-1">Turning Fog Door Check on lowers Fog door from 666 to 5&times; Altar cost (500 at the default altar cost) &mdash; raise it again if you want the vanilla door.</div>
       </div>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:10px">
+      <hr class="divider">
       <div class="card-title">Trap/Bonus Filler</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;align-items:start">
         <div class="row" style="grid-column:1/-1">
@@ -618,6 +617,7 @@ _HTML = r"""<!DOCTYPE html>
           <button class="rng-btn" id="yTrapBonusAmmoEnabledRng" onclick="event.preventDefault();toggleRng('yTrapBonusAmmoEnabled')" title="Randomize per seed">&#127922;</button>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): a rolled Trap/Bonus can instantly drain all 3 tracked ammo types (Shotgun, Violator, 9mm) to 0, or hold them all at max for the Trap Duration (or permanently, per Mode above).</span></span>
         </label>
+      </div>
       </div>
     </div>
   </div>
