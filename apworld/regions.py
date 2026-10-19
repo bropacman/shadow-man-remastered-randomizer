@@ -14,7 +14,7 @@ from .access_rules import (
 from .extracted_locations import FREE_LOCATIONS, GATED_LOCATIONS
 from .locations import location_table, FRIENDLY_NAMES
 from .fill import CADEAUX_666_LOCS, DEPTH_BUCKETS
-from .items import RETRACTOR_KEY_ITEM_NAMES
+from .items import RETRACTOR_KEY_ITEM_NAMES, is_cadeaux_item
 
 # ── Region name constants ─────────────────────────────────────────────────────
 
@@ -625,6 +625,7 @@ def _build_sub_regions(
     cadeaux_bundle_representatives: dict[str, int] | None = None,
     barrel_promoted_locs: frozenset[str] | None = None,
     pistons_required: int = 6,
+    fog_door_priority: bool = False,
 ) -> None:
     skip_cats = _SKIP_CATS if cadeauxsanity else (_SKIP_CATS | {"cadeaux"})
 
@@ -706,7 +707,20 @@ def _build_sub_regions(
                 # item where item.advancement or item.useful) guarantees it
                 # only ever holds ordinary filler, so nothing structural can
                 # ever depend on its unreachable-in-simulation rule.
-                loc.progress_type = LocationProgressType.EXCLUDED
+                #
+                # Fog Door Progression (2026-10-18): when that option is on,
+                # __init__.py promotes enough Cadeaux to progression that the
+                # rule IS provable in the priority sweep, so the location can
+                # hold progression safely. Same priority treatment as the
+                # Life Altar Offering checks, including the own-Cadeaux
+                # item_rule (a promoted Cadeaux here would be a dull
+                # "progression" item).
+                if fog_door_priority:
+                    loc.progress_type = LocationProgressType.PRIORITY
+                    loc.item_rule = lambda item, p=player: not (
+                        item.player == p and is_cadeaux_item(item.name))
+                else:
+                    loc.progress_type = LocationProgressType.EXCLUDED
             sub.locations.append(loc)
 
         multiworld.regions.append(sub)
@@ -739,6 +753,7 @@ def create_regions(
     barrel_promoted_locs: frozenset[str] | None = None,
     unique_retractor_keys: bool = False,
     pistons_required: int = 6,
+    fog_door_priority: bool = False,
 ) -> None:
     """
     Called from ShadowManWorld.create_regions().
@@ -790,6 +805,13 @@ def create_regions(
                    generate_early()'s precollected-Cadeaux shortfall fix
                    (see __init__.py) to keep it solvable. Threaded down
                    into _build_sub_regions() below.
+    fog_door_priority: this world's FogDoorPriority option (2026-10-18) —
+                   when True (and CadeauxGatedContent is on), the Fogometers
+                   Light Soul location becomes a PRIORITY location instead
+                   of EXCLUDED, with our own Cadeaux excluded from it.
+                   __init__.py's create_items() promotes enough Cadeaux to
+                   progression for fill to prove the door rule. Threaded
+                   into _build_sub_regions().
     cadeaux_bundle_representatives: this world's precomputed result of
                    compute_cadeaux_bundle_representatives() (see
                    __init__.py's generate_early(), self.random used to
@@ -1110,4 +1132,5 @@ def create_regions(
             cadeauxsanity, cadeaux_required, cadeaux_gated_content,
             cadeaux_bundle_representatives, barrel_promoted_locs,
             pistons_required=pistons_required,
+            fog_door_priority=fog_door_priority,
         )

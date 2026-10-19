@@ -237,8 +237,11 @@ class AltarCadeauxRequired(Range):
     Fogometers Cadeaux Required is raised to at least 5x this value.
     Minimum Cadeaux required to interact with a life altar or the
     Fogometers door (cost per interaction always matches). Vanilla is 100.
-    Does not affect AP logic — cadeaux_666 in access_rules.py is currently
-    a no-op. EXE patch — applied by running apply_ap_seed.py (shadow-man-remastered-randomizer repo) against your generated seed, not during AP generation itself.
+    Also the per-offering cost Life Altar Checks logic uses (offering N
+    needs N x this much Cadeaux), and the floor Fogometers Cadeaux Required
+    is raised to. EXE patch — applied by running apply_ap_seed.py
+    (shadow-man-remastered-randomizer repo) against your generated seed,
+    not during AP generation itself.
     """
     display_name = "Altar Cadeaux Required"
     range_start = 1
@@ -264,6 +267,15 @@ class FogometersCadeauxRequired(Range):
     generate_early() precollects the 13-item shortfall as free starting
     Cadeaux to keep that location solvable — see its comment in
     __init__.py.
+
+    GENERATION WARNING (2026-10-18): 666 means the Fog Door Check's logic
+    requires essentially the entire Cadeaux pool (the logic count is capped
+    at how many Cadeaux-family items exist). With Fog Door Progression on
+    that makes hundreds of Cadeaux progression items and produces a much
+    harder seed and slower generation. The AP Companion GUI lowers this to
+    5x Altar Cadeaux Required (500 at the default altar cost) when Fog Door
+    Check is ticked and the field is still at 666; hand-written YAMLs keep
+    their value and only get a generation warning.
     """
     display_name = "Fogometers Cadeaux Required"
     range_start = 0
@@ -294,10 +306,34 @@ class CadeauxGatedContent(Toggle):
     Found and added 2026-07-24 after this location's rule turned out to be
     unreachable-in-full-accessibility for FillError diagnosis reasons — see
     __init__.py's generate_early() comment and access_rules.py's
-    cadeaux_666() docstring for the full history.
+    cadeaux_666() docstring for the full history. Since that rule needs
+    essentially every Cadeaux item, the check is filler-only
+    (LocationProgressType.EXCLUDED) unless Fog Door Progression below is
+    turned on.
     """
     display_name = "Fog Door Check"
     default = False
+
+
+class FogDoorPriority(Toggle):
+    """
+    Only applies when Fog Door Check is on (turned off otherwise).
+    Makes the Fogometers Light Soul check a priority location, so fill puts
+    progression there when it can. To make that possible, enough Cadeaux
+    items to satisfy the Fog door requirement are promoted to progression
+    (the same progression | skip_balancing | deprioritized classification
+    Life Altar Progression uses); the rest stay filler. Off (default): the
+    check only holds filler.
+
+    WORKLOAD WARNING: the Fog Door Check's rule counts Cadeaux ITEMS, and
+    the logic requirement is capped at how many Cadeaux-family items exist.
+    At the vanilla 666 door (or any value at/above that count) this
+    promotes essentially the whole Cadeaux pool to progression — a much
+    harder seed and noticeably heavier generation. Use 500 (the default
+    floor) or bundling if you want a lighter seed.
+    """
+    display_name = "Fog Door Progression"
+    default = 0
 
 
 class DeathPenalty(Range):
@@ -555,7 +591,7 @@ class LifeAltarChecks(Toggle):
     offering can always be made; at the cap they just add no health.
 
     In logic, offering N needs Deadside - Wasteland plus N x Altar Cadeaux
-    Required worth of Cadeaux. With Life Altar Priority on (the default),
+    Required worth of Cadeaux. With Life Altar Progression on (the default),
     they are priority locations and usually hold progression; off, they
     only hold filler.
     """
@@ -572,7 +608,7 @@ class LifeAltarPriority(DefaultOnToggle):
     progression; the rest stay filler. Off: the altars only hold filler,
     as before this option existed.
     """
-    display_name = "Life Altar Priority"
+    display_name = "Life Altar Progression"
 
 
 class CadeauxBundleSize(Range):
@@ -884,6 +920,7 @@ class ShadowManOptions(PerGameCommonOptions):
     altar_cadeaux_required:      AltarCadeauxRequired
     fogometers_cadeaux_required: FogometersCadeauxRequired
     cadeaux_gated_content:       CadeauxGatedContent
+    fog_door_priority:           FogDoorPriority
     life_altar_checks:           LifeAltarChecks
     life_altar_priority:         LifeAltarPriority
     death_penalty:        DeathPenalty
