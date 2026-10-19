@@ -34,11 +34,12 @@ from Options import OptionGroup
 from . import options as _opts
 from .options import ShadowManOptions
 
-# Cadeaux promoted by Life Altar Priority: logically relevant, but plentiful,
-# so not pulled forward by balancing and not wanted on priority locations.
-LIFE_ALTAR_CADEAUX_CLASSIFICATION = (ItemClassification.progression
-                                     | ItemClassification.skip_balancing
-                                     | ItemClassification.deprioritized)
+# Cadeaux promoted by Life Altar Progression / Fog Door Progression:
+# logically relevant, but plentiful, so not pulled forward by balancing and
+# not wanted on priority locations.
+PRIORITY_CADEAUX_CLASSIFICATION = (ItemClassification.progression
+                                    | ItemClassification.skip_balancing
+                                    | ItemClassification.deprioritized)
 
 
 # ── Launcher registration ─────────────────────────────────────────────────────
@@ -98,8 +99,12 @@ class ShadowManWebWorld(WebWorld):
 
     option_groups = [
         OptionGroup("Cadeaux", [
-            _opts.Cadeauxsanity, _opts.CadeauxBundleSize, _opts.CadeauxGatedContent,
-            _opts.LifeAltarChecks, _opts.LifeAltarPriority, _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
+            _opts.Cadeauxsanity, _opts.CadeauxBundleSize,
+            _opts.AltarCadeauxRequired, _opts.FogometersCadeauxRequired,
+        ]),
+        OptionGroup("Cadeaux Checks", [
+            _opts.CadeauxGatedContent, _opts.FogDoorPriority,
+            _opts.LifeAltarChecks, _opts.LifeAltarPriority,
         ]),
         OptionGroup("Gates", [
             _opts.GatePreset, _opts.MaxGateSL, _opts.OpenGatesN,
@@ -229,10 +234,32 @@ class ShadowManWorld(World):
             if bool(o.life_altar_checks):
                 warn("life_altar_checks turned off (requires cadeauxsanity).")
                 o.life_altar_checks.value = 0
-        # Life Altar Priority defaults on and means nothing without the
+        # Life Altar Progression defaults on and means nothing without the
         # checks: turn it off quietly so slot_data matches the seed.
         if not bool(o.life_altar_checks) and bool(o.life_altar_priority):
             o.life_altar_priority.value = 0
+        # Fog Door Progression only means anything with Fog Door Check.
+        # Quiet for the same reason as life_altar_priority above (its
+        # default is off, so this is mostly the !cadeauxsanity cascade).
+        if not bool(o.cadeaux_gated_content) and bool(o.fog_door_priority):
+            o.fog_door_priority.value = 0
+        # Fog Door Check at the vanilla 666 is the heavy case: the logic
+        # requirement is capped at the number of Cadeaux-family items, so
+        # 666 (>= that count at every bundle size) asks fill to prove
+        # essentially the entire pool. The AP Companion GUI nudges the
+        # field down to the 5x-altar floor when the check is ticked; a
+        # hand-written YAML keeps its value, so warn loudly here.
+        if bool(o.cadeaux_gated_content) and int(o.fogometers_cadeaux_required) >= 666:
+            if bool(o.fog_door_priority):
+                warn("Fog Door Check at 666 with Fog Door Progression on: "
+                     "essentially the whole Cadeaux pool becomes progression "
+                     "and generation is much heavier. 500 (the 5x altar "
+                     "floor) is recommended.")
+            else:
+                warn("Fog Door Check at 666: the check needs essentially the "
+                     "whole Cadeaux pool in logic. Fine while it stays "
+                     "filler-only, but 500 is recommended before turning on "
+                     "Fog Door Progression.")
 
         # 4. Flat "Retractor" can't be given when unique keys are on.
         if bool(o.unique_retractor_keys):
@@ -778,6 +805,7 @@ class ShadowManWorld(World):
             cadeauxsanity    = bool(self.options.cadeauxsanity),
             cadeaux_required = self.cadeaux_required_logic,
             cadeaux_gated_content = bool(self.options.cadeaux_gated_content),
+            fog_door_priority = bool(self.options.fog_door_priority),
             cadeaux_bundle_representatives = self.cadeaux_bundle_representatives,
             barrel_promoted_locs = self.barrel_promoted_locs,
             unique_retractor_keys = bool(self.options.unique_retractor_keys),
@@ -1114,23 +1142,43 @@ class ShadowManWorld(World):
             # default bundle size of 1 every weight is 1, so
             # cadeaux_bundle_item_name(1) == "Cadeaux" and this is
             # byte-for-byte the same pool as before this option existed.
-            # Life Altar Priority: promote enough Cadeaux to pay for all 5
-            # offerings (largest bundles first) to progression, so fill's
-            # sweeps can prove the altars reachable and put progression there
-            # (see _create_life_altar_locations). The rest stay filler.
+            # Life Altar Progression / Fog Door Progression: promote enough
+            # Cadeaux (largest bundles first) to progression so fill's
+            # priority sweeps can prove the gated checks reachable and put
+            # real progression there (see _create_life_altar_locations and
+            # regions.py's CADEAUX_666_LOCS priority branch). The rest stay
+            # filler. Both thresholds can be active at once:
+            #   - life altars need WORTH (N x altar cost; bundle weights
+            #     count their full value);
+            #   - the fog door needs a COUNT of Cadeaux-family items
+            #     (cadeaux_666() uses count_group), capped at how many
+            #     items exist; precollected starting Cadeaux already count
+            #     toward it (push_precollected collects them into
+            #     multiworld.state).
             _weights = list(self.cadeaux_bundle_representatives.values())
             _promoted = set()
+            _promote_worth = 0
             if bool(self.options.life_altar_checks) and bool(self.options.life_altar_priority):
-                _promote_worth = min(5 * int(self.options.altar_cadeaux_required), sum(_weights))
+                _promote_worth = min(5 * int(self.options.altar_cadeaux_required),
+                                     sum(_weights))
+            _promote_count = 0
+            if bool(self.options.cadeaux_gated_content) and bool(self.options.fog_door_priority):
+                _precollected = sum(
+                    1 for _it in self.multiworld.precollected_items[self.player]
+                    if is_cadeaux_item(_it.name))
+                _promote_count = max(0, self.cadeaux_required_logic - _precollected)
+            if _promote_worth or _promote_count:
+                _worth = _count = 0
                 for _i in sorted(range(len(_weights)), key=lambda i: -_weights[i]):
-                    if _promote_worth <= 0:
+                    if _worth >= _promote_worth and _count >= _promote_count:
                         break
                     _promoted.add(_i)
-                    _promote_worth -= _weights[_i]
+                    _worth += _weights[_i]
+                    _count += 1
             for _i, _weight in enumerate(_weights):
                 _item = self.create_item(cadeaux_bundle_item_name(_weight))
                 if _i in _promoted:
-                    _item.classification = LIFE_ALTAR_CADEAUX_CLASSIFICATION
+                    _item.classification = PRIORITY_CADEAUX_CLASSIFICATION
                 pool.append(_item)
 
         # CadeauxGatedContent (2026-07-24): off (default) excludes the

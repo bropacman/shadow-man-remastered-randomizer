@@ -148,6 +148,38 @@ class TestCadeauxsanity(ShadowManTestBase):
     seed = 1
 
 
+class TestFogDoorProgression(ShadowManTestBase):
+    """Fog Door Check + Fog Door Progression at the recommended 500 floor
+    (2026-10-18): generation succeeds, the Fogometers Light Soul check is a
+    PRIORITY location, and enough Cadeaux are promoted to progression for
+    fill's priority sweep to prove the door rule."""
+    options = {
+        "cadeauxsanity": True,
+        "cadeaux_bundle_size": 5,
+        "cadeaux_gated_content": True,
+        "fogometers_cadeaux_required": 500,
+        "fog_door_priority": True,
+    }
+    seed = 3
+
+    def test_fog_door_is_priority(self) -> None:
+        from BaseClasses import LocationProgressType
+        from ..fill import CADEAUX_666_LOCS
+        locs = [loc for loc in self.multiworld.get_locations(self.player)
+                if getattr(loc, "raw", None) is not None
+                and loc.raw.loc_key in CADEAUX_666_LOCS]
+        self.assertEqual(len(locs), 1)
+        self.assertEqual(locs[0].progress_type,
+                         LocationProgressType.PRIORITY)
+
+    def test_cadeaux_promoted(self) -> None:
+        from ..items import is_cadeaux_item
+        promoted = [item for item in self.multiworld.itempool
+                    if item.player == self.player
+                    and is_cadeaux_item(item.name) and item.advancement]
+        self.assertGreater(len(promoted), 0)
+
+
 class TestPistonCombos(ShadowManTestBase):
     options = {
         "piston_combos": True,

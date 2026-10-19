@@ -95,7 +95,17 @@ Shadow Man Remastered:
 
   # Whether the Fogometers Light Soul location (SL10 + enough Cadeaux)
   # exists as an AP check. Only meaningful when cadeauxsanity is also on.
+  # NOTE: at the vanilla 666 Fog door value this check needs essentially
+  # the entire Cadeaux pool in logic; 500 (the 5x altar floor) is
+  # recommended if you turn it on.
   cadeaux_gated_content: false
+
+  # Makes the Fog Door Check a priority location, so it usually holds
+  # progression; enough Cadeaux to satisfy the Fog door requirement become
+  # progression items to allow it. Off (default): filler only. Heavy at
+  # Fog door = 666 (see above). Only meaningful when cadeaux_gated_content
+  # is also on.
+  fog_door_priority: false
 
   # 5 checks for offering Cadeaux at the Wasteland life altars, sent as
   # you make your 1st..5th offering (any altar, any order). Each needs N x

@@ -663,7 +663,7 @@ _HTML = r"""<!DOCTYPE html>
             <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Altar cost:</span>
             <input type="number" id="yAltarCadeaux" value="100" min="1" max="133" style="width:60px" oninput="syncCadeauxConstraints()">
             <button class="rng-btn" id="yAltarCadeauxRng" onclick="toggleRng('yAltarCadeaux');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
-            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Cadeaux required and spent per life altar interaction. The minimum required and the per-interaction cost are always equal (vanilla: 100, max: 133 = &lfloor;666 &divide; 5&rfloor;). EXE-only &mdash; doesn&rsquo;t affect AP logic.</span></span>
+            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Cadeaux required and spent per life altar interaction. The minimum required and the per-interaction cost are always equal (vanilla: 100, max: 133 = &lfloor;666 &divide; 5&rfloor;). Also the per-offering cost Life Altar Checks logic uses, and the floor Fog door is raised to. EXE patch, but it feeds AP logic where those checks are on.</span></span>
           </div>
           <div id="yAltarCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
         </div>
@@ -672,7 +672,7 @@ _HTML = r"""<!DOCTYPE html>
             <span style="color:var(--muted);font-size:11px;white-space:nowrap;margin-right:8px">Fog door:</span>
             <input type="number" id="yFogCadeaux" value="666" min="5" max="666" style="width:60px" oninput="syncCadeauxConstraints()">
             <button class="rng-btn" id="yFogCadeauxRng" onclick="toggleRng('yFogCadeaux');syncCadeauxConstraints()" title="Randomize per seed">&#127922;</button>
-            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Total Cadeaux required to open the Fogometers door (vanilla: 666). Must be at least 5&times; the altar cost and no more than 666. Also what the Fog Door Check option (below) checks against, when that option is on.</span></span>
+            <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Total Cadeaux required to open the Fogometers door (vanilla: 666). Must be at least 5&times; the altar cost and no more than 666. Also what the Fog Door Check (below) checks against when that option is on. <b>666 is the extreme case:</b> the check then needs essentially every Cadeaux item in logic, so it is much harder and much heavier to generate &mdash; 500 (the default floor) is recommended whenever Fog Door Check is on.</span></span>
           </div>
           <div id="yFogCadeauxMsg" style="display:none;font-size:10px;color:var(--red);margin-top:2px"></div>
         </div>
@@ -688,23 +688,34 @@ _HTML = r"""<!DOCTYPE html>
           <button class="rng-btn" id="yCadeauxBundleSizeRng" onclick="event.preventDefault();toggleRng('yCadeauxBundleSize')" title="Randomize per seed">&#127922;</button>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Caps how many cadeaux pickups can be grouped into a single AP check, instead of one check per cadeaux. Bundling is now GLOBAL across the whole game (changed 2026-07-28) &mdash; every eligible cadeaux is shuffled together and chunked at this size, so you get AT MOST ONE remainder bundle smaller than this value for the entire seed, not one per region. Tradeoff: a bundle's real check can end up behind a different gate than some of the cadeaux whose value it absorbed, so the reward pacing no longer strictly follows region/gate progression &mdash; doesn't affect completability, just the economy's feel. 1 (default): no bundling, same as before this option existed (~657 individual checks). E.g. a cap of 5 turns ~657 checks into ~131 (130 at x5, 1 remainder). Only meaningful when Cadeaux Key Items above is also on &mdash; greyed out otherwise.</span></span>
         </div>
+      </div>
+
+      <hr class="divider">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px">Cadeaux Checks</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;align-items:start">
         <label class="check-label" style="grid-column:1/-1;margin-top:6px">
-          <input type="checkbox" id="yCadeauxGatedContent" onchange="updateYamlPreview()">
+          <input type="checkbox" id="yCadeauxGatedContent" onchange="onFogDoorCheckChange()">
           Fog Door Check
-          <button class="rng-btn" id="yCadeauxGatedContentRng" onclick="event.preventDefault();toggleRng('yCadeauxGatedContent')" title="Randomize per seed">&#127922;</button>
+          <button class="rng-btn" id="yCadeauxGatedContentRng" onclick="event.preventDefault();toggleRng('yCadeauxGatedContent');onFogDoorCheckChange()" title="Randomize per seed">&#127922;</button>
           <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Controls whether the Fogometers Light Soul location (gated behind SL10 + collecting the Fog door&rsquo;s worth of Cadeaux, above) exists as an AP check at all. Off (default): excluded from AP entirely &mdash; stays vanilla, same treatment as barrels/enemy checks. On: it becomes a real check, gated in logic by that Fog door requirement, backed by a precollected-Cadeaux fix so it stays solvable. Requires Cadeaux Key Items above to also be on (greyed out otherwise) &mdash; Cadeaux isn&rsquo;t an AP-tracked item at all unless that&rsquo;s on.</span></span>
+        </label>
+        <label class="check-label" style="grid-column:1/-1;margin-top:6px">
+          <input type="checkbox" id="yFogDoorPriority" onchange="updateYamlPreview()">
+          Fog Door Progression
+          <button class="rng-btn" id="yFogDoorPriorityRng" onclick="event.preventDefault();toggleRng('yFogDoorPriority')" title="Randomize per seed">&#127922;</button>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Off (default): the Fog Door Check only holds filler. On: it becomes a priority location, so Archipelago fills it with progression (important) items first. To make that possible, enough Cadeaux to satisfy the Fog door requirement become progression items themselves (same treatment as Life Altar Progression); the rest stay filler. <b>Heads up:</b> the Fog Door's logic counts Cadeaux <i>items</i>, so at 666 &mdash; or any value at/above the number of Cadeaux items &mdash; that promotes essentially the whole Cadeaux pool. Use 500 (the default floor) or bundling for a lighter seed. Requires Fog Door Check above to also be on (greyed out otherwise).</span></span>
         </label>
         <label class="check-label" style="grid-column:1/-1;margin-top:6px">
           <input type="checkbox" id="yLifeAltarChecks" onchange="syncLifeAltarPriorityDependency()">
           Life Altar Checks
           <button class="rng-btn" id="yLifeAltarChecksRng" onclick="event.preventDefault();toggleRng('yLifeAltarChecks');syncLifeAltarPriorityDependency()" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. What they can hold is set by Life Altar Priority below. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">Adds 5 checks for offering Cadeaux at the Wasteland life altars: Offering 1 is sent after your first offering at any altar, Offering 2 after your second, and so on, in any order. The altars still cost the altar amount above and still grant health. In logic, offering N needs Wasteland plus N&times; the altar cost in Cadeaux. What they can hold is set by Life Altar Progression below. Requires Cadeaux Key Items above to also be on (greyed out otherwise).</span></span>
         </label>
         <label class="check-label" style="grid-column:1/-1;margin-top:6px">
           <input type="checkbox" id="yLifeAltarPriority" checked onchange="updateYamlPreview()">
-          Life Altar Priority
+          Life Altar Progression
           <button class="rng-btn" id="yLifeAltarPriorityRng" onclick="event.preventDefault();toggleRng('yLifeAltarPriority')" title="Randomize per seed">&#127922;</button>
-          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): the 5 Life Altar Offering checks are priority locations, so they usually hold progression. To allow that, enough Cadeaux to pay for all 5 offerings become progression items; the rest stay filler. Off: the altars only hold filler. Requires Life Altar Checks above to also be on (greyed out otherwise). The location group &ldquo;Life Altars&rdquo; also works in priority_locations / exclude_locations.</span></span>
+          <span class="tip anchor-right"><span class="tip-icon">?</span><span class="tip-box">On (default): the 5 Life Altar Offering checks are priority locations, so they usually hold progression (important) items. To allow that, enough Cadeaux to pay for all 5 offerings become progression items; the rest stay filler. Off: the altars only hold filler. Requires Life Altar Checks above to also be on (greyed out otherwise). The location group &ldquo;Life Altars&rdquo; also works in priority_locations / exclude_locations.</span></span>
         </label>
       </div>
 
@@ -1138,6 +1149,47 @@ function syncCadeauxGatedDependency() {
     if (btn) btn.disabled = insanityOff;
   });
   syncLifeAltarPriorityDependency();
+  syncFogDoorPriorityDependency();
+}
+
+// Fog Door Check (2026-10-18): ticking it while the Fog door field is still
+// at the vanilla 666 nudges that field down to the 5x-altar floor (500 at
+// the default altar cost). At 666 the check's logic requirement is capped
+// at the whole Cadeaux pool, so it needs essentially every Cadeaux item —
+// a much harder seed, and much heavier generation once Fog Door
+// Progression promotes them all. Hand-written YAMLs are only warned about
+// (see the backend's _validate_options), because a bare YAML can't tell
+// "left at default" from "explicitly chose 666".
+function onFogDoorCheckChange() {
+  const gateEl = document.getElementById('yCadeauxGatedContent');
+  const fogEl  = document.getElementById('yFogCadeaux');
+  let nudged = false;
+  if (gateEl.checked && !isRng('yCadeauxGatedContent') && !isRng('yFogCadeaux')
+      && (parseInt(fogEl.value, 10) || 0) >= 666) {
+    const altar = parseInt(document.getElementById('yAltarCadeaux').value, 10) || 100;
+    fogEl.value = Math.min(666, altar * 5);
+    nudged = true;
+  }
+  syncCadeauxConstraints();      // validates + refreshes the YAML preview
+  if (nudged) {
+    const msg = document.getElementById('yFogCadeauxMsg');
+    msg.textContent = 'Lowered from 666 — the Fog Door Check then needs essentially every Cadeaux item, which is much harder and heavier to generate. Raise it again if you really want the vanilla door.';
+    msg.style.display = 'block';
+  }
+  syncCadeauxGatedDependency();  // also syncs Fog Door Progression
+}
+
+// Fog Door Progression only means anything when Fog Door Check is on.
+// Grey it out whenever the check is deterministically off, but keep its
+// value (it defaults off; the backend turns it off quietly), same reasoning
+// as syncLifeAltarPriorityDependency() above.
+function syncFogDoorPriorityDependency() {
+  const gateOff = !isRng('yCadeauxGatedContent') && !document.getElementById('yCadeauxGatedContent').checked;
+  const el  = document.getElementById('yFogDoorPriority');
+  const btn = document.getElementById('yFogDoorPriorityRng');
+  el.disabled = gateOff || isRng('yFogDoorPriority');
+  if (btn) btn.disabled = gateOff;
+  updateYamlPreview();
 }
 
 // Life Altar Priority only means anything when Life Altar Checks is on.
@@ -1354,6 +1406,7 @@ function buildYaml() {
   kv('altar_cadeaux_required', yamlNum('yAltarCadeaux'));
   kv('fogometers_cadeaux_required', yamlNum('yFogCadeaux'));
   kv('cadeaux_gated_content', yamlBool('yCadeauxGatedContent'));
+  kv('fog_door_priority', yamlBool('yFogDoorPriority'));
   kv('life_altar_checks', yamlBool('yLifeAltarChecks'));
   kv('life_altar_priority', yamlBool('yLifeAltarPriority'));
   kv('death_penalty', yamlDeathPenalty());
@@ -1558,6 +1611,7 @@ async function importYaml() {
    'unique_retractor_keys:yUniqueRetractorKeys',
    'deadside_guns:yDeadsideGuns',
    'cadeauxsanity:yInsanity', 'cadeaux_gated_content:yCadeauxGatedContent',
+   'fog_door_priority:yFogDoorPriority',
    'life_altar_checks:yLifeAltarChecks', 'life_altar_priority:yLifeAltarPriority',
    'death_link:yDeathLink',
    'shuffle_ambients:yShuffleAmbients', 'shuffle_music:yShuffleMusic',

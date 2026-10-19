@@ -79,16 +79,20 @@ randomized too. Full option list and detailed behavior notes live in
   liveside level ("Retractor - London", …); each schism only opens with
   its own key, tracked live in Nettie's File.
 - `cadeauxsanity` (renamed from `insanity` 2026-08-23) / `cadeaux_bundle_size` /
-  `cadeaux_gated_content` ("Fog Door Check") — whether Cadeaux locations
-  exist as AP checks at all, whether they're bundled into grouped checks,
-  and whether the Fogometers Light Soul is included.
-- `life_altar_checks` / `life_altar_priority` — 5 checks for your 1st–5th
-  Cadeaux offering at the Wasteland life altars (any altar, any order;
-  the altars stay usable at max health). With `life_altar_priority` (on by
-  default) they're priority locations that hold real progression, and
-  enough Cadeaux to pay for all five become progression items; turn it
-  off for filler-only altars. The "Life Altars" location group works in
-  `priority_locations` / `exclude_locations`. Needs `cadeauxsanity`.
+  `cadeaux_gated_content` ("Fog Door Check") / `fog_door_priority` — whether
+  Cadeaux locations exist as AP checks at all, whether they're bundled into
+  grouped checks, whether the Fogometers Light Soul is included, and whether
+  that check is a priority location that holds progression (off by default;
+  it promotes enough Cadeaux to satisfy the Fog door requirement, which is
+  heavy at the vanilla 666 — 500 is recommended).
+- `life_altar_checks` / `life_altar_priority` ("Life Altar Progression") —
+  5 checks for your 1st–5th Cadeaux offering at the Wasteland life altars
+  (any altar, any order; the altars stay usable at max health). With
+  `life_altar_priority` (on by default) they're priority locations that
+  hold real progression, and enough Cadeaux to pay for all five become
+  progression items; turn it off for filler-only altars. The "Life Altars"
+  location group works in `priority_locations` / `exclude_locations`.
+  Needs `cadeauxsanity`.
 
 **Cosmetic / optional shuffles**
 `shuffle_weapons`, `shuffle_lore`, `shuffle_bonus`, `shuffle_enemies`
